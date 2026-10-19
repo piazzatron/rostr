@@ -1,5 +1,6 @@
 ---
 import { GITHUB_URL, X_URL } from "../consts";
+import GitHubIcon from "../assets/github.svg";
 
 interface Props {
   title: string;
@@ -24,7 +25,7 @@ const { title, description } = Astro.props;
         <a href="/#how-it-works">How it works</a>
         <a href="/cli">CLI docs</a>
         <a href="/#install">Install</a>
-        <a href={GITHUB_URL}>GitHub</a>
+        <a class="nav-icon" href={GITHUB_URL} aria-label="GitHub"><GitHubIcon aria-hidden="true" /></a>
       </nav>
     </header>
 
@@ -137,6 +138,17 @@ const { title, description } = Astro.props;
     color: var(--text);
   }
 
+  .nav nav {
+    align-items: center;
+  }
+
+  .nav-icon svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+
   /* Hero */
   .hero {
     padding: 72px 0 48px;
@@ -153,6 +165,12 @@ const { title, description } = Astro.props;
     color: var(--muted);
     max-width: 36em;
     margin: 0 0 32px;
+  }
+
+  .lede-example {
+    color: var(--text);
+    font-size: 22px;
+    margin-bottom: 12px;
   }
 
   .cta {
@@ -200,6 +218,53 @@ const { title, description } = Astro.props;
     text-decoration: none;
     font-weight: 600;
     font-size: 15px;
+  }
+
+  .cta-title {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .cta-alt {
+    display: inline-block;
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .cta-alt:hover {
+    color: var(--text);
+  }
+
+  /* The hero's install prompt: the old layout, with an accent outline, small hard shadow, and a filled Copy button */
+  .copy-hero {
+    padding: 8px 8px 8px 16px;
+    border: 1.5px solid var(--accent);
+    box-shadow: 3px 3px 0 var(--accent);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .copy-hero:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--accent);
+  }
+
+  .copy-hero:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--accent);
+  }
+
+  .copy-hero .copy-label {
+    padding: 6px 14px;
+    border-radius: 7px;
+    background: var(--accent);
+    color: white;
+    font-family: var(--sans);
+    font-weight: 700;
   }
 
   .works-with {
@@ -373,6 +438,278 @@ const { title, description } = Astro.props;
     color: var(--muted);
   }
 
+  /* The one command people run themselves */
+  .command-hero {
+    position: relative;
+    margin: 8px 0 40px;
+    padding: 28px 24px 20px;
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    border-radius: 14px;
+    box-shadow: 4px 4px 0 var(--accent);
+  }
+
+  .command-hero .code {
+    font-size: 16px;
+    white-space: pre-wrap;
+  }
+
+  .command-hero p {
+    margin: 14px 0 0;
+    color: var(--muted);
+  }
+
+  .command-badge {
+    position: absolute;
+    top: -14px;
+    left: 20px;
+    padding: 3px 12px;
+    background: var(--accent);
+    color: white;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .command-group {
+    margin: 32px 0 4px;
+    font-size: 19px;
+  }
+
+  .command-group-lede {
+    margin: 0 0 4px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  /* Automatic commands are dimmed: they're there to explain, not to run */
+  .commands-automatic .command-row {
+    opacity: 0.7;
+  }
+
+  /* Before/after notification mockup in the "poor human brain" section */
+  .notification-compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin: 8px 0 24px;
+    padding: 24px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #5b7fd6, #9b6cc9 55%, #e0866b);
+  }
+
+  .notification-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .compare-label {
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .notification {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgb(246 246 246 / 0.88);
+    color: #1c1b19;
+    box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  }
+
+  .notification-icon {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #d97757;
+    color: white;
+  }
+
+  .notification-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+
+  .notification-text {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .notification-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13.5px;
+  }
+
+  .notification-top strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .notification-top span {
+    flex-shrink: 0;
+    color: #6b675f;
+    font-size: 12px;
+  }
+
+  .notification-text p {
+    margin: 0;
+    color: #3d3a35;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  /* Fake dashboard in the "Build on it" section */
+  .dashboard {
+    margin: 0 0 32px;
+    background: var(--surface);
+    border: 2px solid var(--text);
+    border-radius: 14px;
+    box-shadow: 5px 5px 0 var(--text);
+    overflow: hidden;
+  }
+
+  .dashboard-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--text);
+    background: var(--bg);
+  }
+
+  .dashboard-bar > span:not(.dashboard-url) {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+
+  .dashboard-url {
+    margin-left: 12px;
+    padding: 2px 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font: 12px var(--mono);
+  }
+
+  .dashboard-body {
+    padding: 20px;
+  }
+
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .dashboard-header strong {
+    font-size: 20px;
+  }
+
+  .dashboard-header span {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+
+  .agent-card {
+    padding: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+  }
+
+  .agent-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .agent-emoji {
+    font-size: 22px;
+  }
+
+  .status-dot {
+    width: 9px;
+    height: 9px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: #2f9e44;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #2f9e44 25%, transparent);
+  }
+
+  .agent-task {
+    margin: 10px 0 12px;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .agent-meta {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    font: 12px var(--mono);
+  }
+
+  .dashboard-bench {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border);
+  }
+
+  .dashboard-bench .chip {
+    animation: none;
+  }
+
+  .bench-label {
+    margin-right: 6px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .dashboard figcaption {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .build-subhead {
+    margin-top: 20px !important;
+  }
+
+  .build-note {
+    margin: 16px 0 0 !important;
+    font-size: 15px;
+  }
+
   .docs-link {
     margin: 20px 0 0;
     font-weight: 600;
@@ -460,8 +797,16 @@ const { title, description } = Astro.props;
     letter-spacing: 0.08em;
   }
 
+  /* The B team label and chips are gray, so the A team stands out */
   .chips + b {
     margin-top: 10px;
+    color: var(--muted);
+  }
+
+  .roster-teams .chip:not(.chip-a) {
+    border-color: color-mix(in srgb, var(--muted) 30%, transparent);
+    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
+    color: var(--muted);
   }
 
   .chips {

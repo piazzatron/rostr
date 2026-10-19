@@ -1,7 +1,8 @@
 # Local storage
 
-Local rosters live in plain files, so there's no database to install. They use the same shapes as the
-[server schema](server-schema.md), which makes `rostr transfer` a straight copy.
+In local mode (the default, when there's no rostr key), everything lives in plain files, so there's no database to
+install. The files use the same shapes as the [server schema](server-schema.md), which makes `rostr transfer` a
+straight copy. In cloud mode everything lives on the API instead, and only `credentials` is kept on disk.
 
 Everything is under the OS config folder: `~/.config/rostr` on macOS and Linux, `%AppData%\rostr` on Windows.
 
@@ -29,12 +30,10 @@ rostr/
 }
 ```
 
-**`rosters/<roster>.json`.** `rostr edit` opens this file in your editor. `location` is `local` or `cloud`; a cloud
-roster's file is just a pointer, and its real data lives on the API.
+**`rosters/<roster>.json`.** `rostr edit` opens this file in your editor.
 
 ```json
 {
-  "location": "local",
   "emojiEnabled": true,
   "members": [{ "name": "Gandalf", "emoji": "🧙", "team": "A" }]
 }
@@ -80,6 +79,6 @@ nothing ever reads a half-written file.
 
 ## Transferring to the cloud
 
-`rostr transfer <roster>` uploads the roster, its project links, and its active drafts, creates your key if you don't
-have one, and turns the local roster file into a `cloud` pointer. `rostr transfer <roster> --to local` does the
-reverse.
+`rostr transfer` uploads every roster, the default roster, project links, and active drafts, creates your key, and
+then deletes the local files except `credentials`. `rostr transfer --to local` downloads everything back and deletes the
+key. A machine is in cloud mode whenever it has a key, from `credentials` or the `ROSTR_KEY` environment variable.

@@ -24,27 +24,31 @@ picks from the A team first and only calls up the **B team** when every starter 
 group instead of twenty names.
 
 You can have **multiple rosters** and give each project its own with `rostr use`, so a name tells you the project as
-well as the task. Projects without one use your default roster.
+well as the task. A project is identified by its git `origin` remote; projects without a roster, and folders outside
+git, use your default roster.
 
-rostr works in both **local** and **cloud** sessions:
+Your whole setup lives in one place, **local** or **cloud**:
 
-- **Local sessions** (a terminal on your machine): roster state lives on disk.
-- **Cloud sessions** (Claude Code on the web, Codex cloud): there's no shared disk, so sessions draft from the rostr
-  API at `api.getrostr.sh`.
+- **Local** (the default): everything lives on disk. No account, no network.
+- **Cloud**: `rostr transfer` moves everything to the rostr API at `api.getrostr.sh`. From then on, every session, on
+  your machine or in a cloud environment like Claude Code on the web or Codex cloud, drafts from there. Having a rostr
+  key is what puts a machine in cloud mode.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `rostr create <roster>` | Create a roster from a preset or your own names, with `--local` or `--cloud` |
+| `rostr create [<roster>]` | Create a roster from a preset, your own names, or a random preset if you don't pick |
 | `rostr presets` | See all the pre-built rosters |
 | `rostr use <roster>` | Use a roster for the current project |
 | `rostr draft` | Draft the next available agent, A team first, optionally with `--task` (the hooks run this for you) |
-| `rostr assign <name> <description>` | Assign an agent its work, or reassign it |
+| `rostr assign [<name>] <description>` | Assign an agent its work, or reassign it (the hooks set the first task) |
 | `rostr list` | See who's on your roster and what each agent is working on |
 | `rostr release <name>` | Release an agent back to the roster |
 | `rostr edit` | Add, remove, or rename members, pick your A team, or turn emoji on and off |
-| `rostr transfer <roster>` | Move a local roster to the cloud (or back with `--to local`) |
+| `rostr recast [<roster>]` | Swap a roster's cast for a new preset, your own names, or a random preset |
+| `rostr transfer` | Move your whole setup to the cloud (or back with `--to local`) |
+| `rostr submit <roster>` | Submit your roster to be considered as a pre-built one |
 | `rostr disband` | Delete your roster |
 
 ## Install

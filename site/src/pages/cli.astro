@@ -13,17 +13,18 @@ interface CommandDoc {
 const COMMAND_DOCS: CommandDoc[] = [
   {
     id: "create",
-    usage: "rostr create <roster> [--preset <id> | --names <list>] [--local | --cloud]",
+    usage: "rostr create [<roster>] [--preset <id> | --names <list>]",
     summary:
-      "Create a roster. The first roster you create becomes your default. Creating your first cloud roster also creates your rostr key.",
+      "Create a roster. Pass neither --preset nor --names and rostr picks a random preset for you; leave out the name and the roster is named after its preset. The first roster you create becomes your default. It's stored wherever your setup lives: on disk, or on the rostr API if you've moved to the cloud.",
     options: [
       { flag: "--preset <id>", description: "Start from a pre-built roster. See them all with rostr presets." },
       { flag: "--names <list>", description: "Use your own comma-separated names. The first six are your A team." },
-      { flag: "--local", description: "Keep the roster on disk. This is the default." },
-      { flag: "--cloud", description: "Keep the roster on the rostr API, so cloud sessions can draft from it." },
     ],
-    example: `rostr create work --preset fellowship
-rostr create side --names "Ada, Grace, Linus, Margaret, Ken, Barbara" --cloud`,
+    example: `rostr create
+🎮 Created smash-bros from the Smash Bros preset
+
+rostr create work --preset fellowship
+rostr create side --names "Ada, Grace, Linus, Margaret, Ken, Barbara"`,
   },
   {
     id: "presets",
@@ -49,10 +50,10 @@ rostr use work`,
     id: "draft",
     usage: "rostr draft [--task <description>] [--session <id>] [--json]",
     summary:
-      "Draft the next available agent, A team first, and print its name. Your hooks run this at the start of every session, so you rarely need it yourself. Drafting is tied to the session: the same session always gets the same name back while it's free.",
+      "Draft the next available agent, A team first, and print its name. Your hooks run this at the start of every session with the session's ID, so you rarely need it yourself. Drafting is tied to the session: the same session always gets the same name back while it's free.",
     options: [
       { flag: "--task <description>", description: "What the agent is working on. Shown in rostr list." },
-      { flag: "--session <id>", description: "The agent session to draft for. Set by the hooks." },
+      { flag: "--session <id>", description: "The agent session to draft for. The hooks pass this, and it defaults to ROSTR_SESSION." },
       { flag: "--json", description: "Print the result as JSON." },
     ],
     example: `rostr draft --task "Fix auth redirect loop"
@@ -60,13 +61,14 @@ rostr use work`,
   },
   {
     id: "assign",
-    usage: "rostr assign <name> <description>\nrostr assign --session <id> <description>",
+    usage: "rostr assign [<name>] <description>",
     summary:
-      "Assign an agent its work, or reassign it when the work changes. Sessions are often drafted before the work is clear, so the rostr skill has your agent assign itself once it knows what it's doing.",
+      "Assign an agent its work, or reassign it when the work changes. Your hooks set each agent's first task from your first prompt, so this is only for changes. Inside a session, rostr knows which agent you mean from ROSTR_SESSION, so the name is optional there.",
     options: [
-      { flag: "--session <id>", description: "Assign whoever is drafted to this session. Used by the skill." },
+      { flag: "--session <id>", description: "Assign whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
     ],
-    example: `rostr assign samwise "Migrate billing to Stripe v3"`,
+    example: `rostr assign "Migrate billing to Stripe v3"
+rostr assign samwise "Migrate billing to Stripe v3"`,
   },
   {
     id: "list",
@@ -89,7 +91,9 @@ idle: Legolas, Gimli, Boromir, Pippin, Merry, Balrog`,
     usage: "rostr release [<name>] [--session <id>]",
     summary:
       "Send an agent back to the bench. The rostr skill has your agent do this when its work is done, and your hooks do it when a session ends.",
-    options: [{ flag: "--session <id>", description: "Release whoever is drafted to this session. Set by the hooks." }],
+    options: [
+      { flag: "--session <id>", description: "Release whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
+    ],
     example: `rostr release gandalf`,
   },
   {
@@ -102,12 +106,31 @@ idle: Legolas, Gimli, Boromir, Pippin, Merry, Balrog`,
 rostr edit work --emoji off`,
   },
   {
-    id: "transfer",
-    usage: "rostr transfer <roster> [--to cloud|local]",
+    id: "recast",
+    usage: "rostr recast [<roster>] [--preset <id> | --names <list>]",
     summary:
-      "Move a roster between your machine and the cloud. Transferring to the cloud uploads the roster, its project links, and who's currently drafted, and creates your rostr key if you don't have one yet. Your local sessions keep using the roster, now through the rostr API.",
-    options: [{ flag: "--to cloud|local", description: "Where to move the roster. Defaults to cloud." }],
-    example: `rostr transfer work`,
+      "Swap a roster's whole cast for a new one, keeping its name and the projects that use it. Pass neither --preset nor --names and rostr picks a random preset you're not already using. Agents already drafted keep their names until their sessions end, so nobody gets renamed mid-task; new sessions draft from the new cast. Recasts the current project's roster unless you name one.",
+    options: [
+      { flag: "--preset <id>", description: "Recast from a pre-built roster." },
+      { flag: "--names <list>", description: "Recast with your own comma-separated names. The first six are your A team." },
+    ],
+    example: `rostr recast work --preset smash-bros
+rostr recast`,
+  },
+  {
+    id: "transfer",
+    usage: "rostr transfer [--to cloud|local]",
+    summary:
+      "Move your whole setup between your machine and the cloud: every roster, your default, your project links, and who's currently drafted. Moving to the cloud creates your rostr key, and from then on every session, local or cloud, drafts through the rostr API. Do this once, when you start using cloud agents.",
+    options: [{ flag: "--to cloud|local", description: "Where to move your setup. Defaults to cloud." }],
+    example: `rostr transfer`,
+  },
+  {
+    id: "submit",
+    usage: "rostr submit <roster>",
+    summary:
+      "Submit one of your rosters to be considered as a pre-built roster. It opens a GitHub issue in your browser with the roster filled in, so you can add a note before sending it.",
+    example: `rostr submit side`,
   },
   {
     id: "disband",
@@ -130,7 +153,7 @@ rostr edit work --emoji off`,
     id: "key",
     usage: "rostr key [rotate]",
     summary:
-      "Print your rostr key, which cloud sessions use to reach your cloud rosters. rostr key rotate replaces it if it leaks. There's no account and no recovery: keep your key somewhere safe.",
+      "Print your rostr key. Having a key is what puts a machine in cloud mode: set it as ROSTR_KEY in a cloud environment so its sessions can reach your rosters. rostr key rotate replaces it if it leaks. There's no account and no recovery: keep your key somewhere safe.",
     example: `rostr key
 rostr key rotate`,
   },
@@ -139,7 +162,7 @@ rostr key rotate`,
 
 <Layout
   title="rostr CLI docs"
-  description="Every rostr command: create, presets, use, draft, assign, list, release, edit, transfer, disband, setup, and key."
+  description="Every rostr command: create, presets, use, draft, assign, list, release, edit, recast, transfer, submit, disband, setup, and key."
 >
   <section class="docs-hero">
     <h1>CLI docs</h1>
@@ -159,10 +182,31 @@ rostr key rotate`,
       <dd>A named list of agents you can draft from, like your Fellowship or your Smash Bros.</dd>
       <dt>A team and B team</dt>
       <dd>Every roster has a small A team, six by default. Drafting picks from the A team first and only calls up the B team when every starter is busy.</dd>
-      <dt>Local and cloud</dt>
-      <dd>Local rosters live on disk. Cloud rosters live on the rostr API at <code>api.getrostr.sh</code>, so cloud sessions can draft from them, and your key is what gets you in.</dd>
+      <dt>Local or cloud</dt>
+      <dd>
+        Your whole setup lives in one place. Locally, everything is on disk. Once you <a href="#transfer">transfer</a>
+        to the cloud, everything lives on the rostr API at <code>api.getrostr.sh</code>, and every session, on your
+        machine or in a cloud environment, drafts from there. Having a rostr key (saved by <code>rostr transfer</code>,
+        or set as <code>ROSTR_KEY</code>) is what puts a machine in cloud mode.
+      </dd>
       <dt>Projects</dt>
-      <dd>Each git repo can use its own roster. Projects without one use your default roster.</dd>
+      <dd>
+        Each git repo can use its own roster. rostr identifies a project by its <code>origin</code> remote
+        (<code>owner/repo</code>).
+      </dd>
+      <dt>Sessions</dt>
+      <dd>
+        Your hooks get each session's ID from Claude Code or Codex and pass it to rostr, so drafting, setting the first
+        task, and releasing all happen without your agent doing anything. The start hook also sets
+        <code>ROSTR_SESSION</code> in the session's shell, so any rostr command your agent runs knows which session it's
+        in.
+      </dd>
+      <dt>Which roster gets drafted</dt>
+      <dd>
+        The <code>--roster</code> flag (which works on every command) if you pass one, then the project's linked roster,
+        then your default. Outside a git repo, or in one without an <code>origin</code> remote, rostr uses your
+        default.
+      </dd>
     </dl>
   </section>
 
