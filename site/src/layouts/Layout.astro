@@ -1,0 +1,574 @@
+---
+import { GITHUB_URL, X_URL } from "../consts";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="wordmark" href="/">rostr</a>
+      <nav>
+        <a href="/#how-it-works">How it works</a>
+        <a href="/cli">CLI docs</a>
+        <a href="/#install">Install</a>
+        <a href={GITHUB_URL}>GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="footer">
+      <span>Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a></span>
+      <span class="footer-links">
+        <a href={GITHUB_URL}>GitHub</a>
+        <a href={X_URL}>X</a>
+      </span>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #fbfaf7;
+    --surface: #ffffff;
+    --text: #1c1b19;
+    --muted: #6b675f;
+    --border: #e6e2da;
+    --accent: #d9480f;
+    --terminal-bg: #1c1b19;
+    --terminal-text: #ece8df;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141312;
+      --surface: #1c1b19;
+      --text: #ece8df;
+      --muted: #9c978d;
+      --border: #2e2c29;
+      --accent: #ff7a3d;
+      --terminal-bg: #0d0c0b;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--text) 7%, transparent);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  .nav,
+  main,
+  .footer {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 24px;
+  }
+
+  .wordmark {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 20px;
+    text-decoration: none;
+  }
+
+  .nav nav {
+    display: flex;
+    gap: 20px;
+    font-size: 15px;
+  }
+
+  .nav nav a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .nav nav a:hover {
+    color: var(--text);
+  }
+
+  /* Hero */
+  .hero {
+    padding: 72px 0 48px;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 60px);
+    max-width: 14em;
+    margin: 0 0 20px;
+  }
+
+  .lede {
+    font-size: 20px;
+    color: var(--muted);
+    max-width: 36em;
+    margin: 0 0 32px;
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    max-width: 100%;
+    padding: 12px 16px;
+    font: 14px var(--mono);
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .copy:hover {
+    border-color: var(--accent);
+  }
+
+  .copy-label {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .copy-block {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .button-secondary {
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: var(--text);
+    color: var(--bg);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .works-with {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 16px 0 48px;
+  }
+
+  .terminal {
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.35);
+  }
+
+  .terminal-bar {
+    display: flex;
+    gap: 6px;
+    padding: 12px 14px;
+  }
+
+  .terminal-bar span {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #3a3834;
+  }
+
+  .terminal pre {
+    margin: 0;
+    padding: 4px 20px 22px;
+    overflow-x: auto;
+    font: 14px/1.7 var(--mono);
+  }
+
+  .prompt {
+    color: var(--accent);
+  }
+
+  .dim {
+    color: #8a857b;
+  }
+
+  /* Sections */
+  .section {
+    padding: 56px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .section h2 {
+    font-size: 32px;
+    margin: 0 0 16px;
+  }
+
+  .narrow p {
+    max-width: 38em;
+  }
+
+  .section-lede {
+    color: var(--muted);
+    max-width: 38em;
+    margin: 0 0 32px;
+  }
+
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    margin: 0 0 32px;
+  }
+
+  .steps li {
+    counter-increment: step;
+  }
+
+  .steps li::before {
+    content: counter(step);
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .steps h3 {
+    margin: 12px 0 6px;
+    font-size: 19px;
+  }
+
+  .steps p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .screenshot-placeholder {
+    margin: 0 0 32px;
+    aspect-ratio: 16 / 7;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .card h3 {
+    margin: 0 0 8px;
+    font-size: 19px;
+  }
+
+  .card p {
+    margin: 0 0 16px;
+    color: var(--muted);
+  }
+
+  .card p:last-child {
+    margin-bottom: 0;
+  }
+
+  .code {
+    margin: 0;
+    padding: 16px;
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    border-radius: 8px;
+    overflow-x: auto;
+    font: 13px/1.7 var(--mono);
+  }
+
+  .commands {
+    margin: 0;
+  }
+
+  .command-row {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .command-row dt code {
+    background: none;
+    padding: 0;
+    font-weight: 600;
+  }
+
+  .command-row dd {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .docs-link {
+    margin: 20px 0 0;
+    font-weight: 600;
+  }
+
+  .docs-link a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .rosters {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .rosters li {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  /* Alternate the tilt direction from one roster to the next */
+  .rosters li:nth-child(odd) {
+    --tilt: 1;
+  }
+
+  .rosters li:nth-child(even) {
+    --tilt: -1;
+  }
+
+  .rosters li:hover,
+  .rosters li:focus-visible {
+    z-index: 5;
+    border-color: var(--text);
+    box-shadow: 3px 3px 0 var(--text);
+    transform: translate(-2px, -2px) rotate(calc(var(--tilt) * -1deg));
+    outline: none;
+  }
+
+  .rosters li:hover .roster-emoji,
+  .rosters li:focus-visible .roster-emoji {
+    animation: wiggle 0.5s ease;
+  }
+
+  /* A team / B team popover, shown on hover or keyboard focus. It opens up and to the right, overlapping the top of
+     the tile; the script below nudges it left when it would run off the screen. */
+  .roster-teams {
+    display: none;
+    position: absolute;
+    bottom: 78%;
+    left: 50%;
+    width: min(340px, calc(100vw - 32px));
+    padding: 12px;
+    background: var(--surface);
+    border: 2px solid var(--text);
+    border-radius: 14px;
+    box-shadow: 4px 4px 0 var(--text);
+    transform: rotate(calc(var(--tilt) * 1.5deg));
+    transform-origin: bottom left;
+  }
+
+  .rosters li:hover .roster-teams,
+  .rosters li:focus-within .roster-teams {
+    display: block;
+    animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .roster-teams b {
+    display: block;
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .chips + b {
+    margin-top: 10px;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .chip {
+    padding: 2px 8px;
+    border: 1.5px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    font-size: 12.5px;
+    white-space: nowrap;
+    animation: chip-in 0.2s ease-out backwards;
+    animation-delay: calc(var(--i) * 12ms + 60ms);
+  }
+
+  .chip-a {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    font-weight: 600;
+  }
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.85) rotate(calc(var(--tilt) * -4deg));
+    }
+  }
+
+  @keyframes chip-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
+
+  @keyframes wiggle {
+    25% {
+      transform: rotate(-14deg) scale(1.15);
+    }
+    50% {
+      transform: rotate(10deg) scale(1.15);
+    }
+    75% {
+      transform: rotate(-6deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rosters li,
+    .rosters li .roster-emoji,
+    .roster-teams,
+    .chip {
+      animation: none !important;
+      transition: none;
+    }
+  }
+
+  .rosters small {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .roster-emoji {
+    display: inline-block;
+    font-size: 24px;
+  }
+
+  .roster-custom {
+    border-style: dashed !important;
+  }
+
+  .team-cards {
+    margin-top: 32px;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 32px;
+    padding-bottom: 48px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .nav nav a:not(:last-child) {
+      display: none;
+    }
+
+    .hero {
+      padding-top: 48px;
+    }
+
+    .command-row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+</style>

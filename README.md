@@ -26,22 +26,25 @@ group instead of twenty names.
 You can have **multiple rosters** and give each project its own with `rostr use`, so a name tells you the project as
 well as the task. Projects without one use your default roster.
 
-Rosters are either **local** or **cloud**:
+rostr works in both **local** and **cloud** sessions:
 
-- **Local:** state lives on disk. For sessions on your machine.
-- **Cloud:** sessions draft from the rostr API at `api.getrostr.sh`. For agents running in the cloud, where there's no
-  shared disk.
+- **Local sessions** (a terminal on your machine): roster state lives on disk.
+- **Cloud sessions** (Claude Code on the web, Codex cloud): there's no shared disk, so sessions draft from the rostr
+  API at `api.getrostr.sh`.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `rostr create <roster>` | Create a roster from a preset or your own names, with `--local` or `--cloud` |
+| `rostr presets` | See all the pre-built rosters |
 | `rostr use <roster>` | Use a roster for the current project |
-| `rostr draft` | Draft the next available agent, A team first (the hooks run this for you) |
+| `rostr draft` | Draft the next available agent, A team first, optionally with `--task` (the hooks run this for you) |
+| `rostr assign <name> <description>` | Assign an agent its work, or reassign it |
 | `rostr list` | See who's on your roster and what each agent is working on |
 | `rostr release <name>` | Release an agent back to the roster |
 | `rostr edit` | Add, remove, or rename members, pick your A team, or turn emoji on and off |
+| `rostr transfer <roster>` | Move a local roster to the cloud (or back with `--to local`) |
 | `rostr disband` | Delete your roster |
 
 ## Install
