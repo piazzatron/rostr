@@ -1,0 +1,627 @@
+---
+const GITHUB_URL = "https://github.com/piazzatron/rostr";
+const TWITTER_URL = "https://x.com/piazzatron";
+const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getroster.sh";
+
+const ROSTER_MEMBERS = [
+  { emoji: "🧙", name: "Gandalf", task: "Fix auth redirect loop", where: "rostr/api", since: "12m" },
+  { emoji: "🌱", name: "Samwise", task: "Migrate billing to Stripe v3", where: "smart-notes", since: "1h" },
+  { emoji: "🏹", name: "Legolas", task: "Flaky e2e tests on CI", where: "rostr/site", since: "3m" },
+  { emoji: "🪓", name: "Gimli", task: "Postgres index audit", where: "cloud", since: "40m" },
+];
+
+const COMMANDS = [
+  { command: "rostr create", description: "Create a roster from a preset or your own names. Choose --local or --cloud." },
+  { command: "rostr draft", description: "Draft the next available agent. Your hooks run this at the start of every session." },
+  { command: "rostr list", description: "See who's on your roster and what each agent is working on." },
+  { command: "rostr release <name>", description: "Send an agent back to the bench when its work is done." },
+  { command: "rostr edit", description: "Add, remove, or rename members, or turn emoji on and off." },
+  { command: "rostr disband", description: "Delete your roster." },
+];
+
+const PRESET_ROSTERS = [
+  { emoji: "💍", name: "The Fellowship", source: "The Lord of the Rings" },
+  { emoji: "⚡", name: "Hogwarts", source: "Harry Potter" },
+  { emoji: "🎮", name: "Smash Bros", source: "Super Smash Bros." },
+  { emoji: "🐉", name: "Westeros", source: "Game of Thrones" },
+  { emoji: "🌌", name: "The Rebellion", source: "Star Wars" },
+  { emoji: "📎", name: "Dunder Mifflin", source: "The Office" },
+  { emoji: "🔴", name: "Kanto", source: "Pokémon" },
+  { emoji: "🛡️", name: "Avengers", source: "Marvel" },
+  { emoji: "🖖", name: "The Enterprise", source: "Star Trek: TNG" },
+  { emoji: "🎰", name: "The Crew", source: "Ocean's Eleven" },
+  { emoji: "🍃", name: "Ghibli", source: "Studio Ghibli" },
+  { emoji: "🏛️", name: "Olympus", source: "Greek mythology" },
+];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>rostr: give your agents names</title>
+    <meta name="description" content="rostr gives each of your coding agents a name, so you can remember who's doing what. Works with Claude Code and Codex." />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="wordmark" href="/">rostr</a>
+      <nav>
+        <a href="#how-it-works">How it works</a>
+        <a href="#install">Install</a>
+        <a href={GITHUB_URL}>GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Hero -->
+      <section class="hero">
+        <h1>Give your agents names and remember who's doing what.</h1>
+        <p class="lede">
+          rostr drafts a name for every coding agent session you start, from a roster you pick. Gandalf is on the auth
+          bug, Samwise is migrating billing, and you never have to dig through five tabs called "New session" again.
+        </p>
+        <div class="cta">
+          <button class="copy" data-copy={SETUP_PROMPT}>
+            <span class="copy-text">“{SETUP_PROMPT}”</span>
+            <span class="copy-label">Copy</span>
+          </button>
+          <a class="button-secondary" href={GITHUB_URL}>View on GitHub</a>
+        </div>
+        <p class="works-with">Works out of the box with <strong>Claude Code</strong> and <strong>Codex</strong>.</p>
+
+        <div class="terminal" aria-label="Example output of rostr list">
+          <div class="terminal-bar"><span></span><span></span><span></span></div>
+          <pre><span class="prompt">$</span> rostr list
+<span class="dim">fellowship · 4 of 9 drafted</span>
+{ROSTER_MEMBERS.map((member) => `\n${member.emoji} ${member.name.padEnd(9)} ${member.task.padEnd(30)} ${member.where.padEnd(12)} ${member.since}`).join("")}
+</pre>
+        </div>
+      </section>
+
+      <!-- Why -->
+      <section class="section narrow">
+        <h2>Think like an engineering manager</h2>
+        <p>
+          Running five agents at once is easy. Remembering what each one is doing is not. Every workstream you have in
+          flight is something you're holding in your head, and anonymous sessions make it harder: "Untitled 4" and "Fix
+          bug" tell you nothing when you come back an hour later.
+        </p>
+        <p>
+          A good engineering manager doesn't keep a mental list of tickets. They know their team, and they know who's on
+          what. Ask who's handling the billing migration and the answer is instant. rostr gives your agents that kind of
+          identity, so you're checking in with Samwise about billing instead of hunting for the right terminal.
+        </p>
+        <p>
+          Names from stories you already know work best. Samwise comes with a personality attached, so "Samwise is on
+          billing" sticks in a way that "session 3" never will.
+        </p>
+      </section>
+
+      <!-- How it works -->
+      <section class="section" id="how-it-works">
+        <h2>How it works</h2>
+        <p class="section-lede">rostr is a small CLI plus a skill that teaches your agent how to use it.</p>
+        <ol class="steps">
+          <li>
+            <h3>Pick a roster</h3>
+            <p>Run <code>rostr create</code> and choose one of the pre-built rosters, or bring your own list of names.</p>
+          </li>
+          <li>
+            <h3>Every session gets drafted</h3>
+            <p>
+              When a session starts, a hook drafts the next available name and tells the agent who it is. The name goes
+              at the front of the session title: <code>🧙 Gandalf · Fix auth redirect loop</code>.
+            </p>
+          </li>
+          <li>
+            <h3>Agents go back to the bench</h3>
+            <p>
+              The rostr skill has your agent release its name when the work is done, so the same familiar faces keep
+              coming back and your roster stays small.
+            </p>
+          </li>
+        </ol>
+
+        <!-- TODO: screenshot of named sessions in the Claude Code / Codex sidebar -->
+        <figure class="screenshot-placeholder">
+          <span>Screenshot: named sessions in the Claude Code sidebar</span>
+        </figure>
+
+        <div class="cards">
+          <div class="card">
+            <h3>💻 Local rosters</h3>
+            <p>
+              For sessions on your machine. Roster state lives on disk, so there's no account to make and nothing goes
+              over the network.
+            </p>
+          </div>
+          <div class="card">
+            <h3>☁️ Cloud rosters</h3>
+            <p>
+              For agents running in the cloud. Sessions draft from the rostr API at <code>api.getroster.sh</code>, so
+              your cloud agents share one roster and never end up with the same name.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Commands -->
+      <section class="section">
+        <h2>Commands</h2>
+        <dl class="commands">
+          {COMMANDS.map((item) => (
+            <div class="command-row">
+              <dt><code>{item.command}</code></dt>
+              <dd>{item.description}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <!-- Rosters -->
+      <section class="section">
+        <h2>Pick your team</h2>
+        <p class="section-lede">
+          rostr comes with fun pre-built rosters, or you can make your own from any list of names. Every member gets an
+          emoji; if that's not your thing, turn them off with <code>rostr edit</code>.
+        </p>
+        <ul class="rosters">
+          {PRESET_ROSTERS.map((roster) => (
+            <li>
+              <span class="roster-emoji">{roster.emoji}</span>
+              <span>
+                <strong>{roster.name}</strong>
+                <small>{roster.source}</small>
+              </span>
+            </li>
+          ))}
+          <li class="roster-custom">
+            <span class="roster-emoji">✏️</span>
+            <span>
+              <strong>Your own</strong>
+              <small>Any list of names</small>
+            </span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Install -->
+      <section class="section" id="install">
+        <h2>Install</h2>
+        <div class="cards">
+          <div class="card">
+            <h3>Ask your agent</h3>
+            <p>Point Claude Code or Codex at this page and it will install rostr, set up the hooks and skill, and help you pick a roster.</p>
+            <button class="copy copy-block" data-copy={SETUP_PROMPT}>
+              <span class="copy-text">“{SETUP_PROMPT}”</span>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+          <div class="card">
+            <h3>Do it yourself</h3>
+            <p>Install with Homebrew, create a roster, then install the hooks and skill for your agents.</p>
+            <pre class="code"><span class="prompt">$</span> brew install piazzatron/tap/rostr
+<span class="prompt">$</span> rostr create --preset fellowship
+<span class="prompt">$</span> rostr setup <span class="dim"># hooks + skill</span></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>rostr is made by <a href={TWITTER_URL}>@piazzatron</a></span>
+      <span class="footer-links">
+        <a href={GITHUB_URL}>GitHub</a>
+        <a href={TWITTER_URL}>Twitter</a>
+      </span>
+    </footer>
+
+    <script>
+      document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await navigator.clipboard.writeText(button.dataset.copy ?? "");
+          const label = button.querySelector(".copy-label");
+          if (!label) return;
+          label.textContent = "Copied";
+          setTimeout(() => (label.textContent = "Copy"), 1500);
+        });
+      });
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #fbfaf7;
+    --surface: #ffffff;
+    --text: #1c1b19;
+    --muted: #6b675f;
+    --border: #e6e2da;
+    --accent: #d9480f;
+    --terminal-bg: #1c1b19;
+    --terminal-text: #ece8df;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141312;
+      --surface: #1c1b19;
+      --text: #ece8df;
+      --muted: #9c978d;
+      --border: #2e2c29;
+      --accent: #ff7a3d;
+      --terminal-bg: #0d0c0b;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--text) 7%, transparent);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  .nav,
+  main,
+  .footer {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 24px;
+  }
+
+  .wordmark {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 20px;
+    text-decoration: none;
+  }
+
+  .nav nav {
+    display: flex;
+    gap: 20px;
+    font-size: 15px;
+  }
+
+  .nav nav a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .nav nav a:hover {
+    color: var(--text);
+  }
+
+  /* Hero */
+  .hero {
+    padding: 72px 0 48px;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 60px);
+    max-width: 14em;
+    margin: 0 0 20px;
+  }
+
+  .lede {
+    font-size: 20px;
+    color: var(--muted);
+    max-width: 36em;
+    margin: 0 0 32px;
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    max-width: 100%;
+    padding: 12px 16px;
+    font: 14px var(--mono);
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .copy:hover {
+    border-color: var(--accent);
+  }
+
+  .copy-label {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .copy-block {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .button-secondary {
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: var(--text);
+    color: var(--bg);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .works-with {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 16px 0 48px;
+  }
+
+  .terminal {
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.35);
+  }
+
+  .terminal-bar {
+    display: flex;
+    gap: 6px;
+    padding: 12px 14px;
+  }
+
+  .terminal-bar span {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #3a3834;
+  }
+
+  .terminal pre {
+    margin: 0;
+    padding: 4px 20px 22px;
+    overflow-x: auto;
+    font: 14px/1.7 var(--mono);
+  }
+
+  .prompt {
+    color: var(--accent);
+  }
+
+  .dim {
+    color: #8a857b;
+  }
+
+  /* Sections */
+  .section {
+    padding: 56px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .section h2 {
+    font-size: 32px;
+    margin: 0 0 16px;
+  }
+
+  .narrow p {
+    max-width: 38em;
+  }
+
+  .section-lede {
+    color: var(--muted);
+    max-width: 38em;
+    margin: 0 0 32px;
+  }
+
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    margin: 0 0 32px;
+  }
+
+  .steps li {
+    counter-increment: step;
+  }
+
+  .steps li::before {
+    content: counter(step);
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .steps h3 {
+    margin: 12px 0 6px;
+    font-size: 19px;
+  }
+
+  .steps p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .screenshot-placeholder {
+    margin: 0 0 32px;
+    aspect-ratio: 16 / 7;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .card h3 {
+    margin: 0 0 8px;
+    font-size: 19px;
+  }
+
+  .card p {
+    margin: 0 0 16px;
+    color: var(--muted);
+  }
+
+  .card p:last-child {
+    margin-bottom: 0;
+  }
+
+  .code {
+    margin: 0;
+    padding: 16px;
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    border-radius: 8px;
+    overflow-x: auto;
+    font: 13px/1.7 var(--mono);
+  }
+
+  .commands {
+    margin: 0;
+  }
+
+  .command-row {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .command-row dt code {
+    background: none;
+    padding: 0;
+    font-weight: 600;
+  }
+
+  .command-row dd {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .rosters {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .rosters li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .rosters small {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .roster-emoji {
+    font-size: 24px;
+  }
+
+  .roster-custom {
+    border-style: dashed !important;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 32px;
+    padding-bottom: 48px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .nav nav a:not(:last-child) {
+      display: none;
+    }
+
+    .hero {
+      padding-top: 48px;
+    }
+
+    .command-row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+</style>
