@@ -19,30 +19,38 @@ It's a small CLI plus a skill that teaches your agent how to use it, and it work
 3. **Agents go back to the bench.** The rostr skill has the agent release its name when the work is done, so the
    same names keep coming back.
 
+Every roster has an **A team**, six members by default (change who's on it with `rostr edit`). Drafting always
+picks from the A team first and only calls up the **B team** when every starter is busy, so you get to know a small
+group instead of twenty names.
+
+You can have **multiple rosters** and give each project its own with `rostr use`, so a name tells you the project as
+well as the task. Projects without one use your default roster.
+
 Rosters are either **local** or **cloud**:
 
 - **Local:** state lives on disk. For sessions on your machine.
-- **Cloud:** sessions draft from the rostr API at `api.getroster.sh`. For agents running in the cloud, where there's no
+- **Cloud:** sessions draft from the rostr API at `api.getrostr.sh`. For agents running in the cloud, where there's no
   shared disk.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `rostr create` | Create a roster from a preset or your own names, with `--local` or `--cloud` |
-| `rostr draft` | Draft the next available agent (the hooks run this for you) |
+| `rostr create <roster>` | Create a roster from a preset or your own names, with `--local` or `--cloud` |
+| `rostr use <roster>` | Use a roster for the current project |
+| `rostr draft` | Draft the next available agent, A team first (the hooks run this for you) |
 | `rostr list` | See who's on your roster and what each agent is working on |
 | `rostr release <name>` | Release an agent back to the roster |
-| `rostr edit` | Add, remove, or rename members, or turn emoji on and off |
+| `rostr edit` | Add, remove, or rename members, pick your A team, or turn emoji on and off |
 | `rostr disband` | Delete your roster |
 
 ## Install
 
-Point your agent at [getroster.sh](https://getroster.sh) and ask it to set up rostr. To do it yourself:
+Point your agent at [getrostr.sh](https://getrostr.sh) and ask it to set up rostr. To do it yourself:
 
 ```sh
 brew install piazzatron/tap/rostr
-rostr create --preset fellowship
+rostr create work --preset fellowship
 rostr setup   # installs the hooks and skill for Claude Code and Codex
 ```
 
@@ -51,6 +59,6 @@ Until then, the Claude Code hook can be installed by hand: see [`cli/hooks/claud
 ## Repo layout
 
 - `cli/` — the `rostr` CLI and agent hooks
-- `site/` — getroster.sh (Astro), auto-deployed to Vercel
-- `server/` — api.getroster.sh, auto-deployed to Railway
+- `site/` — getrostr.sh (Astro), auto-deployed to Vercel
+- `server/` — api.getrostr.sh, auto-deployed to Railway
 - `docs/` — design notes

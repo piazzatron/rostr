@@ -1,7 +1,7 @@
 ---
 const GITHUB_URL = "https://github.com/piazzatron/rostr";
 const TWITTER_URL = "https://x.com/piazzatron";
-const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getroster.sh";
+const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
 const ROSTER_MEMBERS = [
   { emoji: "🧙", name: "Gandalf", task: "Fix auth redirect loop", where: "rostr/api", since: "12m" },
@@ -11,11 +11,12 @@ const ROSTER_MEMBERS = [
 ];
 
 const COMMANDS = [
-  { command: "rostr create", description: "Create a roster from a preset or your own names. Choose --local or --cloud." },
-  { command: "rostr draft", description: "Draft the next available agent. Your hooks run this at the start of every session." },
+  { command: "rostr create <roster>", description: "Create a roster from a preset or your own names. Choose --local or --cloud." },
+  { command: "rostr use <roster>", description: "Use a roster for the current project. Projects without one use your default roster." },
+  { command: "rostr draft", description: "Draft the next available agent, A team first. Your hooks run this at the start of every session." },
   { command: "rostr list", description: "See who's on your roster and what each agent is working on." },
   { command: "rostr release <name>", description: "Send an agent back to the bench when its work is done." },
-  { command: "rostr edit", description: "Add, remove, or rename members, or turn emoji on and off." },
+  { command: "rostr edit", description: "Add, remove, or rename members, pick your A team, or turn emoji on and off." },
   { command: "rostr disband", description: "Delete your roster." },
 ];
 
@@ -73,7 +74,7 @@ const PRESET_ROSTERS = [
         <div class="terminal" aria-label="Example output of rostr list">
           <div class="terminal-bar"><span></span><span></span><span></span></div>
           <pre><span class="prompt">$</span> rostr list
-<span class="dim">fellowship · 4 of 9 drafted</span>
+<span class="dim">fellowship · A team: 4 of 6 drafted</span>
 {ROSTER_MEMBERS.map((member) => `\n${member.emoji} ${member.name.padEnd(9)} ${member.task.padEnd(30)} ${member.where.padEnd(12)} ${member.since}`).join("")}
 </pre>
         </div>
@@ -139,7 +140,7 @@ const PRESET_ROSTERS = [
           <div class="card">
             <h3>☁️ Cloud rosters</h3>
             <p>
-              For agents running in the cloud. Sessions draft from the rostr API at <code>api.getroster.sh</code>, so
+              For agents running in the cloud. Sessions draft from the rostr API at <code>api.getrostr.sh</code>, so
               your cloud agents share one roster and never end up with the same name.
             </p>
           </div>
@@ -184,6 +185,24 @@ const PRESET_ROSTERS = [
             </span>
           </li>
         </ul>
+
+        <div class="cards team-cards">
+          <div class="card">
+            <h3>🅰️ A team, B team</h3>
+            <p>
+              Twenty names are too many to get to know, so every roster has a small A team: six by default, picked with
+              <code>rostr edit</code>. rostr always drafts from the A team first and only calls up the B team when all your
+              starters are busy.
+            </p>
+          </div>
+          <div class="card">
+            <h3>📁 A roster per project</h3>
+            <p>
+              Make as many rosters as you like and give each project its own with <code>rostr use</code>. The Fellowship
+              works on rostr, the Smash Bros work on your app, and a name tells you the project as well as the task.
+            </p>
+          </div>
+        </div>
       </section>
 
       <!-- Install -->
@@ -202,7 +221,7 @@ const PRESET_ROSTERS = [
             <h3>Do it yourself</h3>
             <p>Install with Homebrew, create a roster, then install the hooks and skill for your agents.</p>
             <pre class="code"><span class="prompt">$</span> brew install piazzatron/tap/rostr
-<span class="prompt">$</span> rostr create --preset fellowship
+<span class="prompt">$</span> rostr create work --preset fellowship
 <span class="prompt">$</span> rostr setup <span class="dim"># hooks + skill</span></pre>
           </div>
         </div>
@@ -593,6 +612,10 @@ const PRESET_ROSTERS = [
 
   .roster-custom {
     border-style: dashed !important;
+  }
+
+  .team-cards {
+    margin-top: 32px;
   }
 
   .footer {
