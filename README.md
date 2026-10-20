@@ -1,5 +1,7 @@
 # rostr
 
+[![CI](https://github.com/piazzatron/rostr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/piazzatron/rostr/actions/workflows/ci.yml)
+
 Give your agents names and remember who's doing what.
 
 rostr drafts a name for every coding agent session you start, from a roster you pick: The Fellowship, Hogwarts,
