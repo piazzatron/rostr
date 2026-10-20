@@ -36,7 +36,8 @@ const { title, description } = Astro.props;
     <footer class="footer">
       <span>Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a> · © {new Date().getFullYear()} Rosebud Labs</span>
       <span class="footer-links">
-        <a href="/privacy">Privacy</a>
+        <a href="/privacy-policy">Privacy policy</a>
+        <a href="/terms">Terms</a>
         <a href={GITHUB_URL}>GitHub</a>
         <a href={X_URL}>X</a>
       </span>
@@ -312,6 +313,36 @@ const { title, description } = Astro.props;
     color: var(--muted);
     max-width: 38em;
     margin: 0 0 32px;
+  }
+
+  /* Privacy policy and terms of service, rendered from Markdown */
+  .legal {
+    max-width: 44em;
+    padding: 72px 0 56px;
+  }
+
+  .legal h1 {
+    font-size: clamp(36px, 6vw, 52px);
+    margin: 0 0 8px;
+  }
+
+  .legal h2 {
+    font-size: 22px;
+    margin: 40px 0 12px;
+  }
+
+  .legal table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+
+  .legal th,
+  .legal td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
   }
 
   .steps {
@@ -1106,6 +1137,15 @@ const { title, description } = Astro.props;
 
     .hero {
       padding-top: 48px;
+    }
+
+    .footer {
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .footer-links {
+      flex-wrap: wrap;
     }
 
   }
