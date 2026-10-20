@@ -26,6 +26,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	// Predictable drafts: always the first free member, in roster order
+	pickIndex = func(int) int { return 0 }
+
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		fmt.Fprintln(os.Stderr, "TEST_DATABASE_URL is not set. Start Postgres with `docker compose up -d postgres`; see server/README.md.")

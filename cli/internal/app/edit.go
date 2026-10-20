@@ -96,7 +96,7 @@ func editRoster(ctx context.Context, out io.Writer, st store.Store, name string)
 			return saveErr
 		}
 		fmt.Fprintln(out, "Not saved:", saveErr)
-		again, err := promptConfirm("Open the editor again?", true)
+		again, err := promptConfirm("edit", "Open the editor again?", true)
 		if err != nil {
 			return err
 		}

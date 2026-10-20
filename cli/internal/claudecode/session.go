@@ -99,27 +99,33 @@ func AdditionalContext(eventName, context string) string {
 	return string(out)
 }
 
-// Identity is what the agent is told whenever it's drafted or re-told its name.
-func Identity(display, rosterName string) string {
+// Identity is what the agent is told whenever it's drafted or re-told its name. The task command names the session
+// explicitly, so it works even where ROSTR_SESSION isn't set (a session started before the hooks were installed).
+func Identity(display, rosterName, sessionID string) string {
 	return strings.Join([]string{
 		fmt.Sprintf("You're %s for this session (drafted by rostr from the %q roster).", display, rosterName),
 		fmt.Sprintf("- When you write somewhere other than this chat, sign it \"— %s\": Slack messages, emails, "+
 			"PR descriptions, PR and issue comments.", display),
 		"- Don't put the name in code, commit messages, or files.",
 		"- Your user's own instructions about attribution or sign-offs take precedence over these.",
-		"- When your work changes, run: rostr agent task \"<new task>\"",
+		fmt.Sprintf("- When your work changes, run: %s \"<new task>\"", taskCommand(sessionID)),
 	}, "\n")
 }
 
 // TitleInstruction asks the agent to title the session and record the same summary as its task. Desktop and Remote
 // Control sessions (with a bridge session ID) can set the app's title; terminal sessions only record the task.
-func TitleInstruction(display, bridgeSessionID string) string {
+func TitleInstruction(display, bridgeSessionID, sessionID string) string {
 	if bridgeSessionID == "" {
-		return "Now run: rostr agent task \"<your 3-5 word summary of this conversation>\"."
+		return fmt.Sprintf("Now run: %s \"<your 3-5 word summary of this conversation>\".", taskCommand(sessionID))
 	}
 	return fmt.Sprintf("Now call mcp__claude-code-remote__set_session_title with session_id %q and title "+
-		"\"%s · <your 3-5 word summary of this conversation>\", then run: rostr agent task \"<the same summary>\".",
-		bridgeSessionID, display)
+		"\"%s · <your 3-5 word summary of this conversation>\", then run: %s \"<the same summary>\".",
+		bridgeSessionID, display, taskCommand(sessionID))
+}
+
+// taskCommand is the command the agent runs to set its task, naming its session.
+func taskCommand(sessionID string) string {
+	return "rostr agent task --session " + sessionID
 }
 
 // PlaceholderTask is the start of the first prompt, used as the task until the agent sets its own.

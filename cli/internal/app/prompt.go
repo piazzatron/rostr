@@ -16,40 +16,21 @@ func isInteractive() bool {
 
 var errCancelled = errors.New("cancelled")
 
-// promptSelect asks the user to pick one option, returning its index.
-func promptSelect(title string, options []string) (int, error) {
+// promptSelect asks the user to pick one option on a full screen headed by command, returning its index.
+func promptSelect(command, title, description string, options []string) (int, error) {
 	choices := make([]huh.Option[int], len(options))
 	for i, label := range options {
 		choices[i] = huh.NewOption(label, i)
 	}
 	var picked int
-	err := huh.NewSelect[int]().Title(title).Options(choices...).Value(&picked).Run()
-	return picked, promptError(err)
+	field := huh.NewSelect[int]().Title(title).Description(description).Options(choices...).Value(&picked)
+	err := newScreen(command).run([]screenStep{{field: field}})
+	return picked, err
 }
 
-// promptInput asks for text, starting from initial, until validate accepts it.
-func promptInput(title, initial string, validate func(string) error) (string, error) {
+// promptConfirm asks a yes-or-no question on a full screen headed by command.
+func promptConfirm(command, title string, initial bool) (bool, error) {
 	value := initial
-	err := huh.NewInput().Title(title).Value(&value).Validate(validate).Run()
-	return value, promptError(err)
-}
-
-// promptSecret asks for text without showing what's typed, until validate accepts it.
-func promptSecret(title string, validate func(string) error) (string, error) {
-	var value string
-	err := huh.NewInput().Title(title).EchoMode(huh.EchoModeNone).Value(&value).Validate(validate).Run()
-	return value, promptError(err)
-}
-
-func promptConfirm(title string, initial bool) (bool, error) {
-	value := initial
-	err := huh.NewConfirm().Title(title).Value(&value).Run()
-	return value, promptError(err)
-}
-
-func promptError(err error) error {
-	if errors.Is(err, huh.ErrUserAborted) {
-		return errCancelled
-	}
-	return err
+	err := newScreen(command).run([]screenStep{{field: huh.NewConfirm().Title(title).Value(&value)}})
+	return value, err
 }

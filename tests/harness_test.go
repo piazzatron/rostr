@@ -101,6 +101,7 @@ func newMachine(t *testing.T) *machine {
 		"CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"),
 		"ROSTR_API_URL="+apiURL,
 		"ROSTR_REWAKE_DELAY=0",
+		"ROSTR_DRAFT_PICK=first",
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
 		"TERM=xterm-256color",

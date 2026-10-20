@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/crypto"
@@ -83,21 +84,36 @@ func runCloudOn(ctx context.Context, out io.Writer) error {
 		return moveSetupToCloud(ctx, out, local)
 	}
 
-	picked, err := promptSelect("New setup, or do you have a key?", []string{
-		"New setup (moves this machine's rosters to the cloud)",
-		"I have a key (from another machine)",
+	// Ask for a new setup or an existing key, then for the key, on one screen. A machine with local rosters can't join
+	var join bool
+	var key crypto.Key
+	s := newScreen("config cloud on")
+	err = s.run([]screenStep{
+		{field: huh.NewSelect[bool]().Title("New setup, or do you have a key?").Options(
+			huh.NewOption("New setup (moves this machine's rosters to the cloud)", false),
+			huh.NewOption("I have a key (from another machine)", true),
+		).Value(&join)},
+		{
+			field: huh.NewInput().Title("Paste your rostr key (it won't be shown)").EchoMode(huh.EchoModeNone).
+				Validate(s.forwardOnly(func(value string) error {
+					var err error
+					key, err = crypto.ParseKey(value)
+					return err
+				})),
+			shown: func() bool { return join && len(local.Rosters) == 0 },
+		},
 	})
 	if err != nil {
 		return err
 	}
-	if picked == 0 {
+	if !join {
 		return moveSetupToCloud(ctx, out, local)
 	}
 	if len(local.Rosters) > 0 {
 		return fmt.Errorf("this machine already has local rosters (%s), so it can't join another setup. "+
 			"Choose a new setup to move them to the cloud, or disband them first", rosterNames(local.Rosters))
 	}
-	return joinCloudWithKey(ctx, out)
+	return joinCloudWithKey(ctx, out, key)
 }
 
 // moveSetupToCloud generates a key and uploads the setup with it in one request. Only once that succeeds does it save
@@ -142,18 +158,8 @@ func registerInCloud(ctx context.Context, setup store.Setup) error {
 	return nil
 }
 
-// joinCloudWithKey asks for an existing key, checks it with the API, and saves it.
-func joinCloudWithKey(ctx context.Context, out io.Writer) error {
-	var key crypto.Key
-	_, err := promptSecret("Paste your rostr key (it won't be shown)", func(s string) error {
-		var err error
-		key, err = crypto.ParseKey(s)
-		return err
-	})
-	if err != nil {
-		return err
-	}
-
+// joinCloudWithKey checks an existing key with the API, and saves it.
+func joinCloudWithKey(ctx context.Context, out io.Writer, key crypto.Key) error {
 	cloud, err := store.NewCloud(apiURL(), key)
 	if err != nil {
 		return err

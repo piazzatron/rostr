@@ -203,7 +203,7 @@ func findDraftedAgent(ctx context.Context, st store.Store, name, rosterFlag stri
 		return store.Draft{}, fmt.Errorf("%s is drafted in more than one roster (%s); pass --roster",
 			matches[0].Name(), strings.Join(rosterNames, ", "))
 	}
-	picked, err := promptSelect(fmt.Sprintf("%s is drafted in more than one roster. Which one?", matches[0].Name()), rosterNames)
+	picked, err := promptSelect("agent", fmt.Sprintf("%s is drafted in more than one roster. Which one?", matches[0].Name()), "", rosterNames)
 	if err != nil {
 		return store.Draft{}, err
 	}

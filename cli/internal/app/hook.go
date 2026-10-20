@@ -106,7 +106,7 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 		return nil
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster)))
+	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
 
@@ -140,7 +140,8 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), input.SessionID)
 	time.Sleep(rewakeDelay())
 	fmt.Fprintf(stderr, "%s\n\n%s Reply with nothing else, and don't mention the title or the task.\n",
-		claudecode.Identity(d.Display(), d.Roster), claudecode.TitleInstruction(d.Display(), bridgeSessionID))
+		claudecode.Identity(d.Display(), d.Roster, input.SessionID),
+		claudecode.TitleInstruction(d.Display(), bridgeSessionID, input.SessionID))
 	return exitError{code: rewakeExitCode}
 }
 
@@ -183,8 +184,8 @@ func newHookDraftCommand() *cobra.Command {
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), session)
-			fmt.Fprintf(out, "%s\n\n%s\n", claudecode.Identity(d.Display(), d.Roster),
-				claudecode.TitleInstruction(d.Display(), bridgeSessionID))
+			fmt.Fprintf(out, "%s\n\n%s\n", claudecode.Identity(d.Display(), d.Roster, session),
+				claudecode.TitleInstruction(d.Display(), bridgeSessionID, session))
 			return nil
 		},
 	}

@@ -22,6 +22,8 @@ Decide once there's a working build to play with.
 - [ ] Design pass on the /rosters page.
 - [ ] Logo and iconography design: the logo, the favicon (the site still uses Astro's default), and icons for the site.
 - [ ] General copy pass on everything on the website.
+- [ ] Decide the final tagline ("Give your agents names and remember who's doing what"), used in the CLI's help and on
+      the website.
 - [ ] Upgrade the home page's "Works out of the box with Claude Code and Codex" line to say where: the Claude Code and
       Codex desktop apps, the terminal, tmux, and herdr.
 - [ ] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
@@ -49,6 +51,8 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 - [ ] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
       task encryption, and repo fingerprints.
 - [ ] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
+- [ ] Make drafting and the title summary much faster (hook performance): the name and title currently land several
+      seconds into a session.
 - [ ] Detect headless `claude -p` runs in the hooks (and Codex's equivalent) and skip drafting for them.
 - [ ] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
       and skill.

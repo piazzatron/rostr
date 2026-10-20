@@ -109,9 +109,10 @@ With no rosters yet, every command that needs one says: "No rosters yet. Run `ro
 rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft]
 ```
 
-Interactive setup. The wizard asks, in order: preset, roster name, emoji, where rostr lives (this machine or the
-cloud), and whether to draft every session automatically. Each question can be skipped with a flag, so an agent can
-run it non-interactively.
+Interactive setup. The wizard runs full-screen, one question per step: a pre-built roster (with a preview of its
+cast) or your own names, roster name, emoji, where rostr lives (this machine or the cloud), and whether to draft every
+session automatically, then a summary to confirm. Nothing is saved until it's confirmed; shift+tab goes back a step,
+and esc cancels. Each question can be skipped with a flag, so an agent can run it non-interactively.
 
 - `--preset <id>`: use a pre-built roster.
 - `--names <list>`: comma-separated names, each optionally with an emoji (`"🧮 Ada, Grace"`). The first six are

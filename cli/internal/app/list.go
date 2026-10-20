@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/roster"
@@ -126,9 +128,9 @@ func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.
 		if i > 0 {
 			fmt.Fprintln(w)
 		}
-		heading := r.Name + " roster"
+		heading := styleHeading.Render(r.Name + " roster")
 		if r.Name == defaultRoster {
-			heading += " (default)"
+			heading += styleMuted.Render(" (default)")
 		}
 		fmt.Fprintln(w, heading)
 
@@ -136,7 +138,7 @@ func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.
 		for j, d := range r.Drafted {
 			rows[j] = []string{d.Display, orDash(d.Task), orDash(d.Repo), since(now.Sub(d.DraftedAt))}
 		}
-		writeTable(w, "  ", rows)
+		writeTable(w, "  ", rows, styleBold, stylePlain, styleMuted, styleFaint)
 
 		idle := make([]string, len(r.Idle))
 		for j, m := range r.Idle {
@@ -145,32 +147,67 @@ func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.
 		if len(idle) == 0 {
 			idle = []string{"none"}
 		}
-		fmt.Fprintf(w, "  Idle: %s\n", strings.Join(idle, ", "))
+		fmt.Fprintf(w, "  %s %s\n", styleMuted.Render("Idle:"), styleFaint.Render(strings.Join(idle, ", ")))
 	}
 }
 
-// writeTable prints rows with columns padded to line up, measuring emoji by display width.
-func writeTable(w io.Writer, indent string, rows [][]string) {
+// writeTable prints rows with columns padded to line up, measuring cells with cellWidth. Column i is drawn with
+// styles[i], if given.
+func writeTable(w io.Writer, indent string, rows [][]string, styles ...lipgloss.Style) {
 	var widths []int
 	for _, row := range rows {
 		for i, cell := range row {
 			if i >= len(widths) {
 				widths = append(widths, 0)
 			}
-			widths[i] = max(widths[i], runewidth.StringWidth(cell))
+			widths[i] = max(widths[i], cellWidth(cell))
 		}
 	}
 	for _, row := range rows {
 		var line strings.Builder
 		line.WriteString(indent)
 		for i, cell := range row {
-			line.WriteString(cell)
+			if i < len(styles) {
+				line.WriteString(styles[i].Render(cell))
+			} else {
+				line.WriteString(cell)
+			}
 			if i < len(row)-1 {
-				line.WriteString(strings.Repeat(" ", widths[i]-runewidth.StringWidth(cell)+3))
+				line.WriteString(strings.Repeat(" ", widths[i]-cellWidth(cell)+3))
 			}
 		}
 		fmt.Fprintln(w, line.String())
 	}
+}
+
+// cellWidth measures text the way common terminals draw it, with every emoji two columns wide, including the ones
+// Unicode calls narrow or that only become emoji with a variation selector (⚡, 🛡️, 🏛️).
+func cellWidth(s string) int {
+	width := 0
+	graphemes := uniseg.NewGraphemes(s)
+	for graphemes.Next() {
+		if isEmojiGrapheme(graphemes.Runes()) {
+			width += 2
+		} else {
+			width += runewidth.StringWidth(graphemes.Str())
+		}
+	}
+	return width
+}
+
+// isEmojiGrapheme reports whether a grapheme has a pictograph, a variation selector, or a symbol from the blocks
+// emoji like ⚡ and ✏ come from.
+func isEmojiGrapheme(runes []rune) bool {
+	for _, r := range runes {
+		switch {
+		case r == 0xFE0F, r >= 0x1F000,
+			r >= 0x2300 && r <= 0x23FF, // Miscellaneous Technical (⌛ ⏰)
+			r >= 0x2600 && r <= 0x27BF, // Miscellaneous Symbols and Dingbats (⚡ ☕ ✏)
+			r >= 0x2B00 && r <= 0x2BFF: // Miscellaneous Symbols and Arrows (⭐)
+			return true
+		}
+	}
+	return false
 }
 
 // since formats a duration the way `rostr list` shows time since drafting: "just now", "5m", "2h", "3d".

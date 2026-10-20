@@ -515,12 +515,14 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 
 	// Fellowship, its default name, emoji on, the cloud, auto-draft on
 	out, code := m.runTTY([]ttyStep{
-		{"Pick a roster", keyEnter},
+		{"How do you want to build your roster?", keyEnter},
+		{"Pick a roster: type to search", keyEnter},
 		{"Name this roster", keyEnter},
 		{"How should agents show up?", keyEnter},
 		{"Where should rostr live?", keyDown},
 		{"The cloud", keyEnter},
-		{"Draft every new session automatically?", keyEnter},
+		{"Draft names automatically in new sessions", keyEnter},
+		{"Assemble the fellowship roster?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") {
 		t.Fatalf("wizard: exit %d\n%s", code, out)
@@ -541,8 +543,10 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"What do you want to do?", keyDown},
 		{"Replace a roster's cast", keyEnter},
 		{"Whose cast do you want to replace?", keyEnter},
-		{"Pick a roster", keyDown},
-		{"Hogwarts", keyEnter},
+		{"How do you want to build your roster?", keyEnter},
+		{"Pick a roster: type to search", "hogwarts"},
+		{"hogwarts", keyEnter},
+		{"Replace the fellowship roster's cast with ⚡ Hogwarts?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Replaced the fellowship roster's cast") {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)

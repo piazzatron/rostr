@@ -68,7 +68,7 @@ func newConfigCommand() *cobra.Command {
 				{"Auto-draft", onOff(config.AutoDraft)},
 				{"Expiry", config.Expiry},
 				{"Emoji", orDash(strings.Join(emoji, ", "))},
-			})
+			}, styleMuted)
 			return nil
 		},
 	}

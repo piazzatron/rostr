@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -420,7 +421,7 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
-		// The first free member, A team first, then numbered copies
+		// A random free member, A team first, then numbered copies
 		member, copy, err := firstFreeMember(ctx, tx, r)
 		if err != nil {
 			return err
@@ -687,14 +688,36 @@ func firstFreeMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Membe
 		return roster.Member{}, 0, err
 	}
 
+	m, copy := pickFreeMember(r.ATeam, r.BTeam, func(name string, copy int) bool { return busy[slot{name, copy}] }, pickIndex)
+	return m, copy, nil
+}
+
+// pickFreeMember picks a random free member, A team first, then the B team, then numbered copies the same way. pick
+// chooses an index among the free members; the cast is never empty.
+func pickFreeMember(aTeam, bTeam []roster.Member, busy func(name string, copy int) bool, pick func(n int) int) (roster.Member, int) {
 	for copy := 1; ; copy++ {
-		for _, m := range members {
-			if !busy[slot{m.Name, copy}] {
-				return m, copy, nil
+		for _, team := range [][]roster.Member{aTeam, bTeam} {
+			var free []roster.Member
+			for _, m := range team {
+				if !busy(m.Name, copy) {
+					free = append(free, m)
+				}
+			}
+			if len(free) > 0 {
+				return free[pick(len(free))], copy
 			}
 		}
 	}
 }
+
+// pickIndex chooses which free member to draft: a random one, or always the first with ROSTR_DRAFT_PICK=first, which
+// tests set for predictable drafts.
+var pickIndex = func() func(int) int {
+	if os.Getenv("ROSTR_DRAFT_PICK") == "first" {
+		return func(int) int { return 0 }
+	}
+	return rand.IntN
+}()
 
 func memberNamed(members []roster.Member, name string) (roster.Member, bool) {
 	for _, m := range members {

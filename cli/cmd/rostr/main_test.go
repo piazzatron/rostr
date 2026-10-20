@@ -95,7 +95,7 @@ func (s *sandbox) baseEnv() []string {
 	}
 	// Cloud mode calls a closed local port unless a test says otherwise, so nothing here reaches the real API
 	return append(env, "HOME="+s.home, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "ROSTR_REWAKE_DELAY=0",
-		"ROSTR_API_URL=http://127.0.0.1:1")
+		"ROSTR_DRAFT_PICK=first", "ROSTR_API_URL=http://127.0.0.1:1")
 }
 
 // gitRepo makes a repo in a temp dir, with an origin unless origin is "".
@@ -372,7 +372,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	// First prompt in a terminal session: drafts, then wakes Claude (exit 2) with its identity and the task step
 	r := hook("prompt", firstPrompt("s1"))
 	if r.code != 2 || r.stdout != "" || !strings.HasPrefix(r.stderr, "You're 🧙 Gandalf for this session (drafted by rostr from the \"work\" roster).") ||
-		!strings.Contains(r.stderr, `run: rostr agent task "<your 3-5 word summary`) || strings.Contains(r.stderr, "set_session_title") {
+		!strings.Contains(r.stderr, `run: rostr agent task --session s1 "<your 3-5 word summary`) || strings.Contains(r.stderr, "set_session_title") {
 		t.Fatalf("first prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(keepAliveDir, "s1")); err != nil {
@@ -480,6 +480,58 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	for _, path := range []string{"skills/rostr/SKILL.md", "commands/draft.md"} {
 		if _, err := os.Stat(filepath.Join(s.home, ".claude", path)); err != nil {
 			t.Error(err)
+		}
+	}
+}
+
+func TestDisassembleRemovesTheClaudeCodeInstall(t *testing.T) {
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+
+	// Without a terminal it needs --yes, and says how to use it
+	s.fails(s.home, nil, "pass --yes", "disassemble")
+	if r := s.run(s.home, "", nil, "disassemble"); !strings.Contains(r.stderr, "Usage:\n  rostr disassemble [flags]") {
+		t.Fatalf("no usage: %s", r.stderr)
+	}
+
+	out := s.ok(s.home, nil, "disassemble", "--yes")
+	if !strings.Contains(out, "Removed hooks in") || !strings.Contains(out, "Removed the /draft command") {
+		t.Fatalf("disassemble: %s", out)
+	}
+	settings, _ := os.ReadFile(filepath.Join(s.home, ".claude", "settings.json"))
+	if strings.Contains(string(settings), "rostr") {
+		t.Fatalf("rostr left in settings.json: %s", settings)
+	}
+
+	// uninstall is the same command; the roster is still there
+	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "Nothing to remove") {
+		t.Fatalf("uninstall: %s", out)
+	}
+	s.ok(s.home, nil, "list")
+}
+
+func TestMissingArgumentsPrintUsage(t *testing.T) {
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+
+	for _, args := range [][]string{{"disband"}, {"config", "emoji"}, {"assemble", "--emoji", "on"}, {"list", "--bogus"}} {
+		r := s.run(s.home, "", nil, args...)
+		if r.code != 1 || !strings.Contains(r.stderr, "Usage:") {
+			t.Errorf("rostr %v: exit %d, stderr %q", args, r.code, r.stderr)
+		}
+	}
+
+	// Errors that aren't about missing input don't print usage
+	if r := s.run(s.home, "", nil, "disband", "nope", "--yes"); r.code != 1 || strings.Contains(r.stderr, "Usage:") {
+		t.Errorf("disband nope: exit %d, stderr %q", r.code, r.stderr)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	s := newSandbox(t)
+	for _, args := range [][]string{{"version"}, {"--version"}} {
+		if out := s.ok(s.home, nil, args...); !strings.HasPrefix(out, "rostr ") {
+			t.Errorf("rostr %v: %q", args, out)
 		}
 	}
 }

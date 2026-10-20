@@ -52,11 +52,11 @@ func newLinkCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			current := fmt.Sprintf("%s uses the %s roster (your default).", repo, settings.DefaultRoster)
 			if linked != "" {
-				fmt.Fprintf(out, "%s uses the %s roster (linked).\n", repo, linked)
-			} else {
-				fmt.Fprintf(out, "%s uses the %s roster (your default).\n", repo, settings.DefaultRoster)
+				current = fmt.Sprintf("%s uses the %s roster (linked).", repo, linked)
 			}
+			fmt.Fprintln(out, current)
 			if !isInteractive() {
 				return nil
 			}
@@ -68,7 +68,7 @@ func newLinkCommand() *cobra.Command {
 			if linked != "" {
 				options = append(options, fmt.Sprintf("Unlink (use your default, %s)", settings.DefaultRoster))
 			}
-			picked, err := promptSelect("Change it?", options)
+			picked, err := promptSelect("link", "Change it?", current, options)
 			if err != nil {
 				return err
 			}

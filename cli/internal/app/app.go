@@ -17,7 +17,7 @@ import (
 
 var (
 	errNoRosters = store.ErrNoRosters
-	errNoSession = errors.New("no session: pass --session, or run this inside a Claude Code session, where ROSTR_SESSION is set")
+	errNoSession = missingInput("no session: pass --session, or run this inside a Claude Code session, where ROSTR_SESSION is set")
 )
 
 // defaultAPIURL is the rostr API that cloud mode calls. ROSTR_API_URL overrides it (tests point it at a local server).
@@ -26,16 +26,20 @@ const defaultAPIURL = "https://api.getrostr.sh"
 // Execute runs rostr and returns its exit code.
 func Execute() int {
 	root := newRootCommand()
-	err := root.Execute()
+	cmd, err := root.ExecuteC()
 
 	var exit exitError
+	var missing errMissingInput
 	switch {
 	case err == nil:
 		return 0
 	case errors.As(err, &exit):
 		return exit.code
+	case errors.As(err, &missing):
+		fmt.Fprintf(os.Stderr, "%s %s\n\n%s", styleErrorPrefix.Render("rostr:"), err, cmd.UsageString())
+		return 1
 	default:
-		fmt.Fprintln(os.Stderr, "rostr:", err)
+		fmt.Fprintln(os.Stderr, styleErrorPrefix.Render("rostr:")+" "+err.Error())
 		return 1
 	}
 }
@@ -44,9 +48,14 @@ func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "rostr",
 		Short:         "Give your agents names and remember who's doing what",
+		Version:       versionString(),
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
+	root.SetVersionTemplate("rostr {{.Version}}\n")
+	// Shell completion still works (the Homebrew formula installs it) but stays out of the command list
+	root.CompletionOptions.HiddenDefaultCmd = true
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return missingInput(err.Error()) })
 	root.AddCommand(
 		newAssembleCommand("assemble", false),
 		newAssembleCommand("create", true),
@@ -56,11 +65,37 @@ func newRootCommand() *cobra.Command {
 		newEditCommand(),
 		newPresetsCommand(),
 		newDisbandCommand(),
+		newDisassembleCommand(),
 		newAgentCommand(),
 		newConfigCommand(),
 		newHookCommand(),
+		newVersionCommand(),
 	)
+	wrapArgsWithUsage(root)
 	return root
+}
+
+// errMissingInput is a command run without the arguments or flags it needs (wrong argument count, a bad flag, or a
+// prompt it can't ask without a terminal). Execute prints the command's usage after it.
+type errMissingInput struct{ message string }
+
+func (e errMissingInput) Error() string { return e.message }
+
+func missingInput(message string) error { return errMissingInput{message} }
+
+// wrapArgsWithUsage makes every command's argument-count errors missing-input errors, so they print usage too.
+func wrapArgsWithUsage(cmd *cobra.Command) {
+	if validate := cmd.Args; validate != nil {
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			if err := validate(c, args); err != nil {
+				return missingInput(err.Error())
+			}
+			return nil
+		}
+	}
+	for _, child := range cmd.Commands() {
+		wrapArgsWithUsage(child)
+	}
 }
 
 // exitError ends rostr with a specific exit code and no message, for hooks whose exit code means something.

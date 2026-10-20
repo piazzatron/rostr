@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"slices"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
@@ -75,68 +78,46 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	}
 	cloud := opts.cloud && !alreadyCloud
 
-	// Running it again: ask what the person wants. Agents passing flags always make a new roster
-	flagsGiven := len(args) > 0 || opts.preset != "" || opts.names != "" || opts.emoji != "" || opts.noAutoDraft
-	if !firstRun && interactive && !flagsGiven {
-		choice, err := promptSelect("You already have a roster. What do you want to do?",
-			[]string{"Make a new roster", "Replace a roster's cast", "Edit a roster"})
-		if err != nil {
-			return err
-		}
-		switch choice {
-		case 1:
-			return replaceCastInteractively(ctx, out, st, existing)
-		case 2:
-			name, err := pickRoster("Which roster?", existing)
-			if err != nil {
-				return err
-			}
-			return editRoster(ctx, out, st, name)
-		}
-	}
-
-	// Cast
-	chosen, err := chooseCast(opts, interactive)
-	if err != nil {
-		return err
-	}
-
-	// Name
-	name, err := chooseRosterName(ctx, st, args, chosen, interactive)
-	if err != nil {
-		return err
-	}
-
-	// Emoji mode
+	// Without a terminal, flags say everything; at a terminal, one full-screen wizard asks whatever they don't
+	var chosen cast
+	var name string
 	mode := roster.EmojiOn
-	switch {
-	case opts.emoji != "":
-		if mode, err = roster.ParseEmojiMode(opts.emoji); err != nil {
-			return err
-		}
-	case interactive:
-		modes := []roster.EmojiMode{roster.EmojiOn, roster.EmojiOff, roster.EmojiOnly}
-		picked, err := promptSelect("How should agents show up?", []string{
-			roster.Display(chosen.aTeam[0].Emoji, chosen.aTeam[0].Name, 1, roster.EmojiOn) + "  (emoji and name)",
-			roster.Display(chosen.aTeam[0].Emoji, chosen.aTeam[0].Name, 1, roster.EmojiOff) + "  (name only)",
-			roster.Display(chosen.aTeam[0].Emoji, chosen.aTeam[0].Name, 1, roster.EmojiOnly) + "  (emoji only)",
-		})
+	autoDraft := !opts.noAutoDraft
+	if interactive {
+		flow, err := newAssembleFlow(assembleSetup{existing: existing, opts: opts, args: args, inCloud: opts.cloud || alreadyCloud})
 		if err != nil {
 			return err
 		}
-		mode = modes[picked]
-	}
-
-	// Setup-wide questions, asked only on the first run
-	autoDraft := !opts.noAutoDraft
-	if firstRun && interactive {
-		if !cloud && !alreadyCloud {
-			if cloud, err = promptWhereRostrLives(); err != nil {
+		if err := flow.ask(ctx, st); err != nil {
+			return err
+		}
+		switch flow.action {
+		case actionEdit:
+			return editRoster(ctx, out, st, flow.roster)
+		case actionReplace:
+			replacement := flow.chosenCast()
+			if err := st.ReplaceCast(ctx, flow.roster, replacement.aTeam, replacement.bTeam); err != nil {
 				return err
 			}
+			fmt.Fprintf(out, "Replaced the %s roster's cast. Agents already drafted keep their names until their sessions end.\n", flow.roster)
+			return nil
 		}
-		if !opts.noAutoDraft {
-			if autoDraft, err = promptConfirm("Draft every new session automatically? (Otherwise, use /draft.)", true); err != nil {
+		chosen, name, mode = flow.chosenCast(), flow.rosterName(), flow.emoji
+		if flow.asks(stepWhere) {
+			cloud = flow.cloud
+		}
+		if flow.asks(stepAutoDraft) {
+			autoDraft = flow.autoDraft
+		}
+	} else {
+		if chosen, err = chooseCast(opts); err != nil {
+			return err
+		}
+		if name, err = chooseRosterName(args, chosen); err != nil {
+			return err
+		}
+		if opts.emoji != "" {
+			if mode, err = roster.ParseEmojiMode(opts.emoji); err != nil {
 				return err
 			}
 		}
@@ -200,40 +181,16 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	return nil
 }
 
-// chooseCast takes the cast from --preset or --names, or asks for one.
-func chooseCast(opts assembleOptions, interactive bool) (cast, error) {
+// chooseCast takes the cast from --preset or --names.
+func chooseCast(opts assembleOptions) (cast, error) {
 	switch {
 	case opts.preset != "":
 		return presetCast(opts.preset)
 	case opts.names != "":
 		aTeam, bTeam, err := roster.ParseNames(opts.names)
 		return cast{aTeam: aTeam, bTeam: bTeam}, err
-	case !interactive:
-		return cast{}, errors.New("pass --preset <id> (see `rostr presets`) or --names <list>, or run `rostr assemble` in a terminal")
 	}
-
-	all := presets.All()
-	options := make([]string, 0, len(all)+1)
-	for _, p := range all {
-		options = append(options, fmt.Sprintf("%s %s  (%s)", p.Emoji, p.Name, p.Source))
-	}
-	options = append(options, "✏️  Your own names")
-	picked, err := promptSelect("Pick a roster", options)
-	if err != nil {
-		return cast{}, err
-	}
-	if picked < len(all) {
-		return presetCast(all[picked].ID)
-	}
-
-	var aTeam, bTeam []roster.Member
-	_, err = promptInput(`Names, comma-separated. An emoji in front is optional ("🧮 Ada, Grace"). The first six are the A team.`, "",
-		func(s string) error {
-			var err error
-			aTeam, bTeam, err = roster.ParseNames(s)
-			return err
-		})
-	return cast{aTeam: aTeam, bTeam: bTeam}, err
+	return cast{}, missingInput("pass --preset <id> (see `rostr presets`) or --names <list>, or run `rostr assemble` in a terminal")
 }
 
 func presetCast(id string) (cast, error) {
@@ -248,68 +205,15 @@ func presetCast(id string) (cast, error) {
 	}, nil
 }
 
-// chooseRosterName takes the name argument, asks for one, or defaults to the preset's id when run by an agent.
-func chooseRosterName(ctx context.Context, st store.Store, args []string, chosen cast, interactive bool) (string, error) {
+// chooseRosterName takes the name argument, or defaults to the preset's id.
+func chooseRosterName(args []string, chosen cast) (string, error) {
 	if len(args) > 0 {
 		return args[0], nil
 	}
-	if !interactive {
-		if chosen.presetID == "" {
-			return "", errors.New("name the roster: rostr assemble <roster> --names <list>")
-		}
-		return chosen.presetID, nil
+	if chosen.presetID == "" {
+		return "", missingInput("name the roster: rostr assemble <roster> --names <list>")
 	}
-
-	initial := chosen.presetID
-	if initial == "" {
-		initial = "work"
-	}
-	return promptInput("Name this roster", initial, func(name string) error {
-		if strings.TrimSpace(name) == "" {
-			return errors.New("a roster needs a name")
-		}
-		if existing, err := st.Roster(ctx, name); err == nil {
-			return fmt.Errorf("you already have a roster named %q", existing.Name)
-		}
-		return nil
-	})
-}
-
-// promptWhereRostrLives asks where rostr lives, reporting whether the answer is the cloud.
-func promptWhereRostrLives() (bool, error) {
-	picked, err := promptSelect("Where should rostr live?", []string{
-		"This machine (local)",
-		"The cloud (every machine and cloud environment)",
-	})
-	return picked == 1, err
-}
-
-func replaceCastInteractively(ctx context.Context, out io.Writer, st store.Store, existing []store.Roster) error {
-	name, err := pickRoster("Whose cast do you want to replace?", existing)
-	if err != nil {
-		return err
-	}
-	chosen, err := chooseCast(assembleOptions{}, true)
-	if err != nil {
-		return err
-	}
-	if err := st.ReplaceCast(ctx, name, chosen.aTeam, chosen.bTeam); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "Replaced the %s roster's cast. Agents already drafted keep their names until their sessions end.\n", name)
-	return nil
-}
-
-func pickRoster(title string, rosters []store.Roster) (string, error) {
-	names := make([]string, len(rosters))
-	for i, r := range rosters {
-		names[i] = r.Name
-	}
-	picked, err := promptSelect(title, names)
-	if err != nil {
-		return "", err
-	}
-	return names[picked], nil
+	return chosen.presetID, nil
 }
 
 func displayMembers(members []roster.Member, mode roster.EmojiMode) string {
@@ -318,4 +222,354 @@ func displayMembers(members []roster.Member, mode roster.EmojiMode) string {
 		parts[i] = roster.Display(m.Emoji, m.Name, 1, mode)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// assembleAction is what a run of `rostr assemble` does once you already have a roster.
+type assembleAction int
+
+const (
+	actionNew assembleAction = iota
+	actionReplace
+	actionEdit
+)
+
+// assembleStep is one question of the assemble wizard, in the order they're asked.
+type assembleStep int
+
+const (
+	stepAction assembleStep = iota
+	stepPickRoster
+	stepBuild
+	stepPreset
+	stepNames
+	stepName
+	stepEmoji
+	stepWhere
+	stepAutoDraft
+	stepConfirm
+)
+
+var assembleSteps = []assembleStep{
+	stepAction, stepPickRoster, stepBuild, stepPreset, stepNames, stepName, stepEmoji, stepWhere, stepAutoDraft, stepConfirm,
+}
+
+// assembleSetup is what the wizard starts from: the rosters there are, and the flags and argument given.
+type assembleSetup struct {
+	existing []store.Roster
+	opts     assembleOptions
+	args     []string
+	// inCloud is whether the setup is going, or already is, in the cloud
+	inCloud bool
+}
+
+// assembleFlow is the assemble wizard's questions and answers. The setup and flags decide which questions it can ask;
+// earlier answers decide which of those it does.
+type assembleFlow struct {
+	assembleSetup
+	flagCast cast
+
+	action      assembleAction
+	roster      string
+	usePreset   bool
+	presetID    string
+	names       string
+	namesCast   cast
+	name        string
+	nameDefault string
+	emoji       roster.EmojiMode
+	cloud       bool
+	autoDraft   bool
+	confirmed   bool
+}
+
+func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
+	f := &assembleFlow{
+		assembleSetup: setup,
+		usePreset:     true,
+		presetID:      presets.All()[0].ID,
+		emoji:         roster.EmojiOn,
+		autoDraft:     true,
+		confirmed:     true,
+	}
+	var err error
+	if !f.asks(stepBuild) {
+		if f.flagCast, err = chooseCast(setup.opts); err != nil {
+			return nil, err
+		}
+	}
+	if !f.asks(stepEmoji) {
+		if f.emoji, err = roster.ParseEmojiMode(setup.opts.emoji); err != nil {
+			return nil, err
+		}
+	}
+	return f, nil
+}
+
+// asks reports whether the wizard can ask a step at all, given the setup and flags. Running it again with no flags
+// starts by asking what to do; the setup-wide questions are only for the first roster.
+func (f *assembleFlow) asks(step assembleStep) bool {
+	firstRun := len(f.existing) == 0
+	opts := f.opts
+	switch step {
+	case stepAction, stepPickRoster:
+		flagsGiven := len(f.args) > 0 || opts.preset != "" || opts.names != "" || opts.emoji != "" || opts.noAutoDraft
+		return !firstRun && !flagsGiven
+	case stepBuild, stepPreset, stepNames:
+		return opts.preset == "" && opts.names == ""
+	case stepName:
+		return len(f.args) == 0
+	case stepEmoji:
+		return opts.emoji == ""
+	case stepWhere:
+		return firstRun && !f.inCloud
+	case stepAutoDraft:
+		return firstRun && !opts.noAutoDraft
+	}
+	return true
+}
+
+// shows reports whether a step is asked, given the answers so far.
+func (f *assembleFlow) shows(step assembleStep) bool {
+	if !f.asks(step) {
+		return false
+	}
+	switch step {
+	case stepPickRoster:
+		return f.action != actionNew
+	case stepBuild, stepConfirm:
+		return f.action != actionEdit
+	case stepPreset:
+		return f.action != actionEdit && f.usePreset
+	case stepNames:
+		return f.action != actionEdit && !f.usePreset
+	case stepName, stepEmoji:
+		return f.action == actionNew
+	}
+	return true
+}
+
+// visibleSteps is every step the wizard asks, given the answers so far.
+func (f *assembleFlow) visibleSteps() []assembleStep {
+	var steps []assembleStep
+	for _, step := range assembleSteps {
+		if f.shows(step) {
+			steps = append(steps, step)
+		}
+	}
+	return steps
+}
+
+// ask runs the wizard, if the flags leave anything to ask. Nothing is saved until its last step is confirmed.
+func (f *assembleFlow) ask(ctx context.Context, st store.Store) error {
+	if !slices.ContainsFunc(assembleSteps, func(step assembleStep) bool { return step != stepConfirm && f.asks(step) }) {
+		return nil
+	}
+	s, steps := f.screen(ctx, st)
+	if err := s.run(steps); err != nil {
+		return err
+	}
+	if !f.confirmed {
+		return errCancelled
+	}
+	return nil
+}
+
+// screen builds the wizard: a field for each step it can ask, the preset preview beside the preset picker, and the
+// text that depends on earlier answers, filled in as each step comes into view.
+func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []screenStep) {
+	s := newScreen("assemble")
+
+	all := presets.All()
+	presetOptions := make([]huh.Option[string], len(all))
+	widest := 0
+	for i, p := range all {
+		label := fmt.Sprintf("%s %s · %s", p.Emoji, p.Name, p.Source)
+		presetOptions[i] = huh.NewOption(label, p.ID)
+		widest = max(widest, lipgloss.Width(label))
+	}
+
+	action := huh.NewSelect[assembleAction]().Title("You already have a roster. What do you want to do?").Options(
+		huh.NewOption("Make a new roster", actionNew),
+		huh.NewOption("Replace a roster's cast", actionReplace),
+		huh.NewOption("Edit a roster", actionEdit),
+	).Value(&f.action)
+	rosterNames := make([]string, len(f.existing))
+	for i, r := range f.existing {
+		rosterNames[i] = r.Name
+	}
+	pickRoster := huh.NewSelect[string]().Title("Which roster?").Options(huh.NewOptions(rosterNames...)...).Value(&f.roster)
+	build := huh.NewConfirm().Title("How do you want to build your roster?").
+		Affirmative("🎭 Pick a pre-built roster").Negative("✏️  Use your own names").Value(&f.usePreset)
+	preset := huh.NewSelect[string]().Title("Pick a roster").
+		Description("Pick a roster: type to search, ↑/↓ to move, enter to pick.").
+		Options(presetOptions...).Filtering(true).Value(&f.presetID)
+	names := huh.NewInput().
+		Title(`Names, comma-separated. An emoji in front is optional ("🧮 Ada, Grace"). The first six are the A team.`).
+		Value(&f.names).Validate(s.forwardOnly(func(list string) error {
+		aTeam, bTeam, err := roster.ParseNames(list)
+		f.namesCast = cast{aTeam: aTeam, bTeam: bTeam}
+		return err
+	}))
+	name := huh.NewInput().Title("Name this roster").Value(&f.name).Validate(s.forwardOnly(func(name string) error {
+		if strings.TrimSpace(name) == "" {
+			return errors.New("a roster needs a name")
+		}
+		if existing, err := st.Roster(ctx, name); err == nil {
+			return fmt.Errorf("you already have a roster named %q", existing.Name)
+		}
+		return nil
+	}))
+	emoji := huh.NewSelect[roster.EmojiMode]().Title("How should agents show up?").Options(f.emojiOptions()...).Value(&f.emoji)
+	where := huh.NewSelect[bool]().Title("Where should rostr live?").Options(
+		huh.NewOption("This machine (local)", false),
+		huh.NewOption("The cloud (every machine and cloud environment)", true),
+	).Value(&f.cloud)
+	autoDraft := huh.NewConfirm().Title("Draft names automatically in new sessions, or manually assign with /draft?").
+		Affirmative("Automatically").Negative("Manually with /draft").Value(&f.autoDraft)
+	confirm := huh.NewConfirm().Value(&f.confirmed)
+
+	fields := map[assembleStep]huh.Field{
+		stepAction: action, stepPickRoster: pickRoster, stepBuild: build, stepPreset: preset, stepNames: names,
+		stepName: name, stepEmoji: emoji, stepWhere: where, stepAutoDraft: autoDraft, stepConfirm: confirm,
+	}
+	var steps []screenStep
+	for _, step := range assembleSteps {
+		if f.asks(step) {
+			steps = append(steps, screenStep{field: fields[step], shown: func() bool { return f.shows(step) }})
+		}
+	}
+
+	// The preset picker shows the highlighted roster beside it
+	s.panel = &sidePanel{
+		field:     preset,
+		formWidth: widest + 5,
+		render: func(width int) string {
+			id, ok := preset.Hovered()
+			if !ok {
+				return ""
+			}
+			p, _ := presets.ByID(id)
+			return presetPreview(p, width)
+		},
+	}
+
+	s.onFocus = func(field huh.Field) tea.Cmd {
+		switch field {
+		case pickRoster:
+			pickRoster.Title(map[assembleAction]string{
+				actionReplace: "Whose cast do you want to replace?",
+				actionEdit:    "Which roster do you want to edit?",
+			}[f.action])
+		case preset:
+			// Coming back to the picker searches again
+			if !preset.GetFiltering() {
+				return func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}} }
+			}
+		case name:
+			// Default to the chosen preset's id, unless the name's been changed
+			if f.name == f.nameDefault {
+				f.nameDefault = f.chosenCast().presetID
+				if f.nameDefault == "" {
+					f.nameDefault = "work"
+				}
+				f.name = f.nameDefault
+				name.Value(&f.name)
+			}
+		case emoji:
+			emoji.Options(f.emojiOptions()...)
+		case confirm:
+			title, description := f.confirmation()
+			confirm.Title(title).Description(description)
+		}
+		return nil
+	}
+	return s, steps
+}
+
+// chosenCast is the cast from the flags, the picked preset, or the names typed in.
+func (f *assembleFlow) chosenCast() cast {
+	switch {
+	case !f.asks(stepBuild):
+		return f.flagCast
+	case f.usePreset:
+		chosen, _ := presetCast(f.presetID)
+		return chosen
+	}
+	return f.namesCast
+}
+
+// rosterName is the name typed in, or else the name argument.
+func (f *assembleFlow) rosterName() string {
+	if f.asks(stepName) {
+		return f.name
+	}
+	return f.args[0]
+}
+
+// emojiOptions previews each emoji mode with the cast's first member.
+func (f *assembleFlow) emojiOptions() []huh.Option[roster.EmojiMode] {
+	first := roster.Member{Emoji: "🧙", Name: "Gandalf"}
+	if chosen := f.chosenCast(); len(chosen.aTeam) > 0 {
+		first = chosen.aTeam[0]
+	}
+	return []huh.Option[roster.EmojiMode]{
+		huh.NewOption(roster.Display(first.Emoji, first.Name, 1, roster.EmojiOn)+"  (emoji and name)", roster.EmojiOn),
+		huh.NewOption(roster.Display(first.Emoji, first.Name, 1, roster.EmojiOff)+"  (name only)", roster.EmojiOff),
+		huh.NewOption(roster.Display(first.Emoji, first.Name, 1, roster.EmojiOnly)+"  (emoji only)", roster.EmojiOnly),
+	}
+}
+
+// confirmation is the last step's question and its summary of the answers.
+func (f *assembleFlow) confirmation() (title, description string) {
+	castLabel := f.castLabel()
+	if f.action == actionReplace {
+		return fmt.Sprintf("Replace the %s roster's cast with %s?", f.roster, castLabel),
+			"Drafted agents keep their names until their sessions end."
+	}
+
+	parts := []string{castLabel, "emoji " + string(f.emoji)}
+	if len(f.existing) == 0 {
+		where := "this machine"
+		if f.inCloud || (f.asks(stepWhere) && f.cloud) {
+			where = "the cloud"
+		}
+		autoDraft := !f.opts.noAutoDraft
+		if f.asks(stepAutoDraft) {
+			autoDraft = f.autoDraft
+		}
+		parts = append(parts, where, "auto-draft "+onOff(autoDraft))
+	}
+	return fmt.Sprintf("Assemble the %s roster?", strings.TrimSpace(f.rosterName())), strings.Join(parts, " · ")
+}
+
+// castLabel names the chosen cast: the preset, or the first few names.
+func (f *assembleFlow) castLabel() string {
+	chosen := f.chosenCast()
+	if p, ok := presets.ByID(chosen.presetID); ok {
+		return p.Emoji + " " + p.Name
+	}
+	members := append(append([]roster.Member{}, chosen.aTeam...), chosen.bTeam...)
+	if len(members) <= 3 {
+		return displayMembers(members, roster.EmojiOn)
+	}
+	return fmt.Sprintf("%s and %d more", displayMembers(members[:3], roster.EmojiOn), len(members)-3)
+}
+
+// presetPreview shows a preset's name and source, its A team, and its B team in grey.
+func presetPreview(p presets.Preset, width int) string {
+	wrap := lipgloss.NewStyle().Width(width)
+	aTeam := make([]string, len(p.ATeam))
+	for i, m := range p.ATeam {
+		aTeam[i] = roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left,
+		wrap.Inherit(styleHeading).Render(p.Emoji+" "+p.Name),
+		wrap.Inherit(styleMuted).Render(p.Source),
+		"",
+		styleMuted.Render("A team"),
+		wrap.Render(strings.Join(aTeam, "\n")),
+		"",
+		styleMuted.Render("B team"),
+		wrap.Inherit(styleFaint).Render(displayMembers(p.BTeam, roster.EmojiOn)),
+	)
 }

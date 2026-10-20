@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -127,7 +129,7 @@ func (s *Server) handleKeepAlive(w http.ResponseWriter, r *http.Request, ownerID
 // draftSession gives the session a member. It runs inside withOwnerTx, which has already expired stale drafts:
 //  1. same session, same name, via reclaimSession;
 //  2. resume, also via reclaimSession;
-//  3. otherwise the first free member, A team first, then numbered copies.
+//  3. otherwise a random free member, A team first, then numbered copies.
 func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (draftResponse, error) {
 	resp, found, err := reclaimSession(ctx, tx, ownerID, in)
 	if err != nil || found {
@@ -142,7 +144,7 @@ func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput)
 	if err != nil {
 		return draftResponse{}, err
 	}
-	m, copy := firstFreeMember(roster.members(), busy)
+	m, copy := freeMember(roster, busy, pickIndex)
 	return insertDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
 }
 
@@ -259,16 +261,32 @@ func busySlots(ctx context.Context, tx pgx.Tx, rosterID string) (map[slot]bool, 
 	return busy, err
 }
 
-// firstFreeMember walks the cast in order for a free copy 1, then copy 2, and so on. The cast is never empty.
-func firstFreeMember(members []member, busy map[slot]bool) (member, int) {
+// freeMember picks a random free copy-1 member, A team first, then the B team, then copy 2 the same way, and so on.
+// pick chooses an index among the free members; the cast is never empty.
+func freeMember(roster rosterRow, busy map[slot]bool, pick func(n int) int) (member, int) {
 	for copy := 1; ; copy++ {
-		for _, m := range members {
-			if !busy[slot{nameKey(m.Name), copy}] {
-				return m, copy
+		for _, team := range [][]member{roster.ATeam, roster.BTeam} {
+			var free []member
+			for _, m := range team {
+				if !busy[slot{nameKey(m.Name), copy}] {
+					free = append(free, m)
+				}
+			}
+			if len(free) > 0 {
+				return free[pick(len(free))], copy
 			}
 		}
 	}
 }
+
+// pickIndex chooses which free member to draft: a random one, or always the first with ROSTR_DRAFT_PICK=first, which
+// tests set for predictable drafts.
+var pickIndex = func() func(int) int {
+	if os.Getenv("ROSTR_DRAFT_PICK") == "first" {
+		return func(int) int { return 0 }
+	}
+	return rand.IntN
+}()
 
 type newDraft struct {
 	ownerID  string

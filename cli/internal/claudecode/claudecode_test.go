@@ -96,18 +96,19 @@ func TestIdentityText(t *testing.T) {
 - When you write somewhere other than this chat, sign it "— 🧙 Gandalf": Slack messages, emails, PR descriptions, PR and issue comments.
 - Don't put the name in code, commit messages, or files.
 - Your user's own instructions about attribution or sign-offs take precedence over these.
-- When your work changes, run: rostr agent task "<new task>"`
-	if got := Identity("🧙 Gandalf", "work"); got != want {
+- When your work changes, run: rostr agent task --session s1 "<new task>"`
+	if got := Identity("🧙 Gandalf", "work", "s1"); got != want {
 		t.Fatalf("got:\n%s", got)
 	}
 }
 
 func TestTitleInstruction(t *testing.T) {
-	desktop := TitleInstruction("🧙 Gandalf", "session_abc")
-	if !strings.Contains(desktop, `set_session_title with session_id "session_abc"`) || !strings.Contains(desktop, `"🧙 Gandalf · <your 3-5 word summary`) {
+	desktop := TitleInstruction("🧙 Gandalf", "session_abc", "s1")
+	if !strings.Contains(desktop, `set_session_title with session_id "session_abc"`) || !strings.Contains(desktop, `"🧙 Gandalf · <your 3-5 word summary`) ||
+		!strings.Contains(desktop, "rostr agent task --session s1") {
 		t.Errorf("desktop: %s", desktop)
 	}
-	if terminal := TitleInstruction("🧙 Gandalf", ""); strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, "rostr agent task") {
+	if terminal := TitleInstruction("🧙 Gandalf", "", "s1"); strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, "rostr agent task --session s1") {
 		t.Errorf("terminal: %s", terminal)
 	}
 }
@@ -196,6 +197,57 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(skill); string(got) != "my edits" {
 		t.Error("overwrote the edited skill")
+	}
+}
+
+func TestUninstallRemovesOnlyWhatRostrAdded(t *testing.T) {
+	claudeDir := t.TempDir()
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	write(t, settingsPath, `{
+  "model": "opus",
+  "permissions": {"allow": ["Bash(ls:*)"]},
+  "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}
+}`)
+	// A /draft the user wrote themselves: Install skips it, and Uninstall must leave it
+	myDraft := filepath.Join(claudeDir, "commands", "draft.md")
+	write(t, myDraft, "my own draft command")
+	if _, err := Install(claudeDir); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := Uninstall(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 2 || removed[1] != "the rostr skill" {
+		t.Errorf("removed %v", removed)
+	}
+
+	var settings struct {
+		Model       string
+		Permissions struct{ Allow []string }
+		Hooks       map[string][]struct{ Hooks []struct{ Command string } }
+	}
+	data, _ := os.ReadFile(settingsPath)
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings.Model != "opus" || len(settings.Permissions.Allow) != 1 || settings.Permissions.Allow[0] != "Bash(ls:*)" {
+		t.Errorf("other settings changed: %s", data)
+	}
+	if len(settings.Hooks) != 1 || len(settings.Hooks["UserPromptSubmit"]) != 1 || settings.Hooks["UserPromptSubmit"][0].Hooks[0].Command != "echo mine" {
+		t.Errorf("hooks: %s", data)
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "rostr")); !os.IsNotExist(err) {
+		t.Errorf("skill folder still there: %v", err)
+	}
+	if got, _ := os.ReadFile(myDraft); string(got) != "my own draft command" {
+		t.Error("removed the user's own /draft")
+	}
+
+	// Nothing left to remove the second time
+	if removed, err := Uninstall(claudeDir); err != nil || len(removed) != 0 {
+		t.Fatalf("second uninstall: %v, %v", removed, err)
 	}
 }
 
