@@ -2,38 +2,30 @@
 
 ## CLI design
 
-- [ ] Work through the open findings in [`cli-review.md`](cli-review.md) (#3–#15), then delete that file.
-- [ ] `rostr use` is now `rostr link` / `rostr unlink` (documented), and setting the default roster moved to
-      `rostr config default`. Still open: a way to see which roster the current project uses.
-- [ ] Keep `create` as a hidden alias for `rostr assemble`, so people who guess `create` still get a roster.
-- [ ] End-to-end encrypt tasks in cloud mode (decided). The CLI encrypts each task with AES-256-GCM using a key
-      derived from the rostr key; the server stores only ciphertext; any machine with the key decrypts, so
-      `rostr list` shows cloud tasks. The site's Privacy section and /privacy page describe this.
-      - Trade-offs: raw API calls return encrypted tasks (dashboards go through `rostr list --json`), the server still
-        sees task length and timing, and a future web dashboard or team rosters would need the key in the browser or
-        shared.
-- [ ] Derive separate keys from the rostr key with HKDF on the client: an auth token sent to the server (which stores
-      only its hash), an encryption key for tasks, and a fingerprint key for repo names. The last two never leave the
-      machine, which is what makes the Privacy section's claims true.
-- [ ] Interactive `rostr assemble` wizard (documented): preset, roster name, emoji, local or cloud, auto-draft. The
-      first run also installs hooks, skill, and slash commands. Agents run the same steps with flags.
-- [ ] Auto-draft setting (`rostr config auto-draft on|off`, documented). Off means sessions start unnamed.
-- [ ] Command groups (documented): roster commands at the top level, `rostr agent draft|release|task`, and
-      `rostr config default|emoji|auto-draft|cloud|key`.
-- [ ] Slash commands `/draft` and `/release`, installed by `rostr assemble`. Claude Code for now; add Codex's later.
-- [ ] `rostr config emoji on|off|only` (documented). `only` shows just the emoji (e.g. `🧙 · Fix auth redirect loop`) and
-      needs every member of a roster to have a different emoji.
+Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
+
+- [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
+      that file.
+
+## Deferred decisions
+
+Decide once there's a working build to play with.
+
+- [ ] How the first-prompt draft step works in terminal sessions: whether to wake Claude there too (one extra silent
+      model turn) so its summary becomes the task and title, or keep the start of the prompt.
 
 ## Project
 
 - [x] Pick a license (MIT).
 - [ ] Finalize the A team and B team for each preset roster.
-- [ ] Make a few more pre-built rosters (the /rosters page shows them all; the home page shows the first 10).
+- [x] Make a few more pre-built rosters (added NBA, MLB, NFL, and NHL Legends).
 - [ ] Design pass on the /rosters page.
 - [ ] Logo and iconography design: the logo, the favicon (the site still uses Astro's default), and icons for the site.
+- [ ] General copy pass on everything on the website.
+- [ ] Upgrade the home page's "Works out of the box with Claude Code and Codex" line to say where: the Claude Code and
+      Codex desktop apps, the terminal, tmux, and herdr.
 - [ ] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
-- [ ] Write the agent setup instructions: what an agent reads and does when told "Set up rostr for me by following the
-      instructions at https://getrostr.sh".
+- [x] Write the agent setup instructions (`site/public/setup.md`, linked from the home page and `llms.txt`).
 
 ## Legal
 
@@ -44,38 +36,30 @@
 
 ## CLI build
 
-- [ ] One CLI in Go, built for macOS and Linux, used the same way by local and cloud sessions.
+Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 
-## Cloud auth
+- [ ] Go CLI for macOS and Linux.
+- [ ] Install paths that `setup.md` and the site promise: GitHub releases of the binary, the `piazzatron/homebrew-tap`
+      formula, and the `getrostr.sh/install` script.
+- [ ] Roster commands: `assemble` (with the wizard and the hidden `create` alias), `link` / `unlink`, `list`, `edit`,
+      `presets`, `disband`.
+- [ ] Agent commands: `agent draft`, `agent release`, `agent task`.
+- [ ] `config`, including the `cloud on` migration.
+- [ ] Local storage ([`docs/local-storage.md`](docs/local-storage.md)).
+- [ ] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
+      task encryption, and repo fingerprints.
+- [ ] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
+- [ ] Detect headless `claude -p` runs in the hooks (and Codex's equivalent) and skip drafting for them.
+- [ ] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
+      and skill.
+- [ ] Test release and resume in local sessions and in cloud sessions.
 
-- [ ] One secret key per person, no account. `rostr config cloud on` gets a `rostr_sk_…` key from the server and saves it to
-      `~/.config/rostr/credentials`. The key owns all of that person's rosters and project links.
-- [ ] A machine is in cloud mode whenever it has a key (`credentials` or `ROSTR_KEY`); otherwise everything is local.
-      No mixing local and cloud rosters.
-- [ ] `rostr config key` prints the key. No rotation in v1.
-- [ ] Server stores only a hash of each auth token (never the rostr key) and rate-limits key creation by IP.
-- [ ] No recovery in v1: a lost key means lost cloud rosters.
+## Monitoring
 
-## Session-start hook
-
-- [ ] Read `session_id` from the hook's JSON input and run `rostr agent draft --session <id>`.
-- [ ] Write `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE` so rostr commands the agent runs know their session.
-- [ ] Set the agent's first task from the first prompt (`rostr agent task --session <id> "<summary>"`).
-- [ ] Check what Codex's hooks provide: a session ID on start and end, and a way to set env vars for the agent's shell.
-- [ ] Tell the agent to sign anything it sends you outside the session (Slack messages, emails, PR comments, etc.)
-      with its name, so you know which agent posted it.
-
-## Release hook
-
-- [ ] Build the release hook: free the agent's name when the session ends. Use `SessionEnd`, not `Stop` (`Stop` fires
-      after every reply). Find Codex's equivalent.
-- [ ] Test it in local sessions and in cloud sessions.
-- [ ] Server-side expiry as a backstop (24–48h) for sessions that die without running the hook.
-
-## Resuming sessions
-
-- [ ] A resumed session gets its old name back if it's still free. Draft by session ID so the same session always
-      asks for the same name.
+- [ ] Point Uptime Robot at `https://api.getrostr.sh/health` (`200` when the server and database are up, `503` when
+      the database is unreachable), with alerts to Discord.
+- [ ] Send CI failures to Discord too.
+- [ ] Set Railway's healthcheck path to `/health` once the real server is deployed.
 
 ## Cloud access instructions
 
@@ -97,8 +81,14 @@ Write the setup steps for Claude Code on the web and Codex cloud:
 
 - [ ] Confirm herdr support, or make a plugin for it.
 
+## To Test
+
+- [ ] Test that agent-based installs work properly.
+
 ## Testing
 
+- [ ] Make sure the permissions story works well in Claude Code: the hooks, the agent's `rostr` commands, the session
+      title tool, and `/draft` shouldn't leave users clicking through permission prompts.
 - [ ] Claude Code in the terminal
 - [ ] Claude Code in the app
 - [ ] Codex in the terminal

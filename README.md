@@ -8,16 +8,16 @@ so when you have five agents running you can tell at a glance who's on what.
 
 It's a small CLI plus a skill that teaches your agent how to use it, and it works with Claude Code and Codex.
 
-> **Status:** early. The CLI below is the planned design. What exists today is the Claude Code session-title hook in
-> [`cli/hooks/claude-code/`](cli/hooks/claude-code/).
+> **Status:** early. The CLI below is the planned design ([spec](docs/cli-spec.md)). What exists today is the
+> Claude Code session-title hook in [`cli/hooks/claude-code/`](cli/hooks/claude-code/).
 
 ## How it works
 
 1. **Pick a roster.** `rostr assemble` sets one up from a preset or your own names.
 2. **Every session gets drafted.** At the start of a session, a hook drafts the next available name, tells the agent
    who it is, and puts the name in the session title.
-3. **Agents go back to the bench.** The rostr skill has the agent release its name when the work is done, so the
-   same names keep coming back.
+3. **Agents go back to the bench.** When a session ends, a hook releases its name, so the same names keep coming
+   back.
 
 Every roster has an **A team**, six members by default (change who's on it with `rostr edit`). Drafting always
 picks from the A team first and only calls up the **B team** when every starter is busy, so you get to know a small
@@ -44,12 +44,12 @@ Full docs at [getrostr.sh/cli](https://getrostr.sh/cli).
 |---|---|
 | `rostr assemble` | Interactive setup: pick a roster, emoji, local or cloud, and auto-draft. The only one you need |
 | `rostr link <roster>` | Link a roster to the current project (`rostr unlink` to undo) |
-| `rostr list` | See who's working on what, and who's idle |
-| `rostr edit [<roster>]` | Change a roster's members or A team, or swap its cast (`--preset`) |
+| `rostr list` | See who's working on what across your rosters, and who's idle |
+| `rostr edit [<roster>]` | Change a roster's members, emoji, or A team |
 | `rostr presets` | See all the pre-built rosters |
 | `rostr disband <roster>` | Delete a roster |
 
-**Agent commands** (your hooks, the skill, and the `/draft` and `/release` slash commands run these)
+**Agent commands** (your hooks, the skill, and the `/draft` slash command run these)
 
 | Command | What it does |
 |---|---|
@@ -64,8 +64,8 @@ Full docs at [getrostr.sh/cli](https://getrostr.sh/cli).
 | `rostr config` | See all your settings |
 | `rostr config default <roster>` | Choose the roster projects use when they don't have a link |
 | `rostr config emoji on\|off\|only` | Show agents with their emoji, without it, or as just the emoji |
-| `rostr config auto-draft on\|off` | Draft every new session automatically, or by hand with `/draft` and `/release` |
-| `rostr config cloud on\|off` | Move your whole setup to the cloud, or back to this machine |
+| `rostr config auto-draft on\|off` | Draft every new session automatically, or by hand with `/draft` |
+| `rostr config cloud on` | Move your whole setup to the cloud |
 | `rostr config key` | Print your rostr key |
 
 ## Install
@@ -77,7 +77,7 @@ brew install piazzatron/tap/rostr
 rostr assemble   # interactive: pick a roster, emoji, local or cloud, and auto-draft
 ```
 
-Prefer to draft by hand? Turn off auto-draft (`rostr config auto-draft off`) and use `/draft` and `/release` in Claude Code.
+Prefer to draft by hand? Turn off auto-draft (`rostr config auto-draft off`) and use `/draft` in Claude Code.
 
 Until then, the Claude Code hook can be installed by hand: see [`cli/hooks/claude-code/README.md`](cli/hooks/claude-code/README.md).
 
@@ -86,4 +86,4 @@ Until then, the Claude Code hook can be installed by hand: see [`cli/hooks/claud
 - `cli/` — the `rostr` CLI and agent hooks
 - `site/` — getrostr.sh (Astro), auto-deployed to Vercel
 - `server/` — api.getrostr.sh, auto-deployed to Railway
-- `docs/` — design notes
+- `docs/` — design docs; [`docs/cli-spec.md`](docs/cli-spec.md) is the source of truth for the CLI

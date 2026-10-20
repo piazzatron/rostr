@@ -351,16 +351,6 @@ const { title, description } = Astro.props;
     color: var(--muted);
   }
 
-  .screenshot-placeholder {
-    margin: 0 0 32px;
-    aspect-ratio: 16 / 7;
-    display: grid;
-    place-items: center;
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    color: var(--muted);
-    font-size: 15px;
-  }
 
   .cards {
     display: grid;
@@ -389,30 +379,192 @@ const { title, description } = Astro.props;
     margin-bottom: 0;
   }
 
-  /* Before/after notification mockup in the "poor human brain" section */
-  .notification-compare {
+  /* "Poor human brain" section: benefit cards */
+  .value-grid h3 {
+    margin: 0 0 6px;
+    font-size: 21px;
+  }
+
+
+  .value-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 8px;
+  }
+
+  .value-closer {
+    margin: 28px 0 0;
+    font-size: 19px;
+    font-weight: 600;
+  }
+
+  /* A chat message signed by an agent, in fixed light colors like a screenshot */
+  .chat-message {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid #ebe8e2;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #1c1b19;
+  }
+
+  .chat-avatar {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #f1ede6;
+    font-size: 20px;
+  }
+
+  .chat-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .chat-meta span {
+    color: #8a857b;
+    font-size: 12px;
+  }
+
+  .chat-message p {
+    margin: 2px 0 0 !important;
+    color: #1c1b19 !important;
+    font-size: 14px;
+  }
+
+  /* Before/after mockup in the "poor human brain" section: an app window with a session sidebar and a notification.
+     The mockup uses fixed light colors, like a screenshot, so it looks the same in both themes. */
+  .notification-compare {
     margin: 8px 0 24px;
-    padding: 24px;
+    padding: 56px 48px 40px;
     border-radius: 16px;
     background: linear-gradient(135deg, #5b7fd6, #9b6cc9 55%, #e0866b);
   }
 
-  .notification-column {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+
+  .app-window {
+    position: relative;
+    max-width: 560px;
+    margin: 0 auto;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #1c1b19;
+    box-shadow: 0 20px 40px -20px rgb(0 0 0 / 0.5);
   }
 
-  .compare-label {
-    color: white;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  .app-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #ebe8e2;
   }
+
+  .app-bar span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #dcd8d0;
+  }
+
+  .app-body {
+    display: grid;
+    grid-template-columns: 62% 1fr;
+    min-height: 210px;
+  }
+
+  .app-sidebar {
+    list-style: none;
+    margin: 0;
+    padding: 10px 8px;
+    border-right: 1px solid #ebe8e2;
+    background: #f6f4ef;
+    border-radius: 0 0 0 12px;
+  }
+
+  .app-sidebar li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 8px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: #4a4740;
+  }
+
+  .session-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The session the notification is about */
+  .app-sidebar li.is-waiting {
+    background: color-mix(in srgb, #d9480f 12%, white);
+    box-shadow: inset 0 0 0 1.5px #d9480f;
+    color: #1c1b19;
+    font-weight: 600;
+  }
+
+  .waiting-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: #d9480f;
+  }
+
+  .app-main {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 14px;
+  }
+
+  .app-main span {
+    height: 8px;
+    border-radius: 4px;
+    background: #ebe8e2;
+  }
+
+  .app-main span:nth-child(2) {
+    width: 70%;
+  }
+
+  .app-main span:nth-child(4) {
+    width: 50%;
+  }
+
+  /* The notification sits over the top-right corner of the window, like a real macOS banner */
+  .scene-notification {
+    position: absolute;
+    top: -34px;
+    right: -12px;
+    width: min(92%, 330px);
+  }
+
+  .scene-notification.is-waiting {
+    box-shadow: 0 0 0 2px #d9480f, 0 8px 24px -12px rgb(0 0 0 / 0.5);
+  }
+
+  @media (max-width: 640px) {
+    .notification-compare {
+      padding: 52px 16px 24px;
+    }
+
+    .scene-notification {
+      right: -6px;
+    }
+  }
+
 
   .notification {
     display: flex;
@@ -420,7 +572,7 @@ const { title, description } = Astro.props;
     align-items: center;
     padding: 10px 12px;
     border-radius: 14px;
-    background: rgb(246 246 246 / 0.88);
+    background: #f6f6f6;
     color: #1c1b19;
     box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.5);
   }
@@ -603,13 +755,48 @@ const { title, description } = Astro.props;
     font-size: 13px;
   }
 
-  .build-subhead {
-    margin-top: 20px !important;
+  /* Headings sit a little further from the code blocks, whose shadows make 8px look cramped */
+  .build-cards h3 {
+    margin-bottom: 12px;
+  }
+
+  .build-cards .build-subhead {
+    margin-top: 28px;
+  }
+
+  /* A slightly smaller code font so the curl example and JSON fit side by side in half-width cards */
+  .build-cards .expressive-code {
+    --ec-codeFontSize: 13px;
+    --ec-codePadInl: 16px;
+  }
+
+  /* A text-style button that copies a prompt, like the decryption prompt in "Build on it" */
+  .copy-link {
+    display: block;
+    padding: 0;
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .copy-link:hover .copy-label {
+    text-decoration: underline;
+  }
+
+  .build-note code {
+    white-space: nowrap;
   }
 
   .build-note {
-    margin: 16px 0 0 !important;
+    margin: 12px 0 16px !important;
     font-size: 15px;
+  }
+
+  .build-note:last-child {
+    margin-bottom: 0 !important;
   }
 
   .accent-link {
@@ -675,6 +862,17 @@ const { title, description } = Astro.props;
       grid-template-columns: 1fr;
       gap: 2px;
     }
+  }
+
+  .threads {
+    margin: 0;
+    padding-left: 22px;
+    max-width: 40em;
+  }
+
+  .threads li {
+    margin-bottom: 14px;
+    padding-left: 4px;
   }
 
   .docs-link {

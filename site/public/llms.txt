@@ -1,0 +1,12 @@
+# rostr
+
+> rostr gives every coding-agent session (Claude Code, Codex) a name from a roster you pick, like 🧙 Gandalf from The
+> Fellowship, so you can remember who's doing what. A CLI for macOS and Linux, plus hooks, a skill, and a /draft
+> slash command.
+
+## Docs
+
+- [Setup instructions for agents](https://getrostr.sh/setup.md): follow these to install and set up rostr for a user.
+  Also served at https://getrostr.sh/agents.md.
+- [CLI docs](https://getrostr.sh/cli): every command.
+- [Privacy](https://getrostr.sh/privacy): what's stored where, and how cloud data is encrypted.

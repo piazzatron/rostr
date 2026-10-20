@@ -1,5 +1,7 @@
 # Server schema
 
+Storage for the behavior in [cli-spec.md](cli-spec.md). The endpoints are in [api.md](api.md).
+
 The rostr API (`api.getrostr.sh`) stores cloud rosters in Postgres. Local rosters never touch it.
 
 Everything an owner has hangs off their key. There are no accounts: the key is the identity.
@@ -9,73 +11,96 @@ server), a task encryption key, and a repo fingerprint key. Only the auth token 
 the site's /privacy page.
 
 ```sql
--- One row per rostr key. Only a SHA-256 hash of the derived auth token is stored.
+-- One row per rostr key. Only a SHA-256 hash of the derived auth token is stored. Deleted (with everything under it)
+-- when the owner disbands their last roster.
 create table owners (
   id                uuid primary key default gen_random_uuid(),
   auth_token_hash   text not null unique,
   default_roster_id uuid,  -- set after the first roster is created
+  draft_expiry      interval not null default '7 days',  -- `rostr config expiry`
+  auto_draft        boolean not null default true,       -- `rostr config auto-draft`
   created_at        timestamptz not null default now()
 );
 
 -- A roster and all its members. Members are always read and written as a whole (`rostr edit` opens the entire
--- roster), so they live in one JSON column. Array order is draft order; the first six are the A team by default.
--- members: [{"name": "Gandalf", "emoji": "🧙", "team": "A"}, ...]
+-- roster), so they live in JSON columns. Array order is draft order, A team first.
+-- a_team, b_team: [{"name": "Gandalf", "emoji": "🧙"}, ...]
 create table rosters (
   id            uuid primary key default gen_random_uuid(),
   owner_id      uuid not null references owners on delete cascade,
   name          text not null,
-  emoji_mode    text not null default 'on',  -- 'on', 'off', or 'only'
-  members       jsonb not null,
+  name_key      text not null,  -- name lowercased with accents stripped (by the API), so names are unique loosely
+  emoji_mode    text not null default 'on' check (emoji_mode in ('on', 'off', 'only')),
+  a_team        jsonb not null,
+  b_team        jsonb not null default '[]',
   created_at    timestamptz not null default now(),
-  unique (owner_id, name)
+  constraint rosters_owner_name unique (owner_id, name_key)
 );
 
 alter table owners
   add foreign key (default_roster_id) references rosters on delete set null;
 
 -- Which roster a project uses (`rostr link`). Projects without a link use the owner's default roster.
--- The server never sees repo names: the CLI sends HMAC-SHA256("owner/repo", fingerprint key). The fingerprint key
--- never leaves the user's machine, so the server can't compute or reverse these.
+-- The server never sees repo names. The CLI sends two values, both computed with keys that never leave the user's
+-- machine: repo_hash, HMAC-SHA256 of the lowercased "owner/repo" with the fingerprint key, for lookups; and repo,
+-- AES-256-GCM ciphertext of "owner/repo", so any machine with the key can show and restore the name.
 create table project_links (
   owner_id  uuid not null references owners on delete cascade,
   repo_hash text not null,
+  repo      bytea not null,
   roster_id uuid not null references rosters on delete cascade,
   primary key (owner_id, repo_hash)
 );
 
--- One row per draft. Rows are kept after release so a resumed session can ask for its old name back.
+create index project_links_roster on project_links (roster_id);  -- for the cascade when a roster is disbanded
+
+-- One row per draft. Rows are kept for 7 days after release so a resumed session can ask for its old name back.
 create table drafts (
   id           bigint generated always as identity primary key,
+  owner_id     uuid not null references owners on delete cascade,  -- the roster's owner, for the session index
   roster_id    uuid not null references rosters on delete cascade,
   member_name  text not null,
+  member_emoji text not null,  -- kept on the draft so it still shows after the cast is replaced
+  copy         int not null default 1,  -- 2 for "Gandalf 2", drafted when every member is busy
   session_id   text not null,
   repo_hash    text,          -- same keyed hash as project_links
+  repo         bytea,         -- same ciphertext as project_links
   task         bytea,         -- AES-256-GCM ciphertext, encrypted on the user's machine; the server can't read it
   drafted_at   timestamptz not null default now(),
-  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts and `rostr agent task`
+  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts, `rostr agent task`, and the hourly keep-alive
   released_at  timestamptz    -- null while the agent is active
 );
 
--- A member can only be drafted once at a time, and a session can only hold one member at a time.
-create unique index drafts_active_member on drafts (roster_id, member_name) where released_at is null;
-create unique index drafts_active_session on drafts (roster_id, session_id) where released_at is null;
+-- A member can only be drafted once at a time, and a session can only hold one member at a time, across all of
+-- the owner's rosters.
+create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
+create unique index drafts_active_session on drafts (owner_id, session_id) where released_at is null;
 
 -- For resuming: find the member a session had before.
 create index drafts_session on drafts (session_id, drafted_at desc);
+
+-- For the cascade when a roster is disbanded, and pruning released drafts.
+create index drafts_roster on drafts (roster_id, released_at);
 ```
 
 ## Drafting
 
 `rostr agent draft` runs in one transaction:
 
-1. **Lock the roster row** (`select ... from rosters where id = $1 for update`). This serializes drafts within one
-   roster, so two sessions starting at once can't both pick Gandalf. Contention is per roster, which means one
-   person's own sessions, so the lock is never busy for long.
-2. **Expire stale drafts:** release any active draft whose `last_seen_at` is older than 48 hours. This is the backstop
-   for sessions that die without running the release hook. It runs here, lazily, so there's no cleanup job.
-3. **Same session, same name:** if the session already has an active draft, bump `last_seen_at` and return it.
-4. **Resume:** if the session had a member before and that member is free, draft them again.
-5. **Otherwise** draft the first free member in roster order, which drafts the A team before the B team.
+1. **Lock the owner row** (`select ... from owners where id = $1 for update`). This serializes an owner's drafts, so
+   two sessions starting at once can't both pick Gandalf. It's the owner rather than the roster because a draft can
+   touch more than one roster: "same session" looks across all of them, and a resume drafts into the session's old
+   roster, which may not be the one asked for. Contention is still one person's own sessions, so the lock is never
+   busy for long. Every other write (edits, links, releases, settings) takes the same lock.
+2. **Expire stale drafts:** release any of the owner's active drafts whose `last_seen_at` is older than their
+   `draft_expiry`. This is the backstop for sessions that die without running the release hook. Also delete released
+   rows older than 7 days. It runs here, lazily, at the start of every write, so there's no cleanup job. Reads leave
+   out drafts past the expiry that haven't been released yet.
+3. **Same session, same name:** if the session already has an active draft in any of the owner's rosters (found by
+   `session_id`), bump `last_seen_at` and return it.
+4. **Resume:** if the session had a member before and that member is free, draft them again, from that roster.
+5. **Otherwise** draft the first free member in roster order, which drafts the A team before the B team. If every
+   member is busy, draft the first free numbered copy (`copy` 2, then 3).
 
 The unique indexes back this up: if the logic ever gets it wrong, the insert fails instead of drafting a duplicate.
 
@@ -86,4 +111,4 @@ The unique indexes back this up: if the logic ever gets it wrong, the insert fai
 ## Not in the schema
 
 - Rate-limiting key creation by IP happens in the API, not in a table.
-- Local rosters use the same shapes, stored as files on disk.
+- Local mode uses a SQLite database with the same shapes; see [local-storage.md](local-storage.md).

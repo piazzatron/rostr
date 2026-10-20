@@ -14,14 +14,26 @@ const HOME_GRID_ROSTERS = [
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
-const ROSTER_MEMBERS = [
-  { emoji: "🧙", name: "Gandalf", task: "Fix auth redirect loop", where: "rostr/api", since: "12m" },
-  { emoji: "🌱", name: "Samwise", task: "Migrate billing to Stripe v3", where: "smart-notes", since: "1h" },
-  { emoji: "💍", name: "Frodo", task: "Flaky e2e tests on CI", where: "rostr/site", since: "3m" },
-  { emoji: "👑", name: "Aragorn", task: "Postgres index audit", where: "cloud", since: "40m" },
+// The hero's `rostr list --all`: one roster for work and one for side projects
+const HERO_ROSTERS = [
+  {
+    name: "work",
+    drafted: [
+      { emoji: "🧙", name: "Gandalf", task: "Fix auth redirect loop", where: "acme/api", since: "12m" },
+      { emoji: "💍", name: "Frodo", task: "Flaky e2e tests on CI", where: "acme/web", since: "3m" },
+      { emoji: "🌱", name: "Samwise", task: "Migrate billing to Stripe v3", where: "acme/billing", since: "1h" },
+    ],
+    idle: ["Aragorn", "Legolas", "Gimli", "Boromir", "Merry", "Pippin"],
+  },
+  {
+    name: "side",
+    drafted: [
+      { emoji: "🐐", name: "Jordan", task: "Port the recipe app to iOS", where: "me/recipes", since: "40m" },
+      { emoji: "👑", name: "LeBron", task: "Add dark mode to the blog", where: "me/blog", since: "5m" },
+    ],
+    idle: ["Kobe", "Magic", "Bird", "Curry", "Shaq", "Kareem"],
+  },
 ];
-
-const IDLE_MEMBERS = ["Legolas", "Gimli", "Boromir", "Pippin", "Merry", "Balrog"];
 
 // Short summaries of the CLI's command groups; each card links to that group in the CLI docs
 const COMMAND_GROUP_CARDS = [
@@ -34,7 +46,7 @@ const COMMAND_GROUP_CARDS = [
   {
     href: "/cli#agent-commands",
     title: "🤖 Agent commands",
-    description: "Your hooks run these for you. Draft by hand with /draft and /release.",
+    description: "Your hooks run these for you. Draft by hand with /draft.",
     commands: ["agent draft", "agent release", "agent task"],
   },
   {
@@ -58,45 +70,59 @@ const DASHBOARD_IDLE_CHIPS = [...DASHBOARD_ROSTER.aTeam, ...DASHBOARD_ROSTER.bTe
 );
 
 // Notification titles for the before/after comparison in the "poor human brain" section
-const NOTIFICATIONS_WITHOUT_ROSTR = ["New session"];
-const NOTIFICATIONS_WITH_ROSTR = ["📚 Hermione · Speed up the search API"];
+// The session sidebar in the notification mockup; the notification is about the waiting session
+const NOTIFICATION_SESSIONS = [
+  "⚡ Harry · Fix login redirect",
+  "♟️ Ron · Upgrade to Node 24",
+  "🧪 Snape · Refactor billing",
+  "📚 Hermione · Speed up the search API",
+  "🐉 Hagrid · Clean up feature flags",
+];
+const WAITING_SESSION_INDEX = 3;
 
 // Terminal examples, rendered with Expressive Code
 const HERO_LIST_EXAMPLE = toTerminalText(
   [
     "$ rostr list",
-    `${ANSI_DIM}work · A team: 4 of 6 drafted${ANSI_RESET}`,
-    "",
-    ...ROSTER_MEMBERS.map(
-      (member) => `${member.emoji} ${member.name.padEnd(9)} ${member.task.padEnd(30)} ${member.where.padEnd(12)} ${member.since}`,
-    ),
-    "",
-    `${ANSI_DIM}idle: ${IDLE_MEMBERS.join(", ")}${ANSI_RESET}`,
+    ...HERO_ROSTERS.flatMap((roster, index) => [
+      ...(index > 0 ? [""] : []),
+      `${ANSI_DIM}${roster.name} roster${ANSI_RESET}`,
+      ...roster.drafted.map(
+        (member) => `${member.emoji} ${member.name.padEnd(8)} ${member.task.padEnd(30)} ${member.where.padEnd(13)} ${member.since}`,
+      ),
+      `${ANSI_DIM}idle: ${roster.idle.join(", ")}${ANSI_RESET}`,
+    ]),
   ].join("\n"),
 );
 // Command-only blocks use plain shell (no "$"), so their copy buttons copy runnable commands
 const INSTALL_EXAMPLE = `brew install piazzatron/tap/rostr
 rostr assemble`;
-const API_EXAMPLE = `curl https://api.getrostr.sh/v1/rosters/work \\
-  -H "Authorization: Bearer $ROSTR_KEY"`;
+const API_EXAMPLE = `curl https://api.getrostr.sh/v1/rosters \\
+  -H "Authorization: Bearer $ROSTR_TOKEN"`;
+// Pasted to an agent so it can write the ~15 lines that derive the auth token and decrypt tasks and repos
+const DECRYPT_PROMPT = `Build me a dashboard of my rostr agents using the rostr API. My rostr key is in ROSTR_KEY: "rostr_sk_" followed by 32 bytes as base64url. Derive two 32-byte keys from those bytes with HKDF-SHA256 (no salt): info "auth" is the bearer token (send it base64url-encoded), and info "encrypt" is an AES-256-GCM key. Fetch GET https://api.getrostr.sh/v1/rosters with that token. Each drafted agent's task and repo are base64: the first 12 bytes are the nonce, and the rest is the ciphertext and tag.`;
 
 const LIST_JSON_EXAMPLE = `{
-  "roster": "work",
-  "drafted": [
+  "rosters": [
     {
-      "name": "Gandalf",
-      "emoji": "🧙",
-      "team": "A",
-      "task": "Fix auth redirect loop",
-      "repo": "piazzatron/rostr",
-      "draftedAt": "2026-10-19T03:12:00Z"
-    }
-  ],
-  "idle": [
-    {
-      "name": "Legolas",
-      "emoji": "🏹",
-      "team": "A"
+      "name": "work",
+      "drafted": [
+        {
+          "name": "Gandalf",
+          "emoji": "🧙",
+          "team": "A",
+          "task": "Fix auth redirect loop",
+          "repo": "acme/api",
+          "draftedAt": "2026-10-19T03:12:00Z"
+        }
+      ],
+      "idle": [
+        {
+          "name": "Aragorn",
+          "emoji": "👑",
+          "team": "A"
+        }
+      ]
     }
   ]
 }`;
@@ -133,57 +159,6 @@ const LIST_JSON_EXAMPLE = `{
       <Code code={HERO_LIST_EXAMPLE} lang="ansi" frame="terminal" />
     </section>
 
-    <!-- Why -->
-    <section class="section narrow">
-      <h2>Give your poor human brain a rest</h2>
-      <p>
-        Running five agents at once is easy. Remembering what each one is doing is not. Every workstream you have in
-        flight is something you're holding in your head, and anonymous sessions make it harder: "Untitled 4" and "Fix
-        bug" tell you nothing when you come back an hour later.
-      </p>
-      <p>
-        A good engineering manager doesn't keep a mental list of tickets. They know their team, and they know who's on
-        what. Ask who's handling the billing migration and the answer is instant. rostr gives your agents that kind of
-        identity, so you're checking in with Samwise about billing instead of hunting for the right terminal.
-      </p>
-      <p>
-        It works outside the terminal too. When an agent reaches out to you on Slack, in a PR comment, or anywhere else,
-        it signs with its name: "Gandalf here, the auth fix is ready for review." You know exactly who's asking, and
-        getting back to that session is as easy as finding Gandalf in your session list.
-      </p>
-      <p>
-        Notifications get the same upgrade. No more getting lost in notification soup, where every alert says
-        "Claude is waiting for your input" and you have to click through each one to find out which chat it means. Each
-        one tells you who's asking, so you know exactly which chat to open.
-      </p>
-      <div class="notification-compare">
-        {[
-          { label: "Without rostr", titles: NOTIFICATIONS_WITHOUT_ROSTR },
-          { label: "With rostr", titles: NOTIFICATIONS_WITH_ROSTR },
-        ].map((column) => (
-          <div class="notification-column">
-            <span class="compare-label">{column.label}</span>
-            {column.titles.map((title) => (
-              <div class="notification">
-                <span class="notification-icon"><ClaudeIcon aria-hidden="true" /></span>
-                <div class="notification-text">
-                  <div class="notification-top">
-                    <strong>{title}</strong>
-                    <span>now</span>
-                  </div>
-                  <p>Claude is waiting for your input</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-      <p>
-        Names from stories you already know work best. Samwise comes with a personality attached, so "Samwise is on
-        billing" sticks in a way that "session 3" never will.
-      </p>
-    </section>
-
     <!-- How it works -->
     <section class="section" id="how-it-works">
       <h2>How it works</h2>
@@ -208,10 +183,32 @@ const LIST_JSON_EXAMPLE = `{
         </li>
       </ol>
 
-      <!-- TODO: screenshot of named sessions in the Claude Code / Codex sidebar -->
-      <figure class="screenshot-placeholder">
-        <span>Screenshot: named sessions in the Claude Code sidebar</span>
-      </figure>
+      <div class="notification-compare">
+        <div class="app-window">
+          <div class="app-bar"><span></span><span></span><span></span></div>
+          <div class="app-body">
+            <ul class="app-sidebar">
+              {NOTIFICATION_SESSIONS.map((session, index) => (
+                <li class:list={{ "is-waiting": index === WAITING_SESSION_INDEX }}>
+                  <span class="session-name">{session}</span>
+                  {index === WAITING_SESSION_INDEX && <span class="waiting-dot" aria-label="waiting for input"></span>}
+                </li>
+              ))}
+            </ul>
+            <div class="app-main" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          </div>
+          <div class="notification scene-notification is-waiting">
+            <span class="notification-icon"><ClaudeIcon aria-hidden="true" /></span>
+            <div class="notification-text">
+              <div class="notification-top">
+                <strong>{NOTIFICATION_SESSIONS[WAITING_SESSION_INDEX]}</strong>
+                <span>now</span>
+              </div>
+              <p>Claude is waiting for your input</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <p class="section-lede">The commands, at a glance:</p>
       <div class="group-cards">
@@ -224,6 +221,48 @@ const LIST_JSON_EXAMPLE = `{
         ))}
       </div>
       <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
+    </section>
+
+    <!-- Why -->
+    <section class="section">
+      <h2>Give your poor human brain a rest</h2>
+      <p class="section-lede">
+        Agentic dev turned all of us into managers. Five agents means five workstreams, and you're the one who has to
+        keep track of them.
+      </p>
+
+      <div class="value-grid">
+        <div class="card">
+          <h3>🔔 Know who needs you</h3>
+          <p>
+            When an agent is waiting on you, the notification says who. Find the same name in your sidebar and you're in
+            the right chat.
+          </p>
+        </div>
+        <div class="card">
+          <h3>🧠 Remember who's on what</h3>
+          <p>
+            Every agent gets a stable name from a cast you already know. Samwise on billing sticks in your head, and
+            five sessions start to feel like a team you manage.
+          </p>
+        </div>
+        <div class="card">
+          <h3>💬 Same name everywhere</h3>
+          <p>
+            When an agent messages you on Slack, comments on a PR, or sends an email, it signs with its name, so you know
+            which session it came from.
+          </p>
+          <div class="chat-message" aria-label="Example chat message signed by an agent">
+            <span class="chat-avatar">📚</span>
+            <div>
+              <div class="chat-meta"><strong>Hermione</strong><span>2:14 PM</span></div>
+              <p>Search API is 3x faster. Ready for review.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="value-closer">Plus, it's fun.</p>
     </section>
 
     <!-- Rosters -->
@@ -282,10 +321,11 @@ const LIST_JSON_EXAMPLE = `{
           </p>
         </div>
         <div class="card">
-          <h3>📁 A roster per project</h3>
+          <h3>📁 One roster for work, one for side projects</h3>
           <p>
-            Make as many rosters as you like and give each project its own with <code>rostr link</code>. The Fellowship
-            works on rostr, the Smash Bros work on your app, and a name tells you the project as well as the task.
+            Keep as many rosters as you like and give each project its own with <code>rostr link</code>. The Fellowship
+            works your day job and the NBA Legends work your side projects, so when Jordan pings you, you know which
+            one it is before you read a word.
           </p>
         </div>
       </div>
@@ -310,7 +350,7 @@ const LIST_JSON_EXAMPLE = `{
         </div>
       </dl>
       <p class="modes-note">
-        Choose during <code>rostr assemble</code>, switch any time with <code>rostr config cloud</code>.
+        Choose during <code>rostr assemble</code>, or move to the cloud later with <code>rostr config cloud on</code>.
       </p>
     </section>
 
@@ -318,8 +358,8 @@ const LIST_JSON_EXAMPLE = `{
     <section class="section">
       <h2>Build on it</h2>
       <p class="section-lede">
-        Everything <code>rostr list</code> shows is available as JSON, from the CLI for any roster or from the rostr API
-        for cloud rosters. Use it to build your own monitoring, dashboards, and integrations.
+        Everything <code>rostr list</code> shows is available as JSON: from the CLI on your machine, or from the rostr
+        API for web dashboards and integrations. Use it to build your own monitoring, dashboards, and integrations.
       </p>
 
       <figure class="dashboard" aria-label="Example team dashboard built on rostr list --json">
@@ -355,22 +395,52 @@ const LIST_JSON_EXAMPLE = `{
         </div>
         <figcaption>A team dashboard built on <code>rostr list --json</code>.</figcaption>
       </figure>
-      <div class="cards">
+      <div class="cards build-cards">
         <div class="card">
-          <h3>From the CLI</h3>
+          <h3>💻 On your machine</h3>
           <Code code="rostr list --json" lang="sh" />
-          <h3 class="build-subhead">From the API</h3>
+          <p class="build-note">Local or cloud mode. Tasks and repos come back decrypted.</p>
+          <h3 class="build-subhead">🌐 On the web</h3>
           <Code code={API_EXAMPLE} lang="sh" />
           <p class="build-note">
-            Both return the same JSON, except that the API's tasks are end-to-end encrypted. Decrypt them with your rostr
-            key, or let <code>rostr list --json</code> do it for you.
+            Cloud mode. Get your token with <code>rostr config key --token</code>. Rosters and who's drafted come back
+            readable; tasks and repos stay end-to-end encrypted.
           </p>
+          <button class="copy-link" data-copy={DECRYPT_PROMPT}>
+            <span class="copy-label">📋 Copy a prompt that teaches your agent to decrypt them</span>
+          </button>
         </div>
         <div class="card">
           <h3>Response</h3>
           <Code code={LIST_JSON_EXAMPLE} lang="json" />
         </div>
       </div>
+
+    </section>
+
+    <!-- Why I built this -->
+    <section class="section narrow" id="why-i-built-this">
+      <h2>Why I built this</h2>
+      <p>A few threads led to rostr:</p>
+      <ol class="threads">
+        <li>
+          Once you adopt a long-running, async agent workflow, your agents need a way to <strong
+            >reach you when they get stuck</strong
+          >. And whatever tool you build or adopt for this, you should be able to tell at a glance which session is
+          reaching out.
+        </li>
+        <li>
+          Stable agent identities seem like a useful primitive! Regardless of what harness or agent management tool you
+          use, you should be able to easily port your team. I was inspired by the named agents in <a href="https://github.com/gastownhall/gastown">Gas Town</a>,
+          but without the whole kitchen sink.
+        </li>
+        <li>
+          rostr is an experiment in exercising some restraint with agents. It's tempting to spin up countless sessions on
+          experimental workstreams, get exhausted, and then lose context picking your work back up the next morning. A
+          fixed team might nudge you to bite off a more human-manageable amount of work and prioritize around your
+          team's size, the way an EM does.
+        </li>
+      </ol>
     </section>
 
     <!-- Install -->
@@ -379,7 +449,10 @@ const LIST_JSON_EXAMPLE = `{
       <div class="cards">
         <div class="card">
           <h3>Ask your agent</h3>
-          <p>Point Claude Code or Codex at this page and it will install rostr, set up the hooks and skill, and help you pick a roster.</p>
+          <p>
+            Point Claude Code or Codex at this page and it will install rostr, set up the hooks and skill, and help you
+            pick a roster. Agents: your setup steps are at <a href="/setup.md">getrostr.sh/setup.md</a>.
+          </p>
           <button class="copy copy-block" data-copy={SETUP_PROMPT}>
             <span class="copy-text">“{SETUP_PROMPT}”</span>
             <span class="copy-label">Copy</span>
@@ -399,8 +472,9 @@ const LIST_JSON_EXAMPLE = `{
         await navigator.clipboard.writeText(button.dataset.copy ?? "");
         const label = button.querySelector(".copy-label");
         if (!label) return;
+        const original = label.textContent;
         label.textContent = "Copied";
-        setTimeout(() => (label.textContent = "Copy"), 1500);
+        setTimeout(() => (label.textContent = original), 1500);
       });
     });
 

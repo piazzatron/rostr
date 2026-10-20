@@ -6,7 +6,7 @@ const STORAGE_ROWS = [
   { data: "Rosters", local: "Disk", cloud: "Plaintext" },
   { data: "Drafts (member, session ID, timestamps)", local: "Disk", cloud: "Plaintext. Session IDs are random" },
   { data: "Tasks", local: "Disk", cloud: "AES-256-GCM ciphertext" },
-  { data: "Repo identity (owner/repo)", local: "Disk", cloud: "HMAC-SHA256 fingerprint" },
+  { data: "Repo identity (owner/repo)", local: "Disk", cloud: "HMAC-SHA256 fingerprint + AES-256-GCM ciphertext" },
   { data: "rostr key", local: "—", cloud: "Never transmitted" },
 ];
 
@@ -21,7 +21,7 @@ const KEY_DERIVATION = `rostr key
     <h1>Privacy</h1>
     <p class="lede">
       Local mode makes no network calls. Cloud mode stores rosters and draft state on the rostr API; tasks and repo
-      names are encrypted or fingerprinted on your machine before they're sent.
+      names are encrypted on your machine before they're sent.
     </p>
   </section>
 
@@ -53,7 +53,7 @@ const KEY_DERIVATION = `rostr key
     <Code code={KEY_DERIVATION} lang="text" frame="none" />
     <ul class="terse-list">
       <li><strong>Auth token:</strong> bearer credential for the API. The server stores only its SHA-256 hash.</li>
-      <li><strong>Encryption key:</strong> encrypts tasks with AES-256-GCM, with a random 96-bit nonce per task.</li>
+      <li><strong>Encryption key:</strong> encrypts tasks and repo names with AES-256-GCM, with a random 96-bit nonce per value.</li>
       <li>
         <strong>Fingerprint key:</strong> HMAC-SHA256 over <code>owner/repo</code>, so the server can match project
         links without learning repo names.

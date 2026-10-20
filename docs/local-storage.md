@@ -1,84 +1,98 @@
 # Local storage
 
-In local mode (the default, when there's no rostr key), everything lives in plain files, so there's no database to
-install. The files use the same shapes as the [server schema](server-schema.md), which makes `rostr config cloud on` a
-straight copy. In cloud mode everything lives on the API instead, and only `credentials` is kept on disk.
+Storage for the behavior in [cli-spec.md](cli-spec.md).
 
-Everything is under `~/.config/rostr`.
+In local mode (the default, when there's no rostr key), everything lives in one SQLite database at
+`~/.config/rostr/rostr.db`. SQLite is compiled into the CLI (the pure-Go `modernc.org/sqlite`), so there's nothing to
+install. The schema mirrors the [server schema](server-schema.md) minus owners and encryption: tasks and repo names
+are plaintext here, and `rostr config cloud on` encrypts and fingerprints them as it uploads. In cloud mode everything
+lives on the API instead, and only `credentials` is kept on disk.
 
 ```
-rostr/
-  config.json                  default roster and project links
-  credentials                  your cloud key (only readable by you)
-  rosters/
-    work.json                  one file per roster
-  drafts/
-    work/
-      gandalf.json             one file per active draft
-  sessions/
-    <session-id>.json          the last member each session had, for resuming
+~/.config/rostr/
+  rostr.db         rosters, project links, drafts, and settings
+  credentials      your cloud key (only readable by you), in cloud mode
 ```
 
-## Files
+## Schema
 
-**`config.json`**
+```sql
+-- default_roster (a roster name), draft_expiry (e.g. "7d"), and auto_draft ("on" or "off")
+create table settings (
+  key   text primary key,
+  value text not null
+);
 
-```json
-{
-  "defaultRoster": "work",
-  "projectLinks": { "piazzatron/rostr": "work" }
-}
+-- a_team, b_team: [{"name": "Gandalf", "emoji": "🧙"}, ...], in draft order
+create table rosters (
+  id         integer primary key,
+  name       text not null unique,
+  emoji_mode text not null default 'on',  -- 'on', 'off', or 'only'
+  a_team     text not null,
+  b_team     text not null default '[]',
+  created_at text not null default (datetime('now'))
+);
+
+-- Which roster a project uses (`rostr link`), keyed by the normalized "owner/repo"
+create table project_links (
+  repo      text primary key,
+  roster_id integer not null references rosters on delete cascade
+);
+
+-- One row per draft, kept for 7 days after release so a resumed session can ask for its old name back
+create table drafts (
+  id           integer primary key,
+  roster_id    integer not null references rosters on delete cascade,
+  member_name  text not null,
+  member_emoji text not null,              -- kept on the draft so it still shows after the cast is replaced
+  copy         integer not null default 1, -- 2 for "Gandalf 2", drafted when every member is busy
+  session_id   text not null,
+  repo         text,
+  task         text,
+  drafted_at   text not null default (datetime('now')),
+  last_seen_at text not null default (datetime('now')),
+  released_at  text                        -- null while the agent is active
+);
+
+create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
+create unique index drafts_active_session on drafts (session_id) where released_at is null;
+create index drafts_session on drafts (session_id, drafted_at desc);
 ```
 
-**`rosters/<roster>.json`.** `rostr edit` opens this file in your editor.
+Names are unique ignoring case and accents; the CLI checks that before writing, since SQLite's `unique` is exact.
+
+## Concurrency
+
+The database runs in WAL mode with a 3-second busy timeout. Every command that writes runs in one
+`begin immediate` transaction, which takes SQLite's write lock up front, so two sessions starting at once draft one
+after the other instead of racing. Reads never block.
+
+## Drafting
+
+The same steps as the server, in one transaction:
+
+1. **Expire stale drafts:** release active drafts whose `last_seen_at` is older than `draft_expiry`, and delete
+   released rows older than 7 days.
+2. **Same session, same name:** if the session has an active draft (in any roster), bump `last_seen_at` and return it.
+3. **Resume:** if the session had a member before and that member is free, draft them again, from that roster.
+4. **Otherwise** draft the first free member in roster order, A team first. If every member is busy, draft the first
+   free numbered copy (`copy` 2, then 3).
+
+## Editing
+
+`rostr edit` writes the roster to a temporary JSON file, opens it in `$EDITOR`, and validates and saves it when the
+editor closes:
 
 ```json
 {
   "emojiMode": "on",
-  "members": [{ "name": "Gandalf", "emoji": "🧙", "team": "A" }]
+  "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }],
+  "bTeam": [{ "name": "Boromir", "emoji": "🛡️" }]
 }
 ```
-
-**`drafts/<roster>/<member>.json`.** Exists only while that member is drafted.
-
-```json
-{
-  "sessionId": "…",
-  "repo": "piazzatron/rostr",
-  "task": "Fix auth redirect loop",
-  "draftedAt": "2026-10-19T03:12:00Z",
-  "lastSeenAt": "2026-10-19T03:12:00Z"
-}
-```
-
-**`sessions/<session-id>.json`.** `{ "roster": "work", "member": "Gandalf" }`. Files older than 7 days are deleted.
-
-## Concurrency without a lock
-
-Several sessions can start at the same moment, so drafting can't read, change, and rewrite a shared file. Instead,
-each draft is its own file:
-
-- **Drafting** creates `drafts/<roster>/<member>.json` in create-only mode (`O_EXCL`). The
-  OS guarantees only one process can create a given file, so the first session to create `gandalf.json` gets Gandalf
-  and any other gets "already exists" and tries the next member.
-- **Releasing** deletes the draft file and writes `sessions/<session-id>.json`.
-- **`rostr agent task`** rewrites only its own draft file, which no other session touches.
-
-Files that people edit (`config.json`, roster files) are written to a temporary file and renamed into place, so
-nothing ever reads a half-written file.
-
-## Drafting
-
-1. **Expire stale drafts:** delete draft files whose `lastSeenAt` is older than 48 hours. If two sessions delete the
-   same stale file, the second delete just fails, which is fine.
-2. **Same session, same name:** if a draft file in this roster already has this session's ID, bump `lastSeenAt` and
-   return it.
-3. **Resume:** if `sessions/<session-id>.json` names a member, try to create their draft file first.
-4. **Otherwise** try to create a draft file for each member in roster order, A team first, and stop at the first one
-   that succeeds.
 
 ## Moving to the cloud
 
-`rostr config cloud on` uploads every roster, the default roster, project links, and active drafts, creates your key, and
-then deletes the local files except `credentials`. `rostr config cloud off` downloads everything back and deletes the
-key. A machine is in cloud mode whenever it has a key, from `credentials` or the `ROSTR_KEY` environment variable.
+`rostr config cloud on` uploads every roster, the default roster, project links, and active drafts in one request,
+creates your key, and only then deletes `rostr.db`. There's no way back to local in v1. A machine is in cloud mode
+whenever it has a key, from `credentials` or the `ROSTR_KEY` environment variable.

@@ -42,10 +42,10 @@ const COMMAND_GROUPS: CommandGroup[] = [
           "Interactive setup: answer a few questions and you're done. It's the only command you need to run, and your agent can run it for you with flags.",
         options: [
           { flag: "--preset <id>", description: "Skip the preset question. See them all with rostr presets." },
-          { flag: "--names <list>", description: "Use your own comma-separated names. The first six are your A team." },
+          { flag: "--names <list>", description: "Use your own comma-separated names, with an emoji in front if you like. The first six are your A team, and names without an emoji get a random one." },
           { flag: "--emoji on|off|only", description: "How agents show up. Defaults to on." },
           { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr config cloud on." },
-          { flag: "--no-auto-draft", description: "Don't draft sessions automatically; use /draft and /release instead." },
+          { flag: "--no-auto-draft", description: "Don't draft sessions automatically; use /draft instead." },
         ],
         example: `$ rostr assemble
 ✔ Pick a preset · 💍 The Fellowship
@@ -53,67 +53,62 @@ const COMMAND_GROUPS: CommandGroup[] = [
 ✔ Emoji · On (🧙 Gandalf)
 ✔ Where should rostr live? · This machine
 ✔ Draft every new session automatically? · Yes
-✔ Claude Code: hooks, skill, and /draft + /release installed
+✔ Claude Code: hooks, skill, and /draft installed
 ✔ Codex: hooks and skill installed
 💍 Assembled a roster named work. Start a new session to get drafted
 
-$ rostr assemble side --names "Ada, Grace, Linus, Margaret, Ken, Barbara"
-✏️ Assembled a roster named side with 6 members, all on the A team`,
+$ rostr assemble side --names "🧮 Ada, Grace, Linus, Margaret, Ken, Barbara"
+✏️ Assembled a roster named side with 6 members, all on the A team
+   🧮 Ada, 🦋 Grace, 🐧 Linus, 🚀 Margaret, 🧵 Ken, 🌻 Barbara`,
       },
       {
         id: "link",
         heading: "link / unlink",
-        usage: "rostr link <roster> [--repo <owner/repo>]\nrostr unlink [--repo <owner/repo>]",
+        usage: "rostr link [<roster>] [--repo <owner/repo>]\nrostr unlink [--repo <owner/repo>]",
         summary:
-          "Link a particular roster to your project, or unlink it to go back to your default roster.",
+          "Pick which roster your project uses, or unlink it to go back to your default roster. Run rostr link on its own to see which roster this project uses and change it.",
         note:
-          "Worth it when you want to tell projects apart at a glance: give your app the Smash Bros, and Mario can only mean your app.",
+          "Worth it when you want to tell projects apart at a glance: give your side projects the NBA Legends, and Jordan can only mean a side project.",
         options: [{ flag: "--repo <owner/repo>", description: "Link or unlink a repo other than the current one." }],
-        example: `$ cd ~/code/rostr
-$ rostr link work
-💍 Linked the current repo, piazzatron/rostr, to the work roster (The Fellowship)
-   A team: 🧙 Gandalf, 💍 Frodo, 🌱 Samwise, 👑 Aragorn, 🏹 Legolas, 🪓 Gimli
+        example: `$ cd ~/code/recipes
+$ rostr link
+✔ me/recipes uses the work roster (your default). Pick one · side
+🏀 Linked me/recipes to the side roster
 
-$ rostr link side --repo piazzatron/smart-notes
-✏️ Linked piazzatron/smart-notes to the side roster
+$ rostr link side --repo me/blog
+🏀 Linked me/blog to the side roster
 
 $ rostr unlink
-Unlinked the current repo, piazzatron/rostr. It now drafts from your default roster, smash-bros`,
+Unlinked me/recipes. It now uses your default roster, work`,
       },
       {
         id: "list",
-        usage: "rostr list [<roster>] [--all] [--json]",
-        summary: "See who's working on what, and who's idle.",
-        options: [
-          { flag: "--all", description: "Show every roster." },
-          { flag: "--json", description: "Print the result as JSON." },
-        ],
+        usage: "rostr list [<roster>...] [--json]",
+        summary: "See who's working on what, and who's idle, across all your rosters. Name rosters to see just those.",
+        options: [{ flag: "--json", description: "Print the result as JSON." }],
         example: `$ rostr list
-work · A team: 4 of 6 drafted
+work roster
+🧙 Gandalf   Fix auth redirect loop         acme/api      12m
+💍 Frodo     Flaky e2e tests on CI          acme/web      3m
+🌱 Samwise   Migrate billing to Stripe v3   acme/billing  1h
+idle: Aragorn, Legolas, Gimli, Boromir, Merry, Pippin
 
-🧙 Gandalf   Fix auth redirect loop         rostr/api    12m
-🌱 Samwise   Migrate billing to Stripe v3   smart-notes  1h
-💍 Frodo     Flaky e2e tests on CI          rostr/site   3m
-👑 Aragorn   Postgres index audit           cloud        40m
+side roster
+🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
+idle: LeBron, Kobe, Magic, Bird, Curry, Shaq
 
-idle: Legolas, Gimli, Boromir, Pippin, Merry, Balrog`,
+$ rostr list side
+side roster
+🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
+idle: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
       },
       {
         id: "edit",
-        usage: "rostr edit [<roster>] [--preset <id> | --names <list>]",
-        summary: "Open a roster in your editor to change its members and A team, or swap its whole cast.",
-        options: [
-          { flag: "--preset <id>", description: "Swap the cast for a pre-built roster. Agents already drafted keep their names until their sessions end." },
-          { flag: "--names <list>", description: "Swap the cast for your own comma-separated names." },
-        ],
+        usage: "rostr edit [<roster>]",
+        summary: "Open a roster in your editor to change its members, their emoji, and who's on the A team. To swap in a whole new cast, run rostr assemble and replace it.",
         example: `$ rostr edit work
-Opening ~/.config/rostr/rosters/work.json in your editor…
-💍 Saved work: 6 on the A team, 8 on the B team
-
-$ rostr edit work --preset smash-bros
-🎮 work now has the Smash Bros cast
-   A team: 🍄 Mario, 🗡️ Link, ⭐ Kirby, ⚡ Pikachu, 🚀 Samus, 🦊 Fox
-   3 agents from The Fellowship keep their names until their sessions end`,
+Opening work in your editor…
+💍 Saved work: 6 on the A team, 8 on the B team`,
       },
       {
         id: "presets",
@@ -125,10 +120,12 @@ $ rostr edit work --preset smash-bros
       },
       {
         id: "disband",
-        usage: "rostr disband <roster>",
-        summary: "Delete a roster. Projects that used it fall back to your default.",
-        example: `$ rostr disband side
-Disbanded side. 1 project that used it now uses work`,
+        usage: "rostr disband <roster> [--yes]",
+        summary: "Delete a roster, after asking. Projects that used it fall back to your default, and if it was your default, your oldest other roster takes over.",
+        options: [{ flag: "--yes", description: "Skip the question. Agents need this, since they can't answer it." }],
+        example: `$ rostr disband work
+✔ Disband work? 3 agents drafted, 1 linked project · Yes
+Disbanded work. side is now your default roster`,
       },
     ],
   },
@@ -136,7 +133,7 @@ Disbanded side. 1 project that used it now uses work`,
     id: "agent-commands",
     emoji: "🤖",
     title: "Agent commands",
-    lede: "Your hooks, the rostr skill, and the /draft and /release slash commands run these.",
+    lede: "Your hooks, the rostr skill, and the /draft slash command run these.",
     commands: [
       {
         id: "agent-draft",
@@ -184,14 +181,14 @@ $ rostr agent task samwise "Migrate billing to Stripe v3"
       {
         id: "config",
         usage:
-          "rostr config\nrostr config default <roster>\nrostr config emoji on|off|only [--roster <roster>]\nrostr config auto-draft on|off\nrostr config cloud on|off\nrostr config key",
+          "rostr config\nrostr config default <roster>\nrostr config emoji on|off|only [--roster <roster>]\nrostr config auto-draft on|off\nrostr config cloud on\nrostr config key [--token]",
         summary: "See and change your settings. Run it on its own to see them all.",
         options: [
           { flag: "default", description: "The roster projects use when they don't have a link." },
           { flag: "emoji", description: "How agents show up: on (🧙 Gandalf), off (Gandalf), or only (🧙). only needs every member to have a different emoji." },
-          { flag: "auto-draft", description: "Draft new sessions automatically, or by hand with /draft and /release." },
-          { flag: "cloud", description: "Move your whole setup to the cloud, or back to this machine. Turn it on once, when you start using cloud agents." },
-          { flag: "key", description: "Print your rostr key, which puts a machine in cloud mode. There's no recovery, so keep it safe." },
+          { flag: "auto-draft", description: "Draft new sessions automatically, or by hand with /draft." },
+          { flag: "cloud on", description: "Move your whole setup to the cloud. Turn it on once, when you start using cloud agents. There's no going back to local." },
+          { flag: "key", description: "Print your rostr key, which puts a machine in cloud mode. There's no recovery, so keep it safe. --token prints the token for the API instead." },
         ],
         example: `$ rostr config
 default      work
@@ -203,10 +200,11 @@ $ rostr config emoji only
 🧙 Emoji only for work. Agents now show as: 🧙 · Fix auth redirect loop
 
 $ rostr config cloud on
+✔ New setup, or do you have a key? · New setup
 ☁️ Moved your setup to the cloud
    2 rosters, 3 project links, 4 active drafts
-   Your rostr key: rostr_sk_3f9c2b7e4a1d (saved to ~/.config/rostr/credentials)
-   Set it as ROSTR_KEY in your cloud environments so their sessions can draft too`,
+   Saved your rostr key to ~/.config/rostr/credentials
+   Run rostr config key to see it, then set it as ROSTR_KEY in your cloud environments`,
       },
     ],
   },
@@ -251,7 +249,7 @@ $ rostr config cloud on
       <dt>Projects</dt>
       <dd>
         Each git repo can use its own roster. rostr identifies a project by its <code>origin</code> remote
-        (<code>owner/repo</code>).
+        (<code>owner/repo</code>), so it's the same project on every machine and in every worktree.
       </dd>
       <dt>Sessions</dt>
       <dd>
@@ -262,9 +260,8 @@ $ rostr config cloud on
       </dd>
       <dt>Which roster gets drafted</dt>
       <dd>
-        The <code>--roster</code> flag (which works on every command) if you pass one, then the project's linked roster,
-        then your default. Outside a git repo, or in one without an <code>origin</code> remote, rostr uses your
-        default.
+        The <code>--roster</code> flag on agent commands if you pass one, then the project's linked roster,
+        then your default. Outside a git repo, rostr uses your default.
       </dd>
     </dl>
   </section>
@@ -300,19 +297,15 @@ $ rostr config cloud on
       {group.id === "agent-commands" && (
         <section class="section" id="slash-commands">
           <div class="command-heading">
-            <h3>Slash commands</h3>
+            <h3>Slash command</h3>
           </div>
           <p>
-            If you'd rather draft by hand, turn auto-draft off and use these in Claude Code. <code>rostr assemble</code> installs them.
+            If you'd rather draft by hand, turn auto-draft off and use this in Claude Code. <code>rostr assemble</code> installs it.
           </p>
           <dl class="options">
             <div class="option-row">
               <dt><code>/draft</code></dt>
               <dd>Draft an agent for this session. Runs <code>rostr agent draft</code>.</dd>
-            </div>
-            <div class="option-row">
-              <dt><code>/release</code></dt>
-              <dd>Send this session's agent back to the bench. Runs <code>rostr agent release</code>.</dd>
             </div>
           </dl>
         </section>
