@@ -363,12 +363,14 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatal("session start drafted")
 	}
 
-	// The first prompt drafts, then wakes Claude with who it is
+	// The first prompt drafts and tells the agent who it is; the title step then wakes Claude to set its task
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
-	if r.code != 2 || !strings.HasPrefix(r.stderr, `You're 🧙 Gandalf for this session (drafted by rostr from the "work" roster).`) ||
-		!strings.Contains(r.stderr, "rostr agent task") {
-		t.Fatalf("prompt: exit %d, stderr %q", r.code, r.stderr)
+	if r.code != 0 || !strings.Contains(r.stdout, `You're 🧙 Gandalf for this session`) || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) {
+		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	if r := hook("title", prompt); r.code != 2 || !strings.Contains(r.stderr, "rostr agent task") {
+		t.Fatalf("title step: exit %d, stderr %q", r.code, r.stderr)
 	}
 	l := m.list()
 	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Task != "Fix the flaky login test" || d[0].Repo != "acme/hooks" {
@@ -653,7 +655,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 
 	// disband: asks first, releases drafts, promotes the oldest roster, and starts over after the last
 	m.fails("pass --yes to disband the play roster (2 agents drafted, 0 linked projects)", "disband", "play")
-	if out := m.ok("disband", "play", "--yes"); out != "Disbanded the play roster.\nwork is your default roster now.\n" {
+	if out := m.ok("disband", "play", "--yes"); out != "Disbanded the play roster. 🧮 Ada says bye.\nwork is your default roster now.\n" {
 		t.Fatalf("disband: %q", out)
 	}
 	if out := m.with("ROSTR_SESSION=s1").ok("agent", "release"); out != "This session has no drafted agent.\n" {

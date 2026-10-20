@@ -26,7 +26,8 @@ var hookEvents = []struct {
 	asyncRewake bool
 }{
 	{"SessionStart", "session-start", false},
-	{"UserPromptSubmit", "prompt", true},
+	{"UserPromptSubmit", "prompt", false},
+	{"UserPromptSubmit", "title", true},
 	{"SessionEnd", "session-end", false},
 }
 
@@ -130,7 +131,16 @@ func installSettings(path string) (bool, error) {
 	}
 	for _, h := range hookEvents {
 		groups, _ := hooks[h.event].([]any)
-		if hasRostrHook(groups, h.subcommand) {
+		if existing := rostrHook(groups, h.subcommand); existing != nil {
+			// Older installs ran the prompt hook in the background; keep each hook's mode current
+			if async, _ := existing["asyncRewake"].(bool); async != h.asyncRewake {
+				if h.asyncRewake {
+					existing["asyncRewake"] = true
+				} else {
+					delete(existing, "asyncRewake")
+				}
+				changed = true
+			}
 			continue
 		}
 		hook := map[string]any{"type": "command", "command": HookCommand(h.subcommand)}
@@ -269,19 +279,20 @@ func toAny(list []string) []any {
 	return out
 }
 
-func hasRostrHook(groups []any, subcommand string) bool {
+// rostrHook finds rostr's installed hook for a subcommand, or nil.
+func rostrHook(groups []any, subcommand string) map[string]any {
 	for _, group := range groups {
 		groupMap, _ := group.(map[string]any)
 		hooks, _ := groupMap["hooks"].([]any)
 		for _, hook := range hooks {
 			hookMap, _ := hook.(map[string]any)
 			command, _ := hookMap["command"].(string)
-			if strings.Contains(command, "rostr hook claude-code "+subcommand) {
-				return true
+			if strings.HasSuffix(strings.TrimSuffix(command, "; fi"), "rostr hook claude-code "+subcommand) {
+				return hookMap
 			}
 		}
 	}
-	return false
+	return nil
 }
 
 func containsString(list []any, s string) bool {

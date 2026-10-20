@@ -62,6 +62,11 @@ func newConfigCommand() *cobra.Command {
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(config)
 			}
+
+			// At a terminal, pick a setting and change it; otherwise print them, with the commands that change them
+			if isInteractive() {
+				return runConfigScreen(ctx, cmd.OutOrStdout(), st, settings, rosters)
+			}
 			writeTable(cmd.OutOrStdout(), "", [][]string{
 				{"Storage", storageDetail},
 				{"Default", orDash(config.Default)},
@@ -69,6 +74,9 @@ func newConfigCommand() *cobra.Command {
 				{"Expiry", config.Expiry},
 				{"Emoji", orDash(strings.Join(emoji, ", "))},
 			}, styleMuted)
+			for _, line := range strings.Split(configHelp(storage == "cloud"), "\n") {
+				fmt.Fprintln(cmd.OutOrStdout(), styleMuted.Render(line))
+			}
 			return nil
 		},
 	}
@@ -175,6 +183,23 @@ func newConfigExpiryCommand() *cobra.Command {
 			})
 		},
 	}
+}
+
+// configHelp lists the commands that change each setting, printed under the settings when there's no terminal.
+func configHelp(cloud bool) string {
+	lines := []string{
+		"",
+		"Change one with:",
+		"  rostr config default <roster>",
+		"  rostr config auto-draft on|off",
+		"  rostr config expiry <duration>   (48h, 7d, 2w)",
+		"  rostr config emoji on|off|only [--roster <roster>]",
+	}
+	if !cloud {
+		lines = append(lines, "  rostr config cloud on")
+	}
+	lines = append(lines, "Or run `rostr config` in a terminal to pick from a list.")
+	return strings.Join(lines, "\n")
 }
 
 func withStore(fn func(st store.Store) error) error {

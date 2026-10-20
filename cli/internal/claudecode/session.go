@@ -23,6 +23,7 @@ type HookInput struct {
 	Source         string `json:"source"` // SessionStart: startup, resume, clear, or compact
 	Prompt         string `json:"prompt"`
 	PromptID       string `json:"prompt_id"`
+	SessionTitle   string `json:"session_title"` // the session's custom title, if it has one
 }
 
 // ReadHookInput decodes a hook's stdin.
@@ -99,6 +100,28 @@ func AdditionalContext(eventName, context string) string {
 	return string(out)
 }
 
+// PromptOutput is a UserPromptSubmit hook's reply: context for the agent and a session title, either of which may be
+// empty. (A hook's title only sets the local title for now; the desktop app doesn't pick it up yet.)
+func PromptOutput(context, title string) string {
+	output := map[string]any{"hookEventName": "UserPromptSubmit"}
+	if context != "" {
+		output["additionalContext"] = context
+	}
+	if title != "" {
+		output["sessionTitle"] = title
+	}
+	out, _ := json.Marshal(map[string]any{"hookSpecificOutput": output})
+	return string(out)
+}
+
+// Title is a session's title: the agent's name, then what it's working on, if anything yet.
+func Title(display, task string) string {
+	if task == "" {
+		return display
+	}
+	return display + " · " + task
+}
+
 // Identity is what the agent is told whenever it's drafted or re-told its name. The task command names the session
 // explicitly, so it works even where ROSTR_SESSION isn't set (a session started before the hooks were installed).
 func Identity(display, rosterName, sessionID string) string {
@@ -133,6 +156,11 @@ func PlaceholderTask(prompt string) string {
 	const maxRunes = 50
 	line, _, _ := strings.Cut(strings.TrimSpace(prompt), "\n")
 	line = strings.TrimSpace(line)
+
+	// A slash command ("/rostr") or a message Claude Code injected ("<task-notification>") says nothing about the work
+	if strings.HasPrefix(line, "/") || strings.HasPrefix(line, "<") {
+		return ""
+	}
 	if runes := []rune(line); len(runes) > maxRunes {
 		return strings.TrimSpace(string(runes[:maxRunes])) + "…"
 	}

@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -30,7 +33,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// sandbox is a temp HOME for one test, so nothing touches the real ~/.claude, ~/.config/rostr, or ~/.cache/rostr.
+// sandbox is a temp HOME for one test, so nothing touches the real ~/.claude, ~/.codex, ~/.agents, ~/.config/rostr,
+// or ~/.cache/rostr. Its environment drops the terminal's tmux, herdr, and Codex variables, so hooks never label the
+// pane the tests run in.
 type sandbox struct {
 	t    *testing.T
 	home string
@@ -88,7 +93,8 @@ func (s *sandbox) baseEnv() []string {
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		if name == "HOME" || name == "VISUAL" || name == "EDITOR" || strings.HasPrefix(name, "XDG_") ||
-			strings.HasPrefix(name, "CLAUDE") || strings.HasPrefix(name, "ROSTR_") || strings.HasPrefix(name, "GIT_") {
+			strings.HasPrefix(name, "CLAUDE") || strings.HasPrefix(name, "ROSTR_") || strings.HasPrefix(name, "GIT_") ||
+			strings.HasPrefix(name, "CODEX_") || strings.HasPrefix(name, "TMUX") || strings.HasPrefix(name, "HERDR_") {
 			continue
 		}
 		env = append(env, kv)
@@ -257,7 +263,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 
 	// disband: asks first, promotes the oldest roster when the default goes, starts over after the last
 	s.fails(s.home, nil, "pass --yes to disband the play roster (0 agents drafted, 0 linked projects)", "disband", "play")
-	if out := s.ok(s.home, nil, "disband", "play", "--yes"); out != "Disbanded the play roster.\nwork is your default roster now.\n" {
+	if out := s.ok(s.home, nil, "disband", "play", "--yes"); out != "Disbanded the play roster. Ada says bye.\nwork is your default roster now.\n" {
 		t.Fatalf("disband: %q", out)
 	}
 	s.ok(s.home, nil, "disband", "hogwarts", "--yes")
@@ -369,11 +375,36 @@ func TestClaudeCodeHooks(t *testing.T) {
 
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 
-	// First prompt in a terminal session: drafts, then wakes Claude (exit 2) with its identity and the task step
-	r := hook("prompt", firstPrompt("s1"))
-	if r.code != 2 || r.stdout != "" || !strings.HasPrefix(r.stderr, "You're 🧙 Gandalf for this session (drafted by rostr from the \"work\" roster).") ||
-		!strings.Contains(r.stderr, `run: rostr agent task --session s1 "<your 3-5 word summary`) || strings.Contains(r.stderr, "set_session_title") {
-		t.Fatalf("first prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	// First prompt: drafts before Claude sees it, telling the agent its name and titling the session with the prompt
+	type promptOutput struct {
+		HookSpecificOutput struct{ HookEventName, AdditionalContext, SessionTitle string }
+	}
+	readPromptOutput := func(r result) promptOutput {
+		var out promptOutput
+		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.HookSpecificOutput.HookEventName != "UserPromptSubmit" {
+			t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+		}
+		return out
+	}
+	out := readPromptOutput(hook("prompt", firstPrompt("s1")))
+	if !strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're 🧙 Gandalf for this session (drafted by rostr from the \"work\" roster).") ||
+		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
+		t.Fatalf("first prompt: %+v", out)
+	}
+
+	// The title step then wakes Claude (exit 2) to summarize the conversation as its task, once per session
+	r := hook("title", firstPrompt("s1"))
+	if r.code != 2 || !strings.Contains(r.stderr, `run: rostr agent task --session s1 "<your 3-5 word summary`) ||
+		strings.Contains(r.stderr, "set_session_title") || !strings.Contains(r.stderr, "end your turn without writing anything") {
+		t.Fatalf("title step: exit %d, stderr %q", r.code, r.stderr)
+	}
+	expectQuiet("title step again", hook("title", firstPrompt("s1")), 0)
+
+	// The wake-up arrives as another prompt in the same turn, which looks like the first prompt again: it neither
+	// re-tells the name nor retitles the session with the wake-up text
+	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.AdditionalContext != "" ||
+		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
+		t.Fatalf("wake-up prompt: %+v", out)
 	}
 	if _, err := os.Stat(filepath.Join(keepAliveDir, "s1")); err != nil {
 		t.Fatalf("no keep-alive mark: %v", err)
@@ -387,20 +418,27 @@ func TestClaudeCodeHooks(t *testing.T) {
 	sessionsDir := filepath.Join(s.home, ".claude", "sessions")
 	os.MkdirAll(sessionsDir, 0o755)
 	os.WriteFile(filepath.Join(sessionsDir, "4242.json"), []byte(`{"sessionId":"s2","bridgeSessionId":"session_xyz"}`), 0o644)
-	r = hook("prompt", firstPrompt("s2"))
+	readPromptOutput(hook("prompt", firstPrompt("s2")))
+	r = hook("title", firstPrompt("s2"))
 	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_xyz" and title "💍 Frodo · <your 3-5 word summary`) {
-		t.Fatalf("desktop prompt: exit %d, stderr %q", r.code, r.stderr)
+		t.Fatalf("desktop title step: exit %d, stderr %q", r.code, r.stderr)
 	}
 
-	// Later prompts only keep the draft alive, at most once an hour
+	// Later prompts keep the draft alive, at most once an hour, and the title in step with the task
 	transcript := filepath.Join(t.TempDir(), "s1.jsonl")
 	os.WriteFile(transcript, []byte(`{"type":"user","origin":{"kind":"human"},"promptId":"p1"}`+"\n"), 0o644)
-	laterPrompt := fmt.Sprintf(`{"session_id":"s1","transcript_path":%q,"cwd":%q,"prompt":"next","prompt_id":"p2"}`, transcript, repo)
+	laterPrompt := func(title string) string {
+		return fmt.Sprintf(`{"session_id":"s1","transcript_path":%q,"cwd":%q,"prompt":"next","prompt_id":"p2","session_title":%q}`, transcript, repo, title)
+	}
 	twoHoursAgo := time.Now().Add(-2 * time.Hour)
 	os.Chtimes(filepath.Join(keepAliveDir, "s1"), twoHoursAgo, twoHoursAgo)
-	expectQuiet("later prompt", hook("prompt", laterPrompt), 0)
+	expectQuiet("later prompt", hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop")), 0)
 	if info, _ := os.Stat(filepath.Join(keepAliveDir, "s1")); time.Since(info.ModTime()) > time.Minute {
 		t.Fatal("keep-alive didn't bump after an hour")
+	}
+	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "agent", "task", "Deflake the login test")
+	if out := readPromptOutput(hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Deflake the login test" {
+		t.Fatalf("title after a new task: %+v", out)
 	}
 
 	// Compaction re-tells the name without drafting
@@ -474,7 +512,7 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	}
 	json.Unmarshal(second, &settings)
 	if settings.Theme != "dark" || len(settings.Hooks["Stop"]) != 1 || len(settings.Hooks["SessionStart"]) != 1 ||
-		len(settings.Hooks["UserPromptSubmit"]) != 1 || len(settings.Hooks["SessionEnd"]) != 1 {
+		len(settings.Hooks["UserPromptSubmit"]) != 2 || len(settings.Hooks["SessionEnd"]) != 1 {
 		t.Fatalf("settings: %s", second)
 	}
 	for _, path := range []string{"skills/rostr/SKILL.md", "commands/draft.md"} {
@@ -484,30 +522,58 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	}
 }
 
-func TestDisassembleRemovesTheClaudeCodeInstall(t *testing.T) {
+func TestAssembleLinksTheRepoYoureIn(t *testing.T) {
+	s := newSandbox(t)
+	repo := s.gitRepo("api", "git@github.com:Acme/API.git")
+
+	// The first roster is the default, so --link has nothing to do
+	if out := s.ok(repo, nil, "assemble", "work", "--preset", "fellowship", "--link"); strings.Contains(out, "Linked") {
+		t.Fatalf("first roster linked: %s", out)
+	}
+
+	// A later roster with --link is linked to the repo you're in
+	if out := s.ok(repo, nil, "assemble", "side", "--preset", "nba", "--link"); !strings.Contains(out, "Linked acme/api to it.") {
+		t.Fatalf("assemble --link: %s", out)
+	}
+	if out := s.ok(repo, nil, "link"); !strings.Contains(out, "acme/api uses the side roster (linked)") {
+		t.Fatalf("link: %s", out)
+	}
+
+	// Outside a repo, --link says how to use it
+	if r := s.run(s.home, "", nil, "assemble", "play", "--preset", "kanto", "--link"); r.code != 1 || !strings.Contains(r.stderr, "--link needs a git repo") || !strings.Contains(r.stderr, "Usage:") {
+		t.Fatalf("--link outside a repo: exit %d, %s", r.code, r.stderr)
+	}
+}
+
+func TestUninstallRemovesEverything(t *testing.T) {
 	s := newSandbox(t)
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+	s.ok(s.home, nil, "assemble", "side", "--preset", "nba")
+	s.ok(s.home, nil, "agent", "draft", "--session", "s1")
 
 	// Without a terminal it needs --yes, and says how to use it
-	s.fails(s.home, nil, "pass --yes", "disassemble")
-	if r := s.run(s.home, "", nil, "disassemble"); !strings.Contains(r.stderr, "Usage:\n  rostr disassemble [flags]") {
+	s.fails(s.home, nil, "pass --yes", "uninstall")
+	if r := s.run(s.home, "", nil, "uninstall"); !strings.Contains(r.stderr, "Usage:\n  rostr uninstall [flags]") {
 		t.Fatalf("no usage: %s", r.stderr)
 	}
 
-	out := s.ok(s.home, nil, "disassemble", "--yes")
-	if !strings.Contains(out, "Removed hooks in") || !strings.Contains(out, "Removed the /draft command") {
-		t.Fatalf("disassemble: %s", out)
+	out := s.ok(s.home, nil, "uninstall", "--yes")
+	if !strings.Contains(out, "Deleted 2 rosters.") || !strings.Contains(out, "Removed hooks in") || !strings.Contains(out, "Removed the /draft command") {
+		t.Fatalf("uninstall: %s", out)
 	}
 	settings, _ := os.ReadFile(filepath.Join(s.home, ".claude", "settings.json"))
 	if strings.Contains(string(settings), "rostr") {
 		t.Fatalf("rostr left in settings.json: %s", settings)
 	}
-
-	// uninstall is the same command; the roster is still there
-	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "Nothing to remove") {
-		t.Fatalf("uninstall: %s", out)
+	if _, err := os.Stat(filepath.Join(s.home, ".config", "rostr", "rostr.db")); !os.IsNotExist(err) {
+		t.Fatalf("database still there: %v", err)
 	}
-	s.ok(s.home, nil, "list")
+	s.fails(s.home, nil, "No rosters yet", "list")
+
+	// Running it again finds nothing left
+	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "Nothing to remove") {
+		t.Fatalf("second uninstall: %s", out)
+	}
 }
 
 func TestMissingArgumentsPrintUsage(t *testing.T) {
@@ -611,4 +677,291 @@ func TestCloudModeWithoutTheAPI(t *testing.T) {
 	if out := s.ok(s.home, nil, "presets"); !strings.HasPrefix(out, "fellowship") || !strings.Contains(out, "free-agents") {
 		t.Fatalf("presets: %s", out)
 	}
+}
+
+func TestCodexHooks(t *testing.T) {
+	s := newSandbox(t)
+	repo := s.gitRepo("api", "git@github.com:acme/api.git")
+	keepAliveDir := filepath.Join(s.home, ".cache", "rostr", "keepalive")
+
+	// A fake codex records rostr's attempts to name threads, and fails like a Codex without its app-server
+	bin := t.TempDir()
+	codexCalls := filepath.Join(bin, "calls")
+	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\necho \"$*\" >> "+codexCalls+"\nexit 1\n"), 0o755)
+	path := "PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	hook := func(event, input string, env ...string) result {
+		return s.run(repo, input, append([]string{path}, env...), "hook", "codex", event)
+	}
+	prompt := func(id, transcript, text string) string {
+		return fmt.Sprintf(`{"session_id":%q,"transcript_path":%s,"cwd":%q,"hook_event_name":"UserPromptSubmit","model":"gpt-5",`+
+			`"permission_mode":"default","turn_id":"t1","prompt":%q}`, id, transcript, repo, text)
+	}
+	start := func(id, source string) string {
+		return fmt.Sprintf(`{"session_id":%q,"transcript_path":null,"cwd":%q,"hook_event_name":"SessionStart","model":"gpt-5","source":%q}`, id, repo, source)
+	}
+	expectQuiet := func(name string, r result) {
+		t.Helper()
+		if r.code != 0 || r.stdout != "" {
+			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
+		}
+	}
+	expectIdentity := func(name string, r result, event, display string) {
+		t.Helper()
+		var out struct {
+			HookSpecificOutput struct{ HookEventName, AdditionalContext string }
+		}
+		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.HookSpecificOutput.HookEventName != event ||
+			!strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're "+display+" for this session") {
+			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
+		}
+	}
+	expectNamed := func(name string) {
+		t.Helper()
+		calls, _ := os.ReadFile(codexCalls)
+		if string(calls) != "app-server proxy\n" {
+			t.Fatalf("%s: codex calls %q", name, calls)
+		}
+		os.Remove(codexCalls)
+	}
+	firstPrompt := "Fix the login redirect loop\nmore"
+
+	// Before assemble, hooks never fail a session
+	expectQuiet("prompt, no roster", hook("prompt", prompt("t0", "null", firstPrompt)))
+	expectQuiet("bad input", hook("prompt", "not json"))
+	expectQuiet("start, no roster", hook("session-start", start("t0", "resume")))
+
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+
+	// First prompt: drafts, names the thread, and tells the agent who it is before its first reply
+	expectIdentity("first prompt", hook("prompt", prompt("t1", "null", firstPrompt)), "UserPromptSubmit", "🧙 Gandalf")
+	expectNamed("first prompt")
+	if _, err := os.Stat(filepath.Join(keepAliveDir, "t1")); err != nil {
+		t.Fatalf("no keep-alive mark: %v", err)
+	}
+	drafted := s.list().Rosters[0].Drafted
+	if len(drafted) != 1 || drafted[0].Task != "Fix the login redirect loop" || drafted[0].Repo != "acme/api" || drafted[0].Session != "t1" {
+		t.Fatalf("drafted: %+v", drafted)
+	}
+
+	// The agent's own rostr commands find the session through CODEX_THREAD_ID, unless ROSTR_SESSION says otherwise
+	if out := s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "agent", "task", "Fix auth redirects"); out != "🧙 Gandalf · Fix auth redirects\n" {
+		t.Fatalf("task: %q", out)
+	}
+	if out := s.ok(repo, []string{"CODEX_THREAD_ID=t1", "ROSTR_SESSION=other"}, "agent", "draft"); out != "💍 Frodo\n" {
+		t.Fatalf("ROSTR_SESSION should win over CODEX_THREAD_ID: %q", out)
+	}
+	s.ok(repo, session("other"), "agent", "release")
+
+	// Later prompts (with an earlier prompt in the rollout) only keep the draft alive, at most once an hour
+	rollout := filepath.Join(t.TempDir(), "rollout.jsonl")
+	earlier, _ := json.Marshal(firstPrompt)
+	os.WriteFile(rollout, []byte(`{"timestamp":"t","type":"event_msg","payload":{"type":"user_message","message":`+string(earlier)+`}}`+"\n"+
+		`{"timestamp":"t","type":"event_msg","payload":{"type":"agent_message","message":"Done"}}`+"\n"), 0o644)
+	twoHoursAgo := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(filepath.Join(keepAliveDir, "t1"), twoHoursAgo, twoHoursAgo)
+	expectQuiet("later prompt", hook("prompt", prompt("t1", strconv.Quote(rollout), "next")))
+	if info, _ := os.Stat(filepath.Join(keepAliveDir, "t1")); time.Since(info.ModTime()) > time.Minute {
+		t.Fatal("keep-alive didn't bump after an hour")
+	}
+	if _, err := os.Stat(codexCalls); err == nil {
+		t.Fatal("a later prompt renamed the thread")
+	}
+
+	// A thread that existed before rostr isn't drafted mid-conversation
+	expectQuiet("old thread", hook("prompt", prompt("old", strconv.Quote(rollout), "next")))
+
+	// Startup and clear do nothing; compaction re-tells the name without drafting
+	expectQuiet("startup", hook("session-start", start("t1", "startup")))
+	expectQuiet("clear", hook("session-start", start("t9", "clear")))
+	expectIdentity("compact", hook("session-start", start("t1", "compact")), "SessionStart", "🧙 Gandalf")
+	expectQuiet("compact, never drafted", hook("session-start", start("never", "compact")))
+
+	// A fork is a new thread: it gets its own member and its own name
+	expectIdentity("fork", hook("session-start", start("t2", "fork")), "SessionStart", "💍 Frodo")
+	expectNamed("fork")
+
+	// Session end releases quickly; resume asks for the old name back
+	began := time.Now()
+	expectQuiet("end", hook("session-end", `{"session_id":"t1","transcript_path":null,"cwd":"/","hook_event_name":"SessionEnd","reason":"other"}`))
+	if took := time.Since(began); took > 2*time.Second {
+		t.Fatalf("session end took %s", took)
+	}
+	if _, err := os.Stat(filepath.Join(keepAliveDir, "t1")); err == nil {
+		t.Fatal("session end left the keep-alive file")
+	}
+	for _, d := range s.list().Rosters[0].Drafted {
+		if d.Session == "t1" {
+			t.Fatal("session end didn't release")
+		}
+	}
+	expectIdentity("resume", hook("session-start", start("t1", "resume")), "SessionStart", "🧙 Gandalf")
+
+	// Auto-draft off: no draft step, but $rostr-draft drafts through CODEX_THREAD_ID
+	s.ok(s.home, nil, "config", "auto-draft", "off")
+	expectQuiet("prompt, auto-draft off", hook("prompt", prompt("t3", "null", firstPrompt)))
+	expectQuiet("fork, auto-draft off", hook("session-start", start("t4", "fork")))
+	r := s.run(repo, "", []string{path, "CODEX_THREAD_ID=t3"}, "hook", "codex", "draft")
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 🌱 Samwise for this session") || !strings.Contains(r.stdout, "rostr agent task --session t3") {
+		t.Fatalf("$rostr-draft: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	expectNamed("$rostr-draft")
+	if r := s.run(repo, "", []string{path}, "hook", "codex", "draft"); r.code != 0 || !strings.Contains(r.stdout, "couldn't draft") {
+		t.Fatalf("$rostr-draft without a session: %+v", r)
+	}
+
+	// In cloud mode with no API, hooks still exit 0 and the session goes unnamed
+	s.ok(s.home, nil, "config", "auto-draft", "on")
+	expectQuiet("prompt, no API", hook("prompt", prompt("t5", "null", firstPrompt), "ROSTR_KEY="+unregisteredKey))
+	expectQuiet("end, no API", hook("session-end", `{"session_id":"t5"}`, "ROSTR_KEY="+unregisteredKey))
+}
+
+func TestAssembleInstallsCodexOnlyWhereItsInstalled(t *testing.T) {
+	// Without Codex (no ~/.codex, no codex on PATH), assemble leaves it alone
+	s := newSandbox(t)
+	noCodex := "PATH=" + pathWithout("codex")
+	out := s.ok(s.home, []string{noCodex}, "assemble", "work", "--preset", "fellowship")
+	if strings.Contains(out, "for Codex") {
+		t.Fatalf("assemble without Codex: %s", out)
+	}
+	for _, dir := range []string{".codex", ".agents"} {
+		if _, err := os.Stat(filepath.Join(s.home, dir)); err == nil {
+			t.Errorf("created ~/%s", dir)
+		}
+	}
+
+	// With a ~/.codex, the hooks and skills go in once, and the output says to approve the hooks
+	os.MkdirAll(filepath.Join(s.home, ".codex"), 0o755)
+	out = s.ok(s.home, []string{noCodex}, "assemble", "play", "--preset", "kanto")
+	if !strings.Contains(out, "Installed for Codex: hooks in "+filepath.Join(s.home, ".codex", "hooks.json")+", the rostr skill, the $rostr-draft skill.") ||
+		!strings.Contains(out, "open /hooks in Codex") {
+		t.Fatalf("assemble with Codex: %s", out)
+	}
+	if out := s.ok(s.home, []string{noCodex}, "assemble", "side", "--preset", "hogwarts"); strings.Contains(out, "for Codex") {
+		t.Fatalf("third assemble reinstalled: %s", out)
+	}
+	hooks, _ := os.ReadFile(filepath.Join(s.home, ".codex", "hooks.json"))
+	for _, subcommand := range []string{"session-start", "prompt", "session-end"} {
+		if strings.Count(string(hooks), "rostr hook codex "+subcommand+";") != 1 {
+			t.Errorf("hooks.json: %s", hooks)
+		}
+	}
+	for _, skill := range []string{"rostr", "rostr-draft"} {
+		if _, err := os.Stat(filepath.Join(s.home, ".agents", "skills", skill, "SKILL.md")); err != nil {
+			t.Error(err)
+		}
+	}
+
+	// CODEX_HOME moves Codex's folder
+	other := newSandbox(t)
+	codexHome := filepath.Join(t.TempDir(), "codex-home")
+	os.MkdirAll(codexHome, 0o755)
+	other.ok(other.home, []string{noCodex, "CODEX_HOME=" + codexHome}, "assemble", "work", "--preset", "fellowship")
+	if _, err := os.Stat(filepath.Join(codexHome, "hooks.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	// uninstall takes rostr's pieces back out of Codex too
+	out = s.ok(s.home, nil, "uninstall", "--yes")
+	if !strings.Contains(out, "Removed hooks in "+filepath.Join(s.home, ".codex", "hooks.json")+" (Codex)") ||
+		!strings.Contains(out, "Removed the $rostr-draft skill (Codex)") {
+		t.Fatalf("uninstall: %s", out)
+	}
+	if hooks, _ := os.ReadFile(filepath.Join(s.home, ".codex", "hooks.json")); strings.Contains(string(hooks), "rostr") {
+		t.Fatalf("rostr left in hooks.json: %s", hooks)
+	}
+	if _, err := os.Stat(filepath.Join(s.home, ".agents", "skills", "rostr")); err == nil {
+		t.Fatal("left the rostr skill")
+	}
+}
+
+func TestClaudeCodeHooksLabelTheHerdrPane(t *testing.T) {
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+
+	// A fake herdr records its arguments; the tmux variables point nowhere, and herdr wins over them
+	bin := t.TempDir()
+	herdrCalls := filepath.Join(bin, "calls")
+	os.WriteFile(filepath.Join(bin, "herdr"), []byte("#!/bin/sh\necho \"$*\" >> "+herdrCalls+"\n"), 0o755)
+	env := []string{"PATH=" + bin + string(os.PathListSeparator) + pathWithout("codex"), "HERDR_ENV=1", "HERDR_PANE_ID=w1:p3",
+		"TMUX=/nonexistent,1,0", "TMUX_PANE=%99"}
+
+	r := s.run(s.home, `{"session_id":"s1","transcript_path":"/nonexistent","prompt":"Fix it","prompt_id":"p1"}`, env, "hook", "claude-code", "prompt")
+	if r.code != 0 {
+		t.Fatalf("prompt: exit %d, stderr %q", r.code, r.stderr)
+	}
+	s.run(s.home, `{"session_id":"s1","source":"compact"}`, env, "hook", "claude-code", "session-start")
+	s.run(s.home, `{"session_id":"s1"}`, env, "hook", "claude-code", "session-end")
+	want := "pane report-metadata w1:p3 --source rostr --agent claude --display-agent 🧙 Gandalf\n" +
+		"pane report-metadata w1:p3 --source rostr --agent claude --display-agent 🧙 Gandalf\n" +
+		"pane report-metadata w1:p3 --source rostr --agent claude --clear-display-agent\n"
+	if calls, _ := os.ReadFile(herdrCalls); string(calls) != want {
+		t.Fatalf("herdr calls:\n%s", calls)
+	}
+
+	// Codex hooks never label panes: their environment belongs to Codex's shared daemon
+	os.Remove(herdrCalls)
+	r = s.run(s.home, `{"session_id":"t1","transcript_path":null,"prompt":"Fix it"}`, env, "hook", "codex", "prompt")
+	if r.code != 0 || !strings.Contains(r.stdout, "You're 🧙 Gandalf") {
+		t.Fatalf("codex prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	s.run(s.home, `{"session_id":"t1"}`, env, "hook", "codex", "session-end")
+	if _, err := os.Stat(herdrCalls); err == nil {
+		t.Fatal("a Codex hook called herdr")
+	}
+}
+
+func TestClaudeCodeHooksLabelTheTmuxPane(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux isn't installed")
+	}
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+
+	// A tmux server of the test's own, never the user's
+	suffix := make([]byte, 6)
+	rand.Read(suffix)
+	server := "rostr-test-" + hex.EncodeToString(suffix)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", server}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("tmux %v: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	tmux("-f", os.DevNull, "new-session", "-d", "-x", "80", "-y", "24", "sh")
+	t.Cleanup(func() { exec.Command("tmux", "-L", server, "kill-server").Run() })
+	paneID := tmux("display-message", "-p", "#{pane_id}")
+	env := []string{"TMUX=" + tmux("display-message", "-p", "#{socket_path}") + ",0,0", "TMUX_PANE=" + paneID}
+	state := func() string {
+		return tmux("display-message", "-p", "-t", paneID, "#{@rostr}|#{window_name}|#{automatic-rename}")
+	}
+
+	// The draft step tags the pane and names its window; session end hands the name back to tmux
+	r := s.run(s.home, `{"session_id":"s1","transcript_path":"/nonexistent","prompt":"Fix it","prompt_id":"p1"}`, env, "hook", "claude-code", "prompt")
+	if got := state(); r.code != 0 || got != "🧙 Gandalf|🧙 Gandalf|0" {
+		t.Fatalf("after the draft step: exit %d, tmux %q", r.code, got)
+	}
+	s.run(s.home, `{"session_id":"s1"}`, env, "hook", "claude-code", "session-end")
+	if got := state(); !strings.HasPrefix(got, "|") || !strings.HasSuffix(got, "|1") {
+		t.Fatalf("after session end: tmux %q", got)
+	}
+
+	// Inside herdr, tmux is left alone
+	r = s.run(s.home, `{"session_id":"s2","transcript_path":"/nonexistent","prompt":"Fix it","prompt_id":"p1"}`,
+		append(env, "HERDR_ENV=1", "HERDR_PANE_ID=w1:p1", "HERDR_BIN_PATH=/nonexistent/herdr"), "hook", "claude-code", "prompt")
+	if got := state(); r.code != 0 || !strings.HasPrefix(got, "|") {
+		t.Fatalf("inside herdr: exit %d, tmux %q", r.code, got)
+	}
+}
+
+// pathWithout is PATH without the directories that hold the named program.
+func pathWithout(program string) string {
+	var kept []string
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if _, err := os.Stat(filepath.Join(dir, program)); err != nil {
+			kept = append(kept, dir)
+		}
+	}
+	return strings.Join(kept, string(os.PathListSeparator))
 }

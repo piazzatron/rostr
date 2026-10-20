@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/paths"
+	"github.com/piazzatron/rostr/cli/internal/roster"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
@@ -76,7 +77,12 @@ func newDisbandCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Disbanded the %s roster.\n", r.Name)
+			// The roster's first A-teamer says goodbye
+			farewell := ""
+			if len(r.ATeam) > 0 {
+				farewell = " " + roster.Display(r.ATeam[0].Emoji, r.ATeam[0].Name, 1, r.EmojiMode) + " says bye."
+			}
+			fmt.Fprintf(out, "Disbanded the %s roster.%s\n", r.Name, farewell)
 
 			// The server deleted the whole cloud setup with the last roster, so this machine goes back to local mode
 			if result.CloudSetupDeleted {

@@ -1,5 +1,5 @@
-// Package paths resolves where rostr and Claude Code keep their files. Everything hangs off $HOME, with the XDG and
-// CLAUDE_CONFIG_DIR overrides honored, so tests can point it all at a temp dir.
+// Package paths resolves where rostr, Claude Code, and Codex keep their files. Everything hangs off $HOME, with the XDG,
+// CLAUDE_CONFIG_DIR, and CODEX_HOME overrides honored, so tests can point it all at a temp dir.
 package paths
 
 import (
@@ -27,12 +27,30 @@ func KeepAliveDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "keepalive")
 }
 
+// TitleWakeDir holds one empty file per session whose title step has run, so it wakes Claude only once.
+func TitleWakeDir() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "title-wake")
+}
+
 // ClaudeDir is Claude Code's config directory: ~/.claude, or $CLAUDE_CONFIG_DIR.
 func ClaudeDir() string {
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 		return dir
 	}
 	return filepath.Join(home(), ".claude")
+}
+
+// CodexDir is Codex's config directory: ~/.codex, or $CODEX_HOME.
+func CodexDir() string {
+	if dir := os.Getenv("CODEX_HOME"); dir != "" {
+		return dir
+	}
+	return filepath.Join(home(), ".codex")
+}
+
+// AgentsSkillsDir is ~/.agents/skills, where Codex finds user skills.
+func AgentsSkillsDir() string {
+	return filepath.Join(home(), ".agents", "skills")
 }
 
 func xdgDir(envVar, fallback string) string {

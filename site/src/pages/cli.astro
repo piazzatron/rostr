@@ -37,7 +37,7 @@ const COMMAND_GROUPS: CommandGroup[] = [
         id: "assemble",
         badge: "⭐ The only one you need",
         usage:
-          "rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft]",
+          "rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft] [--link]",
         summary:
           "Interactive setup: answer a few questions and you're done. It's the only command you need to run, and your agent can run it for you with flags.",
         options: [
@@ -46,6 +46,7 @@ const COMMAND_GROUPS: CommandGroup[] = [
           { flag: "--emoji on|off|only", description: "How agents show up. Defaults to on." },
           { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr config cloud on." },
           { flag: "--no-auto-draft", description: "Don't draft sessions automatically; use /draft instead." },
+          { flag: "--link", description: "Use the new roster for the repo you're in. The wizard asks this when you're in a repo." },
         ],
         example: `$ rostr assemble
 ✔ Pick a preset · 💍 The Fellowship

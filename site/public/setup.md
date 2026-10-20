@@ -32,6 +32,10 @@ Otherwise:
 curl -fsSL https://getrostr.sh/install | sh
 ```
 
+If the script says the directory it installed to isn't on the PATH, ask the user whether to add the `export PATH=…`
+line it printed to their shell profile (rostr's hooks only work when `rostr` is on the PATH), and run that line in
+your own shell too.
+
 Then run `rostr --version` again to confirm it worked. If it already was installed, run `rostr list`: if the user
 already has rosters, ask whether they want another one before going on.
 
@@ -63,7 +67,8 @@ rostr assemble <name> --preset <id> --emoji <on|off|only>
 - Add `--cloud` if they chose the cloud.
 - Add `--no-auto-draft` if they don't want every session named automatically.
 
-This also installs rostr's hooks, skill, and `/draft` command for Claude Code (and its hooks and skill for Codex).
+This also installs rostr's hooks, skill, and `/draft` command for Claude Code (and, if Codex is installed, its hooks
+plus the `rostr` and `$rostr-draft` skills for Codex).
 Don't edit `~/.claude/settings.json` or other agent config by hand.
 
 ## 5. Check it worked
@@ -77,6 +82,9 @@ It should show the new roster with everyone idle.
 ## 6. Tell the user what's next
 
 - Names start with their **next new session**: hooks load when a session starts, so this one stays unnamed.
+- **If they use Codex:** Codex only runs hooks the user has approved, so they need to open `/hooks` in Codex and
+  trust rostr's. In Codex, `$rostr-draft` takes the place of `/draft`. To see the name in tmux or herdr, they can set
+  `tui.terminal_title = ["spinner", "thread-name", "project"]` in `~/.codex/config.toml`.
 - To give a project its own roster, they can run `rostr assemble` again for a second roster, then `rostr link` in
   that project.
 - **If they chose the cloud:** to use rostr in cloud environments, they should run `rostr config key` themselves in

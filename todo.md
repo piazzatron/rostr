@@ -1,5 +1,22 @@
 # Todo
 
+## Plan to launch
+
+Get everything working end to end, then a final pass over the landing page.
+
+1. [ ] **Solid Claude Code experience** (Michael, hands-on): faster drafting and titles, the terminal title decision,
+   and the spec's "Verify" items (compaction keeps the name, resume and `/clear`, session end fires, no permission
+   prompts).
+2. [ ] **Real install paths** (agent): GoReleaser releases for macOS and Linux, the `piazzatron/homebrew-tap` formula,
+   and the `getrostr.sh/install` script. The repo goes public.
+3. [ ] **Cloud in a real cloud session**: rostr in Claude Code on the web against production (`ROSTR_KEY`, network
+   allowlist, setup-script install, hooks committed to the repo, `origin` behind the proxy). Becomes the cloud access
+   instructions.
+4. [ ] **Codex** (agent): `rostr hook codex …`, a skill-based `/draft`, thread renaming.
+5. [ ] **tmux and herdr** (agent): pane tag and window name in tmux; `herdr pane report-metadata` in herdr.
+6. [ ] **Cleanup**: review findings N10 and N11 (then delete `cli-review.md`), Uptime Robot with Discord alerts.
+7. [ ] **Final landing page pass.**
+
 ## CLI design
 
 Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
@@ -11,8 +28,8 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 
 Decide once there's a working build to play with.
 
-- [ ] How the first-prompt draft step works in terminal sessions: whether to wake Claude there too (one extra silent
-      model turn) so its summary becomes the task and title, or keep the start of the prompt.
+- [x] How the first-prompt draft step works in terminal sessions: the title is the start of the prompt right away,
+      then `name · task` from the next prompt.
 
 ## Project
 
@@ -51,8 +68,13 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 - [ ] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
       task encryption, and repo fingerprints.
 - [ ] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
-- [ ] Make drafting and the title summary much faster (hook performance): the name and title currently land several
-      seconds into a session.
+- [x] Make drafting and the title summary much faster: drafting happens before the first reply, and the summary
+      wake-up comes about a second in.
+- [ ] Understand how Homebrew releases work (the tap, the formula GoReleaser pushes, `brew upgrade`); see
+      `RELEASING.md`.
+- [ ] Upgrading rostr should refresh what it installed (the skill and /draft text, the hooks layout); `assemble`
+      only writes files that are missing today.
+- [ ] Archiving a desktop session doesn't seem to release its name (♟️ Ron stayed drafted); check that SessionEnd fires.
 - [ ] Detect headless `claude -p` runs in the hooks (and Codex's equivalent) and skip drafting for them.
 - [ ] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
       and skill.
@@ -71,7 +93,7 @@ Write the setup steps for Claude Code on the web and Codex cloud:
 
 - [ ] Put `ROSTR_KEY` in the cloud environment's variables (never in a committed file).
 - [ ] Allow `api.getrostr.sh` in the environment's network settings.
-- [ ] Install rostr in the environment's setup script (needs a Linux install path, e.g. `curl -fsSL https://getrostr.sh/install | sh`).
+- [ ] Install rostr in the environment's setup script: `curl -fsSL https://getrostr.sh/install | sh`.
 - [ ] Commit the hooks to the repo's `.claude/settings.json`, since personal settings don't reach cloud containers.
 
 ## GitHub
@@ -88,6 +110,18 @@ Write the setup steps for Claude Code on the web and Codex cloud:
 ## To Test
 
 - [ ] Test that agent-based installs work properly.
+- [ ] Codex: approve the hooks in `/hooks`; on the first prompt the agent knows its name and the thread shows
+      `🧙 Gandalf · …` in the TUI, `codex resume`, and the app (does Codex's own auto-naming overwrite it?).
+- [ ] Codex: a fork gets a new name; `/compact` and `resume` re-tell the same one; quitting releases within 3s; does
+      `/clear` fire SessionEnd?
+- [ ] Codex sandbox: can `$rostr-draft` and `rostr agent task` write `~/.config/rostr` and reach the daemon socket under
+      the default `workspace-write` sandbox?
+- [ ] Codex terminal title: with `tui.terminal_title = ["spinner", "thread-name", "project"]` the name reaches tmux and
+      herdr.
+- [ ] tmux (Claude Code): a single-pane window takes the name and `#{@rostr}` is set, both reverted on exit; a window
+      you named, or a split one, isn't renamed.
+- [ ] herdr (Claude Code): the sidebar shows `🧙 Gandalf` instead of "claude", the emoji renders cleanly, and it
+      clears on exit.
 
 ## Testing
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -12,41 +13,52 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
+	"github.com/piazzatron/rostr/cli/internal/codex"
 	"github.com/piazzatron/rostr/cli/internal/keepalive"
+	"github.com/piazzatron/rostr/cli/internal/pane"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
-// defaultRewakeDelay is how long the draft step waits before waking Claude, so its first reply starts at normal speed.
+// defaultRewakeDelay is how long the title step waits before waking Claude, so its first reply is already under way.
 // ROSTR_REWAKE_DELAY overrides it (tests set it to 0).
-const defaultRewakeDelay = 5 * time.Second
+const defaultRewakeDelay = 1 * time.Second
 
 // rewakeExitCode is the exit code with which an asyncRewake hook wakes Claude with its stderr.
 const rewakeExitCode = 2
 
 // newHookCommand is the hidden `rostr hook` command the installed hooks call. Hooks never block a session: failures
-// are written to stderr and the hook still exits 0. The one exception is the prompt hook's exit 2, which wakes Claude.
+// are written to stderr and the hook still exits 0. The one exception is the Claude Code prompt hook's exit 2, which
+// wakes Claude.
 func newHookCommand() *cobra.Command {
 	hook := &cobra.Command{Use: "hook", Hidden: true}
 	claudeCode := &cobra.Command{Use: "claude-code", Short: "Claude Code hooks"}
-	hook.AddCommand(claudeCode)
+	codexHooks := &cobra.Command{Use: "codex", Short: "Codex hooks"}
+	hook.AddCommand(claudeCode, codexHooks)
 
 	claudeCode.AddCommand(
-		hookSubcommand("session-start", hookSessionStart),
-		hookSubcommand("prompt", hookPrompt),
-		hookSubcommand("session-end", hookSessionEnd),
+		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
+		hookSubcommand("prompt", claudecode.ReadHookInput, hookPrompt),
+		hookSubcommand("title", claudecode.ReadHookInput, hookTitle),
+		hookSubcommand("session-end", claudecode.ReadHookInput, hookSessionEnd),
 		newHookDraftCommand(),
+	)
+	codexHooks.AddCommand(
+		hookSubcommand("session-start", codex.ReadHookInput, hookCodexSessionStart),
+		hookSubcommand("prompt", codex.ReadHookInput, hookCodexPrompt),
+		hookSubcommand("session-end", codex.ReadHookInput, hookCodexSessionEnd),
+		newHookCodexDraftCommand(),
 	)
 	return hook
 }
 
-// hookSubcommand wraps a hook that reads Claude Code's JSON input from stdin.
-func hookSubcommand(use string, run func(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error) *cobra.Command {
+// hookSubcommand wraps a hook that reads the agent's JSON input from stdin.
+func hookSubcommand[Input any](use string, read func(io.Reader) (Input, error), run func(ctx context.Context, input Input, stdout, stderr io.Writer) error) *cobra.Command {
 	return &cobra.Command{
 		Use:  use,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			input, err := claudecode.ReadHookInput(cmd.InOrStdin())
+			input, err := read(cmd.InOrStdin())
 			if err == nil {
 				err = run(cmd.Context(), input, cmd.OutOrStdout(), cmd.ErrOrStderr())
 			}
@@ -76,46 +88,24 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 	}
 	defer st.Close()
 
-	var d *store.Draft
-	switch input.Source {
-	case "resume":
-		// Resume drafts (asking for the old name back) when auto-draft is on; with it off, it only gives back a name
-		// the session already had, so sessions that were never drafted stay unnamed.
-		// TODO(headless): headless `claude -p` runs shouldn't be drafted, but hook input has no reliable way to tell
-		// them apart yet (see todo.md).
-		settings, err := st.Settings(ctx)
-		if err != nil {
-			return err
-		}
-		if settings.AutoDraft {
-			drafted, err := draftSession(ctx, st, input.SessionID, "", hookDir(input), "")
-			if err != nil {
-				return err
-			}
-			d = &drafted
-		} else if d, err = st.Reclaim(ctx, input.SessionID); err != nil {
-			return err
-		}
-	case "compact":
-		// Never a new member after compaction: the active draft, or the last member if still free, or nothing
-		if d, err = st.Reclaim(ctx, input.SessionID); err != nil {
-			return err
-		}
-	}
-	if d == nil {
-		return nil
+	// TODO(headless): headless `claude -p` runs shouldn't be drafted on resume, but hook input has no reliable way to
+	// tell them apart yet (see todo.md).
+	d, err := draftOrReclaim(ctx, st, input.SessionID, hookDir(input.Cwd), input.Source == "resume")
+	if err != nil || d == nil {
+		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
+	pane.Label(ctx, d.Display())
 	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
 
-// hookPrompt runs on every prompt, as an asyncRewake hook. On a session's first prompt (with auto-draft on) it drafts
-// the session, waits, and exits 2 to wake Claude with who it is and an instruction to title the session. On every
-// other prompt it keeps the draft alive, at most once an hour.
+// hookPrompt runs before Claude sees each prompt. On the first, it drafts the session, tells the agent its name, and
+// titles the session with the start of the prompt; later prompts keep the draft alive and the title in step with the
+// agent's task.
 func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	if !claudecode.IsFirstPrompt(input) {
-		return keepDraftAlive(ctx, input.SessionID)
+		return laterPrompt(ctx, input, stdout)
 	}
 
 	st, err := openStore()
@@ -124,30 +114,93 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	}
 	defer st.Close()
 
+	// The title step's wake-up arrives as another prompt in the same turn, which the transcript can't tell from the
+	// first one. A session that already has a name isn't on its first prompt
+	if d, err := st.SessionDraft(ctx, input.SessionID); err != nil || d != nil {
+		st.Close()
+		if err != nil {
+			return err
+		}
+		return laterPrompt(ctx, input, stdout)
+	}
+
 	// TODO(headless): headless `claude -p` runs shouldn't be drafted, but hook input has no reliable way to tell them
 	// apart yet (see todo.md).
 	settings, err := st.Settings(ctx)
 	if err != nil || !settings.AutoDraft {
 		return err
 	}
-	d, err := draftSession(ctx, st, input.SessionID, "", hookDir(input), claudecode.PlaceholderTask(input.Prompt))
+	placeholder := claudecode.PlaceholderTask(input.Prompt)
+	d, err := draftSession(ctx, st, input.SessionID, "", hookDir(input.Cwd), placeholder)
 	if err != nil {
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
+	pane.Label(ctx, d.Display())
+	fmt.Fprintln(stdout, claudecode.PromptOutput(claudecode.Identity(d.Display(), d.Roster, input.SessionID),
+		claudecode.Title(d.Display(), placeholder)))
+	return nil
+}
 
-	// Wake Claude a few seconds in, once its first reply is under way
-	bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), input.SessionID)
+// laterPrompt keeps the draft alive and the title in step with the agent's task.
+func laterPrompt(ctx context.Context, input claudecode.HookInput, stdout io.Writer) error {
+	if err := keepDraftAlive(ctx, input.SessionID); err != nil {
+		return err
+	}
+	return syncTitleWithTask(ctx, input, stdout)
+}
+
+// syncTitleWithTask retitles the session "<name> · <task>" when the agent's task has changed since the title was set.
+func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout io.Writer) error {
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	d, err := st.SessionDraft(ctx, input.SessionID)
+	if err != nil || d == nil || d.Task == "" {
+		return err
+	}
+	if title := claudecode.Title(d.Display(), d.Task); title != input.SessionTitle {
+		fmt.Fprintln(stdout, claudecode.PromptOutput("", title))
+	}
+	return nil
+}
+
+// hookTitle runs in the background on the first prompt. Once the session is drafted and Claude's first reply is under
+// way, it wakes Claude to summarize the conversation as its task and, in the desktop app, its title.
+func hookTitle(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
+	if !claudecode.IsFirstPrompt(input) {
+		return nil
+	}
+
+	// Once per session: the wake-up comes back as another prompt, which runs this hook again
+	if !markTitleWake(input.SessionID) {
+		return nil
+	}
 	time.Sleep(rewakeDelay())
-	fmt.Fprintf(stderr, "%s\n\n%s Reply with nothing else, and don't mention the title or the task.\n",
-		claudecode.Identity(d.Display(), d.Roster, input.SessionID),
+
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	d, err := st.SessionDraft(ctx, input.SessionID)
+	if err != nil || d == nil {
+		return err
+	}
+
+	bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), input.SessionID)
+	fmt.Fprintf(stderr, "%s Then end your turn without writing anything: don't repeat your answer or mention the title or the task.\n",
 		claudecode.TitleInstruction(d.Display(), bridgeSessionID, input.SessionID))
 	return exitError{code: rewakeExitCode}
 }
 
-// hookSessionEnd releases the session's member.
+// hookSessionEnd releases the session's member and clears its pane's label.
 func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
+	_ = os.Remove(filepath.Join(paths.TitleWakeDir(), input.SessionID))
+	pane.Clear(ctx)
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -183,6 +236,7 @@ func newHookDraftCommand() *cobra.Command {
 				return nil
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
+			pane.Label(cmd.Context(), d.Display())
 			bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), session)
 			fmt.Fprintf(out, "%s\n\n%s\n", claudecode.Identity(d.Display(), d.Roster, session),
 				claudecode.TitleInstruction(d.Display(), bridgeSessionID, session))
@@ -211,6 +265,26 @@ func keepDraftAlive(ctx context.Context, sessionID string) error {
 	return keepalive.Mark(paths.KeepAliveDir(), sessionID, now)
 }
 
+// draftOrReclaim is how a session start finds its name. With draftNew (a resume, or a Codex fork) and auto-draft on,
+// it drafts, asking for the session's old name back. Otherwise (compaction, or auto-draft off) it never drafts a new
+// member: the active draft, or the last member if still free, or nil, so sessions never drafted stay unnamed.
+func draftOrReclaim(ctx context.Context, st store.Store, sessionID, dir string, draftNew bool) (*store.Draft, error) {
+	if draftNew {
+		settings, err := st.Settings(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if settings.AutoDraft {
+			d, err := draftSession(ctx, st, sessionID, "", dir, "")
+			if err != nil {
+				return nil, err
+			}
+			return &d, nil
+		}
+	}
+	return st.Reclaim(ctx, sessionID)
+}
+
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
 // writeSessionEnv appends `export ROSTR_SESSION=<id>` to CLAUDE_ENV_FILE, so the agent's rostr commands know their
@@ -233,9 +307,26 @@ func writeSessionEnv(sessionID string) error {
 	return err
 }
 
-func hookDir(input claudecode.HookInput) string {
-	if input.Cwd != "" {
-		return input.Cwd
+// markTitleWake records that the session's title step has run, reporting false if it already had. Creating the file
+// is atomic, so two runs at once can't both go ahead.
+func markTitleWake(sessionID string) bool {
+	if !shellSafe.MatchString(sessionID) {
+		return false
+	}
+	if err := os.MkdirAll(paths.TitleWakeDir(), 0o755); err != nil {
+		return false
+	}
+	f, err := os.OpenFile(filepath.Join(paths.TitleWakeDir(), sessionID), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return false
+	}
+	return f.Close() == nil
+}
+
+// hookDir is the session's directory, from the hook input's cwd.
+func hookDir(cwd string) string {
+	if cwd != "" {
+		return cwd
 	}
 	return workingDir()
 }

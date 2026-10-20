@@ -27,7 +27,8 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 - `rostr presets`: the pre-built rosters (id, emoji, name, source).
 - `rostr assemble <name> --preset <id>`, or `rostr assemble <name> --names "🧮 Ada, Grace, ..."` (the first six are the
   A team; names without an emoji get one). Add `--emoji on|off|only`, and `--no-auto-draft` on the first run to draft
-  only with `/draft`.
+  only with `/draft`. When the roster is for a specific repo, run it inside that repo with `--link`, which links the new
+  roster to the repo in the same step.
 - Ask the user which preset or names they want before assembling.
 
 ## Rosters and projects

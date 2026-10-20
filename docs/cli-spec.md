@@ -75,11 +75,12 @@ Outside a git repo, rostr uses the default.
 Every draft belongs to a session ID from Claude Code or Codex.
 
 - Hooks pass the session ID with `--session`.
-- The start hook writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE`, so rostr commands the agent runs know their
-  session without flags. `--session` defaults to `ROSTR_SESSION`.
-- Drafting always happens inside a session (a hook or `/draft`); nobody drafts from a bare terminal. With no
-  `--session` and no `ROSTR_SESSION`, `agent draft` errors, and so do `agent release` and `agent task` without a
-  name.
+- The Claude Code start hook writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE`, so rostr commands the agent
+  runs know their session without flags. Codex hooks can't set env vars, but Codex gives every command its agent runs
+  `CODEX_THREAD_ID`, its hooks' session ID. `--session` defaults to `ROSTR_SESSION`, then `CODEX_THREAD_ID`.
+- Drafting always happens inside a session (a hook, `/draft`, or `$rostr-draft`); nobody drafts from a bare terminal.
+  With no `--session`, `ROSTR_SESSION`, or `CODEX_THREAD_ID`, `agent draft` errors, and so do `agent release` and
+  `agent task` without a name.
 
 ### Display
 
@@ -106,7 +107,7 @@ With no rosters yet, every command that needs one says: "No rosters yet. Run `ro
 #### `rostr assemble`
 
 ```
-rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft]
+rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft] [--link]
 ```
 
 Interactive setup. The wizard runs full-screen, one question per step: a pre-built roster (with a preview of its
@@ -120,8 +121,11 @@ and esc cancels. Each question can be skipped with a flag, so an agent can run i
 - `--emoji on|off|only`: the roster's emoji mode. Defaults to `on`.
 - `--cloud`: put the setup in the cloud. Only for the first roster; after that, use `rostr config cloud on`.
 - `--no-auto-draft`: turn auto-draft off.
-- The first run also installs the hooks, the skill, and the `/draft` slash command for Claude Code, and the hooks and
-  skill for Codex.
+- `--link`: use the new roster for the repo you're in. Run in a git repo with a roster already set up, the wizard
+  asks this itself ("Use the side roster for acme/api?"); the first roster is the default, so it's never linked.
+- The first run also installs the hooks, the skill, and the `/draft` slash command for Claude Code, and, where Codex
+  looks installed (a `~/.codex` folder or `codex` on PATH), the Codex hooks and skills (see [Codex](#codex)). It
+  tells Codex users to approve the hooks in `/hooks`.
 - `create` is a hidden alias, so people who guess it still get a roster.
 - **Running it again.** If you already have a roster, the wizard first asks what you want: make a new roster,
   replace an existing roster's cast, or edit one (which opens `rostr edit`). Agents passing flags always make a new
@@ -191,6 +195,17 @@ with its drafts and project links.
   if `ROSTR_KEY` is set, it says to unset it). Other machines and cloud environments still holding the key get "key
   not recognized" errors until it's removed, and their hooks just leave sessions unnamed. Starting again
   (`rostr assemble --cloud`) makes a new key.
+
+#### `rostr uninstall`
+
+```
+rostr uninstall [--yes]
+```
+
+Undoes `assemble` completely: deletes every roster (in cloud mode that deletes the whole cloud setup, and the key
+stops working), removes this machine's key or local database, and removes the hooks, skill, and `/draft` from Claude
+Code (only rostr's own entries, and a `/draft` the user wrote themselves is left alone). Asks first; agents pass
+`--yes`.
 
 ### Agent commands
 
@@ -270,11 +285,14 @@ rostr hook claude-code session-start
 rostr hook claude-code prompt
 rostr hook claude-code session-end
 rostr hook claude-code draft          # run by /draft
+rostr hook codex session-start
+rostr hook codex prompt
+rostr hook codex session-end
+rostr hook codex draft                # run by the $rostr-draft skill
 ```
 
 Each reads the hook's JSON input from stdin, does the work, and prints the JSON reply the agent expects. The logic,
 and the exact text the agent is told, live in the CLI, so upgrading rostr changes them without reinstalling hooks.
-Codex gets `rostr hook codex …` later.
 
 ### Claude Code events
 
@@ -283,7 +301,7 @@ Codex gets `rostr hook codex …` later.
 | `SessionStart`, source `startup` or `clear` | Writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE` |
 | `SessionStart`, source `resume` | Writes `ROSTR_SESSION`, drafts (asking for the session's old name back, see [Drafting](#drafting)), and tells the agent who it is |
 | `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member (see below) |
-| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on) |
+| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on): the prompt hook, then the title wake-up |
 | `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)) |
 | `SessionEnd` | Releases the session's member |
 
@@ -306,20 +324,82 @@ Codex gets `rostr hook codex …` later.
   releases, so `/draft` works.
 - **Headless runs aren't drafted.** Scripts and tools that run `claude -p` fire the same hooks, but don't get a name.
   How to detect them is still to be worked out (see `todo.md`).
+- In tmux or herdr, the hooks also label the session's pane (see [tmux and herdr](#tmux-and-herdr)).
+
+### Codex
+
+Findings behind this are in [integrations-research.md](integrations-research.md#codex).
+
+| Event | What `rostr hook codex` does |
+|---|---|
+| `SessionStart`, source `startup` or `clear` | Nothing (Codex already gives commands `CODEX_THREAD_ID`) |
+| `SessionStart`, source `resume` | Drafts (asking for the old name back) and tells the agent who it is |
+| `SessionStart`, source `fork` | A fork is a new thread carrying its parent's history and name: drafts it its own member, names the thread, and tells the agent who it is |
+| `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member |
+| `UserPromptSubmit`, first prompt | The draft step (when auto-draft is on): drafts with the start of the prompt as the task, names the thread, and adds who the agent is through `additionalContext` |
+| `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour |
+| `SessionEnd` | Releases the session's member |
+
+- **Synchronous draft step.** Codex has no `asyncRewake`, so the first prompt waits for the draft, and the agent
+  knows its name from its first reply. It isn't asked to set a title or task; the identity text tells it to run
+  `rostr agent task` when its work changes.
+- **First prompt** means the thread's rollout (`transcript_path`) has no earlier `user_message`, so threads from
+  before rostr was installed, and forks, aren't drafted mid-conversation.
+- **Thread names.** rostr names the thread `🧙 Gandalf · <task>` itself, through the Codex app-server: it runs
+  `codex app-server proxy` (stdio to the daemon's control socket, which speaks JSON-RPC over WebSocket) and sends
+  `initialize`, `initialized`, then `thread/name/set`. It gives up after 2 seconds and ignores failures; without a
+  daemon (`codex --no-daemon`) threads stay unnamed. The agent's later `rostr agent task` updates the task, not the
+  thread name.
+- **Terminal title.** For tmux and herdr to show the name, set
+  `tui.terminal_title = ["spinner", "thread-name", "project"]` in `~/.codex/config.toml`.
+- **`SessionEnd`** is installed with `timeout: 3` (Codex's most), and the release gives up after 2 seconds.
+- **Installed** to `$CODEX_HOME/hooks.json` (`~/.codex/hooks.json`), as `if command -v rostr >/dev/null; then rostr
+  hook codex <event>; fi`, plus the `rostr` and `rostr-draft` skills in `~/.agents/skills` (Codex removed custom
+  prompts, so `/draft` is the `$rostr-draft` skill). `rostr uninstall` removes only rostr's hook entries, and the
+  skills only if unmodified.
+- **Approval.** Codex runs a non-managed hook only once the user trusts it in `/hooks`. The one-line commands never
+  change, so one approval survives rostr upgrades.
+- **No tmux or herdr.** Codex runs hooks in a shared app-server daemon whose environment belongs to whichever
+  terminal started it, so `TMUX_PANE` and `HERDR_PANE_ID` point at the wrong pane. Codex sessions rely on the
+  terminal title instead.
+- Failures never block a session: every `rostr hook codex` exits 0.
+
+### tmux and herdr
+
+Claude Code hooks only (Codex: see above). Best-effort: each command has a 1-second timeout, and failures are ignored.
+The pane is labeled whenever the agent is drafted or re-told (the draft step, resume, compaction, `/draft`) and
+cleared at `SessionEnd`.
+
+- **herdr** (`HERDR_ENV=1`): `herdr pane report-metadata "$HERDR_PANE_ID" --source rostr --agent claude
+  --display-agent "<display>"` replaces "claude" in herdr's sidebar; session end sends `--clear-display-agent`.
+  rostr runs `$HERDR_BIN_PATH`, or `herdr` on PATH. Inside herdr, tmux is left alone.
+- **tmux** (`TMUX` and `TMUX_PANE` set, outside herdr): every command targets `-t "$TMUX_PANE"`.
+  - Tags the pane with the user option `@rostr` (the display), for `pane-border-format` or `status-right`
+    (`#{@rostr}`).
+  - Renames the window to the display only if it has one pane and `automatic-rename` is on (or rostr renamed it),
+    and marks it `@rostr_renamed`.
+  - Session end unsets `@rostr` and, if rostr renamed the window, turns `automatic-rename` back on.
 
 ### The draft step
 
-Drafting happens on the session's first prompt, as one delayed step (an `asyncRewake` hook, as in the prototype), so
-Claude starts answering at normal speed:
+Two `UserPromptSubmit` hooks, on the session's first prompt (when auto-draft is on):
 
-1. Draft the session, with the start of the prompt as a placeholder task.
-2. A few seconds later, wake Claude with who it is (see [Identity](#identity)) and an instruction to set the session
-   title to `🧙 Gandalf · <its 3–5 word summary>` and run `rostr agent task "<summary>"`. Claude writes the title,
-   and the task matches it.
+1. **`rostr hook claude-code prompt`** runs before Claude sees the prompt. It drafts the session with the start of the
+   prompt as a placeholder task, tells the agent who it is (see [Identity](#identity)) through `additionalContext`, and
+   sets the title to `🧙 Gandalf · <start of the prompt>`. The agent knows its name from its first reply.
+2. **`rostr hook claude-code title`** is an `asyncRewake` hook. About a second in, it wakes Claude to summarize the
+   conversation in 3–5 words as its task (`rostr agent task`) and, in desktop and Remote Control sessions, to set the
+   app's title to `🧙 Gandalf · <summary>` with `set_session_title`. It runs once per session (a marker in
+   `~/.cache/rostr/title-wake/`, removed at session end): the wake-up comes back as another prompt in the same turn,
+   which the transcript can't tell from the first, so without the marker it would loop.
 
-Claude learns its name a few seconds into the session rather than before its first reply. This flow will be refined
-once there's a working build; Claude Code's `/rename` and hook `sessionTitle` behavior has changed since the
-prototype (a reported bug is now fixed). Terminal sessions are a deferred decision (see `todo.md`).
+On later prompts the prompt hook keeps the draft alive and retitles the session `🧙 Gandalf · <task>` whenever the task
+has changed. A session that already has a name is never treated as being on its first prompt.
+
+A hook's title only sets the local title (the terminal's) in Claude Code 2.1.292; the desktop app ignores it until
+Anthropic ships the fix for
+[anthropics/claude-code#103336](https://github.com/anthropics/claude-code/issues/103336). Once it does, the app gets
+the name from step 1 and the wake-up can go. See [claude-code-session-titles.md](claude-code-session-titles.md).
 
 ### Compaction never changes the name
 
@@ -359,7 +439,8 @@ setting rostr up, editing rosters. Identity doesn't depend on it.
 ### `/draft`
 
 For people who turn auto-draft off. Runs `rostr hook claude-code draft`, which drafts the session, tells the agent
-who it is with the same text as the hooks, and sets the title. Claude Code only in v1. There is no `/release`.
+who it is with the same text as the hooks, and sets the title. In Codex it's the `$rostr-draft` skill, which runs
+`rostr hook codex draft` and names the thread. There is no `/release`.
 
 ## Drafting
 

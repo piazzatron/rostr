@@ -38,6 +38,14 @@ func TestAssembleWizardSteps(t *testing.T) {
 			[]assembleStep{stepAction, stepPickRoster}},
 		{"later run with a name", assembleSetup{existing: existing, args: []string{"play"}}, nil,
 			[]assembleStep{stepBuild, stepPreset, stepEmoji, stepConfirm}},
+		{"later run in a repo asks to link it", assembleSetup{existing: existing, repo: "acme/api"}, nil,
+			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepLink, stepConfirm}},
+		{"later run in a repo with --link", assembleSetup{existing: existing, repo: "acme/api", opts: assembleOptions{link: true}}, nil,
+			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepConfirm}},
+		{"replacing a cast in a repo doesn't link", assembleSetup{existing: existing, repo: "acme/api"}, func(f *assembleFlow) { f.action = actionReplace },
+			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset, stepConfirm}},
+		{"first run in a repo: the default needs no link", assembleSetup{repo: "acme/api"}, nil,
+			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft, stepConfirm}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

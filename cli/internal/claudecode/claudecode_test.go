@@ -119,6 +119,8 @@ func TestPlaceholderTask(t *testing.T) {
 		"First line\nsecond line":        "First line",
 		strings.Repeat("é", 60):          strings.Repeat("é", 50) + "…",
 		"":                               "",
+		"/rostr":                         "",
+		"<task-notification> <summary>":  "",
 	} {
 		if got := PlaceholderTask(in); got != want {
 			t.Errorf("PlaceholderTask(%q) = %q", in, got)
@@ -176,9 +178,11 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		t.Error("the hook command was HTML-escaped")
 	}
 
+	// The prompt hook runs before Claude; the title hook runs in the background
 	prompt := settings.Hooks["UserPromptSubmit"]
-	if len(prompt) != 2 || prompt[0].Hooks[0].Command != "echo mine" || !prompt[1].Hooks[0].AsyncRewake ||
-		prompt[1].Hooks[0].Command != HookCommand("prompt") {
+	if len(prompt) != 3 || prompt[0].Hooks[0].Command != "echo mine" ||
+		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake ||
+		prompt[2].Hooks[0].Command != HookCommand("title") || !prompt[2].Hooks[0].AsyncRewake {
 		t.Errorf("UserPromptSubmit: %+v", prompt)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {
@@ -248,6 +252,30 @@ func TestUninstallRemovesOnlyWhatRostrAdded(t *testing.T) {
 	// Nothing left to remove the second time
 	if removed, err := Uninstall(claudeDir); err != nil || len(removed) != 0 {
 		t.Fatalf("second uninstall: %v, %v", removed, err)
+	}
+}
+
+func TestInstallUpgradesTheOldBackgroundPromptHook(t *testing.T) {
+	claudeDir := t.TempDir()
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	write(t, settingsPath, `{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "asyncRewake": true, "command": "`+
+		strings.ReplaceAll(HookCommand("prompt"), `"`, `\"`)+`"}]}]}}`)
+	if _, err := Install(claudeDir); err != nil {
+		t.Fatal(err)
+	}
+	var settings struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Command     string
+				AsyncRewake bool
+			}
+		}
+	}
+	data, _ := os.ReadFile(settingsPath)
+	json.Unmarshal(data, &settings)
+	prompt := settings.Hooks["UserPromptSubmit"]
+	if len(prompt) != 2 || prompt[0].Hooks[0].AsyncRewake || prompt[1].Hooks[0].Command != HookCommand("title") || !prompt[1].Hooks[0].AsyncRewake {
+		t.Fatalf("UserPromptSubmit: %s", data)
 	}
 }
 

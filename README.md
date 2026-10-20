@@ -10,8 +10,8 @@ so when you have five agents running you can tell at a glance who's on what.
 
 It's a small CLI plus a skill that teaches your agent how to use it, and it works with Claude Code and Codex.
 
-> **Status:** early. The CLI below is the planned design ([spec](docs/cli-spec.md)). What exists today is the
-> Claude Code session-title hook in [`cli/hooks/claude-code/`](cli/hooks/claude-code/).
+> **Status:** early. The CLI works with Claude Code, locally and in the cloud; Codex support is on the way. The
+> [spec](docs/cli-spec.md) is the source of truth for how it behaves.
 
 ## How it works
 
@@ -79,9 +79,9 @@ brew install piazzatron/tap/rostr
 rostr assemble   # interactive: pick a roster, emoji, local or cloud, and auto-draft
 ```
 
-Prefer to draft by hand? Turn off auto-draft (`rostr config auto-draft off`) and use `/draft` in Claude Code.
+No Homebrew (or on Linux)? `curl -fsSL https://getrostr.sh/install | sh` installs it instead.
 
-Until then, the Claude Code hook can be installed by hand: see [`cli/hooks/claude-code/README.md`](cli/hooks/claude-code/README.md).
+Prefer to draft by hand? Turn off auto-draft (`rostr config auto-draft off`) and use `/draft` in Claude Code.
 
 ## Repo layout
 

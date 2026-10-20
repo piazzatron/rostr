@@ -13,8 +13,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
+	"github.com/piazzatron/rostr/cli/internal/codex"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/presets"
+	"github.com/piazzatron/rostr/cli/internal/project"
 	"github.com/piazzatron/rostr/cli/internal/roster"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
@@ -25,6 +27,7 @@ type assembleOptions struct {
 	emoji       string
 	cloud       bool
 	noAutoDraft bool
+	link        bool
 }
 
 // cast is a chosen set of members, from a preset or the user's own names.
@@ -50,6 +53,7 @@ func newAssembleCommand(use string, hidden bool) *cobra.Command {
 	cmd.Flags().StringVar(&opts.emoji, "emoji", "", "the roster's emoji mode: on, off, or only (default on)")
 	cmd.Flags().BoolVar(&opts.cloud, "cloud", false, "put the setup in the cloud (first roster only)")
 	cmd.Flags().BoolVar(&opts.noAutoDraft, "no-auto-draft", false, "only draft sessions with /draft")
+	cmd.Flags().BoolVar(&opts.link, "link", false, "use the new roster for the current repo")
 	cmd.MarkFlagsMutuallyExclusive("preset", "names")
 	return cmd
 }
@@ -78,13 +82,21 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	}
 	cloud := opts.cloud && !alreadyCloud
 
+	// The repo you're in, if any: a new roster can be linked to it straight away. The first roster is the default for
+	// every project, so it never needs linking
+	repo, inRepo := project.Identify(workingDir())
+	if opts.link && !inRepo {
+		return missingInput("--link needs a git repo: run `rostr assemble` inside the repo to link")
+	}
+	link := opts.link && !firstRun
+
 	// Without a terminal, flags say everything; at a terminal, one full-screen wizard asks whatever they don't
 	var chosen cast
 	var name string
 	mode := roster.EmojiOn
 	autoDraft := !opts.noAutoDraft
 	if interactive {
-		flow, err := newAssembleFlow(assembleSetup{existing: existing, opts: opts, args: args, inCloud: opts.cloud || alreadyCloud})
+		flow, err := newAssembleFlow(assembleSetup{existing: existing, opts: opts, args: args, inCloud: opts.cloud || alreadyCloud, repo: repo})
 		if err != nil {
 			return err
 		}
@@ -108,6 +120,9 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 		}
 		if flow.asks(stepAutoDraft) {
 			autoDraft = flow.autoDraft
+		}
+		if flow.asks(stepLink) {
+			link = flow.link
 		}
 	} else {
 		if chosen, err = chooseCast(opts); err != nil {
@@ -150,11 +165,24 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 				return err
 			}
 		}
+		if link {
+			if err := st.LinkProject(ctx, repo, created.Name); err != nil {
+				return err
+			}
+		}
 	}
 
 	installed, err := claudecode.Install(paths.ClaudeDir())
 	if err != nil {
 		return fmt.Errorf("the %s roster is saved, but installing the Claude Code hooks failed: %w", created.Name, err)
+	}
+
+	// Codex only where it looks installed, so assemble doesn't create a ~/.codex for people who don't use it
+	var installedCodex []string
+	if codex.Detected(paths.CodexDir()) {
+		if installedCodex, err = codex.Install(paths.CodexDir(), paths.AgentsSkillsDir()); err != nil {
+			return fmt.Errorf("the %s roster is saved, but installing the Codex hooks failed: %w", created.Name, err)
+		}
 	}
 
 	// Summary
@@ -166,17 +194,23 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	if firstRun {
 		fmt.Fprintln(out, "It's your default roster. Link it to other projects with `rostr link`.")
 		if !autoDraft {
-			fmt.Fprintln(out, "Auto-draft is off: use /draft in Claude Code to draft a session.")
+			fmt.Fprintln(out, "Auto-draft is off: use /draft in Claude Code, or $rostr-draft in Codex, to draft a session.")
 		}
 		if cloud {
 			fmt.Fprintln(out, "Your setup is in the cloud.")
 			printKeySaved(out)
 		}
+	} else if link {
+		fmt.Fprintf(out, "Linked %s to it.\n", repo)
 	} else {
 		fmt.Fprintf(out, "Use it for a project with `rostr link %s`.\n", created.Name)
 	}
 	if len(installed) > 0 {
 		fmt.Fprintf(out, "Installed for Claude Code: %s.\n", strings.Join(installed, ", "))
+	}
+	if len(installedCodex) > 0 {
+		fmt.Fprintf(out, "Installed for Codex: %s.\n", strings.Join(installedCodex, ", "))
+		fmt.Fprintln(out, "Codex only runs hooks you've approved: open /hooks in Codex and trust rostr's.")
 	}
 	return nil
 }
@@ -244,13 +278,15 @@ const (
 	stepNames
 	stepName
 	stepEmoji
+	stepLink
 	stepWhere
 	stepAutoDraft
 	stepConfirm
 )
 
 var assembleSteps = []assembleStep{
-	stepAction, stepPickRoster, stepBuild, stepPreset, stepNames, stepName, stepEmoji, stepWhere, stepAutoDraft, stepConfirm,
+	stepAction, stepPickRoster, stepBuild, stepPreset, stepNames, stepName, stepEmoji, stepLink, stepWhere, stepAutoDraft,
+	stepConfirm,
 }
 
 // assembleSetup is what the wizard starts from: the rosters there are, and the flags and argument given.
@@ -260,6 +296,8 @@ type assembleSetup struct {
 	args     []string
 	// inCloud is whether the setup is going, or already is, in the cloud
 	inCloud bool
+	// repo is the project you're in ("owner/repo"), or "" outside a git repo
+	repo string
 }
 
 // assembleFlow is the assemble wizard's questions and answers. The setup and flags decide which questions it can ask;
@@ -279,6 +317,7 @@ type assembleFlow struct {
 	emoji       roster.EmojiMode
 	cloud       bool
 	autoDraft   bool
+	link        bool
 	confirmed   bool
 }
 
@@ -289,6 +328,7 @@ func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
 		presetID:      presets.All()[0].ID,
 		emoji:         roster.EmojiOn,
 		autoDraft:     true,
+		link:          true,
 		confirmed:     true,
 	}
 	var err error
@@ -324,6 +364,8 @@ func (f *assembleFlow) asks(step assembleStep) bool {
 		return firstRun && !f.inCloud
 	case stepAutoDraft:
 		return firstRun && !opts.noAutoDraft
+	case stepLink:
+		return !firstRun && f.repo != "" && !opts.link
 	}
 	return true
 }
@@ -342,7 +384,7 @@ func (f *assembleFlow) shows(step assembleStep) bool {
 		return f.action != actionEdit && f.usePreset
 	case stepNames:
 		return f.action != actionEdit && !f.usePreset
-	case stepName, stepEmoji:
+	case stepName, stepEmoji, stepLink:
 		return f.action == actionNew
 	}
 	return true
@@ -426,11 +468,12 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 	).Value(&f.cloud)
 	autoDraft := huh.NewConfirm().Title("Draft names automatically in new sessions, or manually assign with /draft?").
 		Affirmative("Automatically").Negative("Manually with /draft").Value(&f.autoDraft)
+	link := huh.NewConfirm().Affirmative("Yes, link it").Negative("No").Value(&f.link)
 	confirm := huh.NewConfirm().Value(&f.confirmed)
 
 	fields := map[assembleStep]huh.Field{
 		stepAction: action, stepPickRoster: pickRoster, stepBuild: build, stepPreset: preset, stepNames: names,
-		stepName: name, stepEmoji: emoji, stepWhere: where, stepAutoDraft: autoDraft, stepConfirm: confirm,
+		stepName: name, stepEmoji: emoji, stepLink: link, stepWhere: where, stepAutoDraft: autoDraft, stepConfirm: confirm,
 	}
 	var steps []screenStep
 	for _, step := range assembleSteps {
@@ -477,6 +520,9 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 			}
 		case emoji:
 			emoji.Options(f.emojiOptions()...)
+		case link:
+			link.Title(fmt.Sprintf("Use the %s roster for %s?", strings.TrimSpace(f.rosterName()), f.repo)).
+				Description("You're in this repo, so its sessions can draft from the new roster instead of your default.")
 		case confirm:
 			title, description := f.confirmation()
 			confirm.Title(title).Description(description)
@@ -512,11 +558,7 @@ func (f *assembleFlow) emojiOptions() []huh.Option[roster.EmojiMode] {
 	if chosen := f.chosenCast(); len(chosen.aTeam) > 0 {
 		first = chosen.aTeam[0]
 	}
-	return []huh.Option[roster.EmojiMode]{
-		huh.NewOption(roster.Display(first.Emoji, first.Name, 1, roster.EmojiOn)+"  (emoji and name)", roster.EmojiOn),
-		huh.NewOption(roster.Display(first.Emoji, first.Name, 1, roster.EmojiOff)+"  (name only)", roster.EmojiOff),
-		huh.NewOption(roster.Display(first.Emoji, first.Name, 1, roster.EmojiOnly)+"  (emoji only)", roster.EmojiOnly),
-	}
+	return emojiModeOptions(first)
 }
 
 // confirmation is the last step's question and its summary of the answers.
@@ -538,6 +580,9 @@ func (f *assembleFlow) confirmation() (title, description string) {
 			autoDraft = f.autoDraft
 		}
 		parts = append(parts, where, "auto-draft "+onOff(autoDraft))
+	}
+	if f.repo != "" && ((f.asks(stepLink) && f.link) || (f.opts.link && len(f.existing) > 0)) {
+		parts = append(parts, "linked to "+f.repo)
 	}
 	return fmt.Sprintf("Assemble the %s roster?", strings.TrimSpace(f.rosterName())), strings.Join(parts, " · ")
 }

@@ -1,0 +1,91 @@
+#!/bin/sh
+# Installs rostr from its GitHub releases, for macOS and Linux:
+#
+#   curl -fsSL https://getrostr.sh/install | sh
+#
+# It installs to /usr/local/bin if that's writable, otherwise ~/.local/bin.
+#
+#   ROSTR_VERSION       install this version (like 0.1.0) instead of the latest release
+#   ROSTR_INSTALL_DIR   install here instead
+#   ROSTR_DOWNLOAD_URL  for testing: download the archive and checksums.txt from this URL (like a local server for
+#                       GoReleaser's dist/) instead of the GitHub release
+set -eu
+
+REPO="piazzatron/rostr"
+
+# Everything runs from main, so a partially downloaded script doesn't run half an install
+main() {
+	# Pick the archive for this platform
+	case "$(uname -s)" in
+	Darwin) os=darwin ;;
+	Linux) os=linux ;;
+	*) fail "rostr supports macOS and Linux, not $(uname -s). On Windows, use WSL." ;;
+	esac
+	case "$(uname -m)" in
+	x86_64 | amd64) arch=amd64 ;;
+	arm64 | aarch64) arch=arm64 ;;
+	*) fail "rostr supports amd64 and arm64 machines, not $(uname -m)." ;;
+	esac
+	archive="rostr_${os}_${arch}.tar.gz"
+
+	if [ -n "${ROSTR_DOWNLOAD_URL:-}" ]; then
+		base_url="${ROSTR_DOWNLOAD_URL%/}"
+	elif [ -n "${ROSTR_VERSION:-}" ]; then
+		base_url="https://github.com/${REPO}/releases/download/v${ROSTR_VERSION#v}"
+	else
+		base_url="https://github.com/${REPO}/releases/latest/download"
+	fi
+
+	tmp="$(mktemp -d)"
+	trap 'rm -rf "$tmp"' EXIT
+
+	# Download the archive and check it against the release's checksums
+	echo "Downloading ${base_url}/${archive}"
+	curl -fsSL -o "${tmp}/${archive}" "${base_url}/${archive}" || fail "couldn't download ${base_url}/${archive}"
+	curl -fsSL -o "${tmp}/checksums.txt" "${base_url}/checksums.txt" || fail "couldn't download ${base_url}/checksums.txt"
+	expected="$(awk -v file="$archive" '$2 == file { print $1 }' "${tmp}/checksums.txt")"
+	[ -n "$expected" ] || fail "checksums.txt has no checksum for ${archive}"
+	actual="$(sha256_of "${tmp}/${archive}")"
+	[ "$actual" = "$expected" ] || fail "checksum mismatch for ${archive} (expected ${expected}, got ${actual})"
+
+	# Install via a rename in the target directory, so a rostr that's running (say, from a hook) isn't overwritten
+	tar -xzf "${tmp}/${archive}" -C "$tmp" rostr
+	if [ -n "${ROSTR_INSTALL_DIR:-}" ]; then
+		dir="$ROSTR_INSTALL_DIR"
+	elif [ -w /usr/local/bin ]; then
+		dir=/usr/local/bin
+	else
+		dir="${HOME}/.local/bin"
+	fi
+	mkdir -p "$dir"
+	cp "${tmp}/rostr" "${dir}/.rostr.new"
+	chmod 755 "${dir}/.rostr.new"
+	mv -f "${dir}/.rostr.new" "${dir}/rostr"
+	echo "Installed $("${dir}/rostr" version) to ${dir}/rostr"
+
+	case ":${PATH}:" in
+	*":${dir}:"*) ;;
+	*)
+		echo
+		echo "${dir} isn't on your PATH. Add it to your shell profile:"
+		echo "  export PATH=\"${dir}:\$PATH\""
+		;;
+	esac
+}
+
+sha256_of() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{ print $1 }'
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | awk '{ print $1 }'
+	else
+		fail "need sha256sum or shasum to verify the download"
+	fi
+}
+
+fail() {
+	echo "rostr install: $1" >&2
+	exit 1
+}
+
+main "$@"

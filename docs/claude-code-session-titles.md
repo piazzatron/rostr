@@ -83,3 +83,28 @@ The name is derived from a hash of the session ID, so both modes pick the same o
   1. A hook's `sessionTitle` reaches the app, as the docs already say it does.
   2. Hook input includes the server session ID in Remote Control sessions, so an `mcp_tool` hook can call
      `set_session_title` directly.
+
+## Update: October 20 (Claude Code 2.1.292)
+
+- **The bug is fixed upstream but not released.** We filed it as
+  [anthropics/claude-code#103336](https://github.com/anthropics/claude-code/issues/103336); it was closed as completed
+  on October 19. On 2.1.292 a `UserPromptSubmit` hook that always returns `sessionTitle` still only sets the local
+  title: the session's `~/.claude/sessions/<pid>.json` showed `"name": "🧪 Hook title · 21:57:35"` while `get_session`
+  on its bridge session still returned the app's old title.
+- **Which hooks can set a title.** Per the current hooks docs, only `SessionStart` (sources `startup`, `resume`,
+  `fork`) and `UserPromptSubmit`. `Stop`, `PostToolUse`, and async or `asyncRewake` hooks can't. So nothing can set
+  the title after Claude's first reply except the next prompt's hook, or Claude itself (`set_session_title`).
+- **Claude's own summary title lives in different places.**
+  - Terminal sessions write it locally as an `ai-title` entry in the transcript, but **only if no custom title is
+    set**: every session whose title a hook set at the first prompt has no `ai-title` at all.
+  - Desktop and Remote Control sessions never write it locally. The app generates it server-side; the transcript has
+    no `ai-title`. Only Claude can read it, with `get_session` (one model turn each, which is why the earlier
+    `get_session` + `set_session_title` approach took ~20s).
+- **The research session** behind this doc is `552f74fc-070d-5d06-aa53-7ff8a8a2687b` (October 19), in
+  `~/development`.
+- **Testing without the app.** A session created with the `create_session` tool runs on this machine through the
+  Remote Control host and shows in the app, and `get_session` reads its server title. In two such sessions on 2.1.292,
+  the hook's `sessionTitle` set only the local title, and a session created without a title still had none ~60s after
+  its reply: the app's own auto title (e.g. "Biggest dinosaur") comes from the desktop app when a person types the first
+  message there, so this harness can't reproduce the race with it. The server also keeps a per-turn
+  `post_turn_summary` (e.g. "Mount Fuji is Japan's tallest at 3,776m"), readable only through `get_session`.

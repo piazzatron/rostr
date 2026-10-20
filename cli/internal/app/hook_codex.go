@@ -1,0 +1,131 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/piazzatron/rostr/cli/internal/claudecode"
+	"github.com/piazzatron/rostr/cli/internal/codex"
+	"github.com/piazzatron/rostr/cli/internal/keepalive"
+	"github.com/piazzatron/rostr/cli/internal/paths"
+	"github.com/piazzatron/rostr/cli/internal/store"
+)
+
+// codexSessionEndBudget keeps release under the 3-second timeout Codex allows SessionEnd hooks, cloud call included.
+const codexSessionEndBudget = 2 * time.Second
+
+// hookCodexSessionStart drafts on resume and fork, and re-tells the name after compaction. A fork is a new thread
+// that starts with its parent's history and name, so it gets its own member and its own thread name. Codex needs no
+// session env var: it gives the agent's commands CODEX_THREAD_ID.
+func hookCodexSessionStart(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
+	if input.Source != "resume" && input.Source != "compact" && input.Source != "fork" {
+		return nil
+	}
+
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	d, err := draftOrReclaim(ctx, st, input.SessionID, hookDir(input.Cwd), input.Source != "compact")
+	if err != nil || d == nil {
+		return err
+	}
+	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
+	if input.Source == "fork" {
+		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
+	}
+	fmt.Fprintln(stdout, codex.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
+	return nil
+}
+
+// hookCodexPrompt runs on every prompt. On a thread's first prompt (with auto-draft on) it drafts the session, names
+// the thread, and adds who the agent is to its context. Codex hooks can't wake the agent later, so this happens
+// before the first reply. On every other prompt it keeps the draft alive, at most once an hour.
+func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
+	if !codex.IsFirstPrompt(input) {
+		return keepDraftAlive(ctx, input.SessionID)
+	}
+
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	settings, err := st.Settings(ctx)
+	if err != nil || !settings.AutoDraft {
+		return err
+	}
+	d, err := draftSession(ctx, st, input.SessionID, "", hookDir(input.Cwd), claudecode.PlaceholderTask(input.Prompt))
+	if err != nil {
+		return err
+	}
+	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
+	_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(d))
+	fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
+	return nil
+}
+
+// hookCodexSessionEnd releases the session's member, within Codex's SessionEnd timeout.
+func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, codexSessionEndBudget)
+	defer cancel()
+
+	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	_, err = st.Release(ctx, input.SessionID)
+	return err
+}
+
+// newHookCodexDraftCommand is run by the $rostr-draft skill. The agent reads its output, so it prints plain text and
+// never fails. Its session is CODEX_THREAD_ID, which Codex gives the agent's commands.
+func newHookCodexDraftCommand() *cobra.Command {
+	var session string
+	cmd := &cobra.Command{
+		Use:  "draft",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			if session == "" {
+				fmt.Fprintln(out, "rostr couldn't draft this session: it doesn't know the session's ID.")
+				return nil
+			}
+			st, err := openStore()
+			if err != nil {
+				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
+				return nil
+			}
+			defer st.Close()
+
+			d, err := draftSession(cmd.Context(), st, session, "", workingDir(), "")
+			if err != nil {
+				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
+				return nil
+			}
+			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
+			_ = codex.SetThreadName(cmd.Context(), session, codexThreadName(d))
+			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
+			return nil
+		},
+	}
+	sessionFlag(cmd, &session)
+	return cmd
+}
+
+// codexThreadName is the Codex thread name for a draft: `<display> · <task>`, or just the display without a task.
+func codexThreadName(d store.Draft) string {
+	if d.Task == "" {
+		return d.Display()
+	}
+	return d.Display() + " · " + d.Task
+}

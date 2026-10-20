@@ -17,7 +17,7 @@ import (
 
 var (
 	errNoRosters = store.ErrNoRosters
-	errNoSession = missingInput("no session: pass --session, or run this inside a Claude Code session, where ROSTR_SESSION is set")
+	errNoSession = missingInput("no session: pass --session, or run this inside a Claude Code or Codex session, where ROSTR_SESSION or CODEX_THREAD_ID is set")
 )
 
 // defaultAPIURL is the rostr API that cloud mode calls. ROSTR_API_URL overrides it (tests point it at a local server).
@@ -65,7 +65,7 @@ func newRootCommand() *cobra.Command {
 		newEditCommand(),
 		newPresetsCommand(),
 		newDisbandCommand(),
-		newDisassembleCommand(),
+		newUninstallCommand(),
 		newAgentCommand(),
 		newConfigCommand(),
 		newHookCommand(),
@@ -208,10 +208,15 @@ func targetRepo(repoFlag string) (string, error) {
 	return "", errors.New("not in a git repo, so there's no project here. Run this inside a repo, or pass --repo owner/repo")
 }
 
-// sessionFlag registers --session, which defaults to $ROSTR_SESSION.
+// sessionFlag registers --session, which defaults to $ROSTR_SESSION (written by the Claude Code hooks), then
+// $CODEX_THREAD_ID (which Codex gives every command its agent runs, and which is its hooks' session ID).
 func sessionFlag(cmd *cobra.Command, target *string) {
-	cmd.Flags().StringVar(target, "session", os.Getenv("ROSTR_SESSION"),
-		"the agent session's ID (defaults to $ROSTR_SESSION)")
+	session := os.Getenv("ROSTR_SESSION")
+	if session == "" {
+		session = os.Getenv("CODEX_THREAD_ID")
+	}
+	cmd.Flags().StringVar(target, "session", session,
+		"the agent session's ID (defaults to $ROSTR_SESSION, then $CODEX_THREAD_ID)")
 }
 
 func workingDir() string {

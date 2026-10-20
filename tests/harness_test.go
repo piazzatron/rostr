@@ -89,7 +89,8 @@ func newMachine(t *testing.T) *machine {
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		if name == "HOME" || name == "VISUAL" || name == "EDITOR" || strings.HasPrefix(name, "XDG_") ||
-			strings.HasPrefix(name, "CLAUDE") || strings.HasPrefix(name, "ROSTR_") || strings.HasPrefix(name, "GIT_") {
+			strings.HasPrefix(name, "CLAUDE") || strings.HasPrefix(name, "ROSTR_") || strings.HasPrefix(name, "GIT_") ||
+			strings.HasPrefix(name, "CODEX_") || strings.HasPrefix(name, "TMUX") || strings.HasPrefix(name, "HERDR_") {
 			continue
 		}
 		env = append(env, kv)

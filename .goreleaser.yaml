@@ -1,0 +1,45 @@
+# Builds rostr's release binaries, archives, and checksums, publishes them as a GitHub release, and pushes the
+# Homebrew formula to piazzatron/homebrew-tap. Run by .github/workflows/release.yml on a v* tag; see RELEASING.md.
+version: 2
+
+project_name: rostr
+
+builds:
+  - dir: cli
+    main: ./cmd/rostr
+    binary: rostr
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/piazzatron/rostr/cli/internal/app.version=v{{ .Version }}
+
+archives:
+  # Version-less names, so the install script can fetch releases/latest/download/rostr_<os>_<arch>.tar.gz directly
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+
+checksum:
+  name_template: checksums.txt
+
+# A formula, although GoReleaser deprecates `brews` in favor of casks (so `goreleaser check` warns): Homebrew
+# quarantines cask downloads, and macOS then blocks the unsigned binary. Formulas aren't quarantined, and work on
+# Linux Homebrew too. release.yml pins the GoReleaser version so this keeps working.
+brews:
+  - name: rostr
+    description: Give your coding agents names and remember who's doing what
+    homepage: https://getrostr.sh
+    license: MIT
+    directory: Formula
+    repository:
+      owner: piazzatron
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    install: |
+      bin.install "rostr"
+      generate_completions_from_executable(bin/"rostr", "completion")
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/rostr version")
