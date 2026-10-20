@@ -1,0 +1,136 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { SUBMIT_ROSTER_URL } from "../consts";
+import { PRESET_ROSTERS } from "../data/rosters";
+---
+
+<Layout title="rostr pre-built rosters" description="Every pre-built rostr roster, with its A team and B team.">
+  <section class="rosters-hero">
+    <h1>Pre-built rosters</h1>
+    <p class="lede">
+      Pick one with <code>rostr assemble --preset &lt;id&gt;</code>, or let <code>rostr assemble</code> walk you
+      through it. Made one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
+    </p>
+    <nav class="franchises" aria-label="Franchises">
+      {PRESET_ROSTERS.map((roster) => (
+        <a href={`#${roster.id}`}>{roster.emoji} {"featuredTag" in roster ? roster.name : roster.source}</a>
+      ))}
+    </nav>
+  </section>
+
+  <section class="section">
+    <div class="roster-list">
+      {PRESET_ROSTERS.map((roster) => (
+        <article class:list={["card", "roster-card", { "roster-card-featured": "featuredTag" in roster }]} id={roster.id}>
+          <header class="roster-card-header">
+            <span class="roster-card-emoji">{roster.emoji}</span>
+            <span>
+              <strong>{roster.name}</strong>
+              <small>{roster.source}</small>
+            </span>
+            <code class="roster-card-id">{roster.id}</code>
+          </header>
+          <b class="team-label">A team</b>
+          <div class="chips">{roster.aTeam.map((member) => <span class="chip chip-a">{member}</span>)}</div>
+          <b class="team-label team-label-b">B team</b>
+          <div class="chips">{roster.bTeam.map((member) => <span class="chip chip-b">{member}</span>)}</div>
+        </article>
+      ))}
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .rosters-hero {
+    padding: 72px 0 40px;
+  }
+
+  .rosters-hero h1 {
+    font-size: clamp(36px, 6vw, 52px);
+    margin: 0 0 16px;
+  }
+
+  /* Quick links to each roster, labeled by franchise so they're easy to recognize at a glance */
+  .franchises {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 28px;
+  }
+
+  .franchises a {
+    padding: 5px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 14px;
+    text-decoration: none;
+  }
+
+  .franchises a:hover {
+    border-color: var(--accent);
+  }
+
+  .roster-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 16px;
+  }
+
+  .roster-card-featured {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  }
+
+  .roster-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .roster-card-header small {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .roster-card-emoji {
+    font-size: 28px;
+  }
+
+  .roster-card-id {
+    margin-left: auto;
+  }
+
+  .team-label {
+    display: block;
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .team-label-b {
+    margin-top: 12px;
+    color: var(--muted);
+  }
+
+  /* Chips are static here: no pop-in animation, and the B team is gray like on the home page */
+  .chip {
+    animation: none;
+  }
+
+  .chip-b {
+    border-color: color-mix(in srgb, var(--muted) 30%, transparent);
+    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
+    color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .roster-list {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

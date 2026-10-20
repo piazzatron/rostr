@@ -1,10 +1,10 @@
 # Local storage
 
 In local mode (the default, when there's no rostr key), everything lives in plain files, so there's no database to
-install. The files use the same shapes as the [server schema](server-schema.md), which makes `rostr transfer` a
+install. The files use the same shapes as the [server schema](server-schema.md), which makes `rostr config cloud on` a
 straight copy. In cloud mode everything lives on the API instead, and only `credentials` is kept on disk.
 
-Everything is under the OS config folder: `~/.config/rostr` on macOS and Linux, `%AppData%\rostr` on Windows.
+Everything is under `~/.config/rostr`.
 
 ```
 rostr/
@@ -34,7 +34,7 @@ rostr/
 
 ```json
 {
-  "emojiEnabled": true,
+  "emojiMode": "on",
   "members": [{ "name": "Gandalf", "emoji": "🧙", "team": "A" }]
 }
 ```
@@ -58,11 +58,11 @@ rostr/
 Several sessions can start at the same moment, so drafting can't read, change, and rewrite a shared file. Instead,
 each draft is its own file:
 
-- **Drafting** creates `drafts/<roster>/<member>.json` in create-only mode (`O_EXCL`, `CREATE_NEW` on Windows). The
+- **Drafting** creates `drafts/<roster>/<member>.json` in create-only mode (`O_EXCL`). The
   OS guarantees only one process can create a given file, so the first session to create `gandalf.json` gets Gandalf
   and any other gets "already exists" and tries the next member.
 - **Releasing** deletes the draft file and writes `sessions/<session-id>.json`.
-- **`rostr assign`** rewrites only its own draft file, which no other session touches.
+- **`rostr agent task`** rewrites only its own draft file, which no other session touches.
 
 Files that people edit (`config.json`, roster files) are written to a temporary file and renamed into place, so
 nothing ever reads a half-written file.
@@ -77,8 +77,8 @@ nothing ever reads a half-written file.
 4. **Otherwise** try to create a draft file for each member in roster order, A team first, and stop at the first one
    that succeeds.
 
-## Transferring to the cloud
+## Moving to the cloud
 
-`rostr transfer` uploads every roster, the default roster, project links, and active drafts, creates your key, and
-then deletes the local files except `credentials`. `rostr transfer --to local` downloads everything back and deletes the
+`rostr config cloud on` uploads every roster, the default roster, project links, and active drafts, creates your key, and
+then deletes the local files except `credentials`. `rostr config cloud off` downloads everything back and deletes the
 key. A machine is in cloud mode whenever it has a key, from `credentials` or the `ROSTR_KEY` environment variable.

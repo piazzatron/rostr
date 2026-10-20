@@ -13,7 +13,7 @@ It's a small CLI plus a skill that teaches your agent how to use it, and it work
 
 ## How it works
 
-1. **Pick a roster.** `rostr create` sets one up from a preset or your own names.
+1. **Pick a roster.** `rostr assemble` sets one up from a preset or your own names.
 2. **Every session gets drafted.** At the start of a session, a hook drafts the next available name, tells the agent
    who it is, and puts the name in the session title.
 3. **Agents go back to the bench.** The rostr skill has the agent release its name when the work is done, so the
@@ -23,33 +23,50 @@ Every roster has an **A team**, six members by default (change who's on it with 
 picks from the A team first and only calls up the **B team** when every starter is busy, so you get to know a small
 group instead of twenty names.
 
-You can have **multiple rosters** and give each project its own with `rostr use`, so a name tells you the project as
+You can have **multiple rosters** and give each project its own with `rostr link`, so a name tells you the project as
 well as the task. A project is identified by its git `origin` remote; projects without a roster, and folders outside
 git, use your default roster.
 
 Your whole setup lives in one place, **local** or **cloud**:
 
 - **Local** (the default): everything lives on disk. No account, no network.
-- **Cloud**: `rostr transfer` moves everything to the rostr API at `api.getrostr.sh`. From then on, every session, on
+- **Cloud**: `rostr config cloud on` moves everything to the rostr API at `api.getrostr.sh`. From then on, every session, on
   your machine or in a cloud environment like Claude Code on the web or Codex cloud, drafts from there. Having a rostr
   key is what puts a machine in cloud mode.
 
 ## Commands
 
+Full docs at [getrostr.sh/cli](https://getrostr.sh/cli).
+
+**Roster commands** (you run these)
+
 | Command | What it does |
 |---|---|
-| `rostr create [<roster>]` | Create a roster from a preset, your own names, or a random preset if you don't pick |
+| `rostr assemble` | Interactive setup: pick a roster, emoji, local or cloud, and auto-draft. The only one you need |
+| `rostr link <roster>` | Link a roster to the current project (`rostr unlink` to undo) |
+| `rostr list` | See who's working on what, and who's idle |
+| `rostr edit [<roster>]` | Change a roster's members or A team, or swap its cast (`--preset`) |
 | `rostr presets` | See all the pre-built rosters |
-| `rostr use <roster>` | Use a roster for the current project |
-| `rostr draft` | Draft the next available agent, A team first, optionally with `--task` (the hooks run this for you) |
-| `rostr assign [<name>] <description>` | Assign an agent its work, or reassign it (the hooks set the first task) |
-| `rostr list` | See who's on your roster and what each agent is working on |
-| `rostr release <name>` | Release an agent back to the roster |
-| `rostr edit` | Add, remove, or rename members, pick your A team, or turn emoji on and off |
-| `rostr recast [<roster>]` | Swap a roster's cast for a new preset, your own names, or a random preset |
-| `rostr transfer` | Move your whole setup to the cloud (or back with `--to local`) |
-| `rostr submit <roster>` | Submit your roster to be considered as a pre-built one |
-| `rostr disband` | Delete your roster |
+| `rostr disband <roster>` | Delete a roster |
+
+**Agent commands** (your hooks, the skill, and the `/draft` and `/release` slash commands run these)
+
+| Command | What it does |
+|---|---|
+| `rostr agent draft` | Draft the next free agent for a session, A team first |
+| `rostr agent release` | Send an agent back to the bench |
+| `rostr agent task` | Set or change what an agent is working on |
+
+**Settings**
+
+| Command | What it does |
+|---|---|
+| `rostr config` | See all your settings |
+| `rostr config default <roster>` | Choose the roster projects use when they don't have a link |
+| `rostr config emoji on\|off\|only` | Show agents with their emoji, without it, or as just the emoji |
+| `rostr config auto-draft on\|off` | Draft every new session automatically, or by hand with `/draft` and `/release` |
+| `rostr config cloud on\|off` | Move your whole setup to the cloud, or back to this machine |
+| `rostr config key` | Print your rostr key |
 
 ## Install
 
@@ -57,9 +74,10 @@ Point your agent at [getrostr.sh](https://getrostr.sh) and ask it to set up rost
 
 ```sh
 brew install piazzatron/tap/rostr
-rostr create work --preset fellowship
-rostr setup   # installs the hooks and skill for Claude Code and Codex
+rostr assemble   # interactive: pick a roster, emoji, local or cloud, and auto-draft
 ```
+
+Prefer to draft by hand? Turn off auto-draft (`rostr config auto-draft off`) and use `/draft` and `/release` in Claude Code.
 
 Until then, the Claude Code hook can be installed by hand: see [`cli/hooks/claude-code/README.md`](cli/hooks/claude-code/README.md).
 

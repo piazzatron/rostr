@@ -1,178 +1,236 @@
 ---
+import { Code } from "astro-expressive-code/components";
 import Layout from "../layouts/Layout.astro";
+import { toTerminalText } from "../terminal";
 import { PRESET_ROSTERS } from "../data/rosters";
 
 interface CommandDoc {
   id: string;
+  /** Shown after "rostr" in the heading and quick links, e.g. "link / unlink" or "agent draft". Defaults to the id. */
+  heading?: string;
   usage: string;
   summary: string;
   options?: { flag: string; description: string }[];
   example: string;
+  /** A short label shown as a pill next to the heading. */
+  badge?: string;
+  /** A highlighted callout shown under the summary. */
+  note?: string;
 }
 
-const COMMAND_DOCS: CommandDoc[] = [
-  {
-    id: "create",
-    usage: "rostr create [<roster>] [--preset <id> | --names <list>]",
-    summary:
-      "Create a roster. Pass neither --preset nor --names and rostr picks a random preset for you; leave out the name and the roster is named after its preset. The first roster you create becomes your default. It's stored wherever your setup lives: on disk, or on the rostr API if you've moved to the cloud.",
-    options: [
-      { flag: "--preset <id>", description: "Start from a pre-built roster. See them all with rostr presets." },
-      { flag: "--names <list>", description: "Use your own comma-separated names. The first six are your A team." },
-    ],
-    example: `rostr create
-🎮 Created smash-bros from the Smash Bros preset
+interface CommandGroup {
+  id: string;
+  emoji: string;
+  title: string;
+  lede: string;
+  commands: CommandDoc[];
+}
 
-rostr create work --preset fellowship
-rostr create side --names "Ada, Grace, Linus, Margaret, Ken, Barbara"`,
-  },
+const COMMAND_GROUPS: CommandGroup[] = [
   {
-    id: "presets",
-    usage: "rostr presets",
-    summary: "See all the pre-built rosters. Pass any of these ids to rostr create --preset.",
-    example:
-      "rostr presets\n" +
-      PRESET_ROSTERS.map((roster) => `${roster.id.padEnd(16)} ${roster.emoji} ${roster.name} (${roster.source})`).join("\n"),
-  },
-  {
-    id: "use",
-    usage: "rostr use <roster> [--repo <owner/repo>] [--default]",
-    summary:
-      "Use a roster for the current project. rostr works out the project from the git repo you're in, so you don't need to pass it. Projects without a roster use your default.",
-    options: [
-      { flag: "--repo <owner/repo>", description: "Link a repo other than the current one." },
-      { flag: "--default", description: "Make this roster the default for projects without one." },
-    ],
-    example: `cd ~/code/rostr
-rostr use work`,
-  },
-  {
-    id: "draft",
-    usage: "rostr draft [--task <description>] [--session <id>] [--json]",
-    summary:
-      "Draft the next available agent, A team first, and print its name. Your hooks run this at the start of every session with the session's ID, so you rarely need it yourself. Drafting is tied to the session: the same session always gets the same name back while it's free.",
-    options: [
-      { flag: "--task <description>", description: "What the agent is working on. Shown in rostr list." },
-      { flag: "--session <id>", description: "The agent session to draft for. The hooks pass this, and it defaults to ROSTR_SESSION." },
-      { flag: "--json", description: "Print the result as JSON." },
-    ],
-    example: `rostr draft --task "Fix auth redirect loop"
-🧙 Gandalf`,
-  },
-  {
-    id: "assign",
-    usage: "rostr assign [<name>] <description>",
-    summary:
-      "Assign an agent its work, or reassign it when the work changes. Your hooks set each agent's first task from your first prompt, so this is only for changes. Inside a session, rostr knows which agent you mean from ROSTR_SESSION, so the name is optional there.",
-    options: [
-      { flag: "--session <id>", description: "Assign whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
-    ],
-    example: `rostr assign "Migrate billing to Stripe v3"
-rostr assign samwise "Migrate billing to Stripe v3"`,
-  },
-  {
-    id: "list",
-    usage: "rostr list [<roster>] [--all] [--json]",
-    summary: "See who's working on what, and who's idle. Shows the current project's roster unless you name one.",
-    options: [
-      { flag: "--all", description: "Show every roster." },
-      { flag: "--json", description: "Print the result as JSON." },
-    ],
-    example: `rostr list
-fellowship · A team: 4 of 6 drafted
+    id: "roster-commands",
+    emoji: "🎯",
+    title: "Roster commands",
+    lede: "Set up and manage your rosters.",
+    commands: [
+      {
+        id: "assemble",
+        badge: "⭐ The only one you need",
+        usage:
+          "rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft]",
+        summary:
+          "Interactive setup: answer a few questions and you're done. It's the only command you need to run, and your agent can run it for you with flags.",
+        options: [
+          { flag: "--preset <id>", description: "Skip the preset question. See them all with rostr presets." },
+          { flag: "--names <list>", description: "Use your own comma-separated names. The first six are your A team." },
+          { flag: "--emoji on|off|only", description: "How agents show up. Defaults to on." },
+          { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr config cloud on." },
+          { flag: "--no-auto-draft", description: "Don't draft sessions automatically; use /draft and /release instead." },
+        ],
+        example: `$ rostr assemble
+✔ Pick a preset · 💍 The Fellowship
+✔ Name your roster · work
+✔ Emoji · On (🧙 Gandalf)
+✔ Where should rostr live? · This machine
+✔ Draft every new session automatically? · Yes
+✔ Claude Code: hooks, skill, and /draft + /release installed
+✔ Codex: hooks and skill installed
+💍 Assembled a roster named work. Start a new session to get drafted
 
-🧙 Gandalf   Fix auth redirect loop   rostr/api   12m
-🌱 Samwise   Migrate billing          smart-notes 1h
+$ rostr assemble side --names "Ada, Grace, Linus, Margaret, Ken, Barbara"
+✏️ Assembled a roster named side with 6 members, all on the A team`,
+      },
+      {
+        id: "link",
+        heading: "link / unlink",
+        usage: "rostr link <roster> [--repo <owner/repo>]\nrostr unlink [--repo <owner/repo>]",
+        summary:
+          "Link a particular roster to your project, or unlink it to go back to your default roster.",
+        note:
+          "Worth it when you want to tell projects apart at a glance: give your app the Smash Bros, and Mario can only mean your app.",
+        options: [{ flag: "--repo <owner/repo>", description: "Link or unlink a repo other than the current one." }],
+        example: `$ cd ~/code/rostr
+$ rostr link work
+💍 Linked the current repo, piazzatron/rostr, to the work roster (The Fellowship)
+   A team: 🧙 Gandalf, 💍 Frodo, 🌱 Samwise, 👑 Aragorn, 🏹 Legolas, 🪓 Gimli
+
+$ rostr link side --repo piazzatron/smart-notes
+✏️ Linked piazzatron/smart-notes to the side roster
+
+$ rostr unlink
+Unlinked the current repo, piazzatron/rostr. It now drafts from your default roster, smash-bros`,
+      },
+      {
+        id: "list",
+        usage: "rostr list [<roster>] [--all] [--json]",
+        summary: "See who's working on what, and who's idle.",
+        options: [
+          { flag: "--all", description: "Show every roster." },
+          { flag: "--json", description: "Print the result as JSON." },
+        ],
+        example: `$ rostr list
+work · A team: 4 of 6 drafted
+
+🧙 Gandalf   Fix auth redirect loop         rostr/api    12m
+🌱 Samwise   Migrate billing to Stripe v3   smart-notes  1h
+💍 Frodo     Flaky e2e tests on CI          rostr/site   3m
+👑 Aragorn   Postgres index audit           cloud        40m
 
 idle: Legolas, Gimli, Boromir, Pippin, Merry, Balrog`,
-  },
-  {
-    id: "release",
-    usage: "rostr release [<name>] [--session <id>]",
-    summary:
-      "Send an agent back to the bench. The rostr skill has your agent do this when its work is done, and your hooks do it when a session ends.",
-    options: [
-      { flag: "--session <id>", description: "Release whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
+      },
+      {
+        id: "edit",
+        usage: "rostr edit [<roster>] [--preset <id> | --names <list>]",
+        summary: "Open a roster in your editor to change its members and A team, or swap its whole cast.",
+        options: [
+          { flag: "--preset <id>", description: "Swap the cast for a pre-built roster. Agents already drafted keep their names until their sessions end." },
+          { flag: "--names <list>", description: "Swap the cast for your own comma-separated names." },
+        ],
+        example: `$ rostr edit work
+Opening ~/.config/rostr/rosters/work.json in your editor…
+💍 Saved work: 6 on the A team, 8 on the B team
+
+$ rostr edit work --preset smash-bros
+🎮 work now has the Smash Bros cast
+   A team: 🍄 Mario, 🗡️ Link, ⭐ Kirby, ⚡ Pikachu, 🚀 Samus, 🦊 Fox
+   3 agents from The Fellowship keep their names until their sessions end`,
+      },
+      {
+        id: "presets",
+        usage: "rostr presets",
+        summary: "See all the pre-built rosters you can pass to --preset. They're also on the rosters page, with their full teams.",
+        example:
+          "$ rostr presets\n" +
+          PRESET_ROSTERS.map((roster) => `${roster.id.padEnd(16)} ${roster.emoji} ${roster.name} (${roster.source})`).join("\n"),
+      },
+      {
+        id: "disband",
+        usage: "rostr disband <roster>",
+        summary: "Delete a roster. Projects that used it fall back to your default.",
+        example: `$ rostr disband side
+Disbanded side. 1 project that used it now uses work`,
+      },
     ],
-    example: `rostr release gandalf`,
   },
   {
-    id: "edit",
-    usage: "rostr edit [<roster>] [--emoji on|off]",
-    summary:
-      "Open a roster in your editor to add, remove, or rename members and choose who's on the A team. Emoji can be switched on or off without opening the editor.",
-    options: [{ flag: "--emoji on|off", description: "Show or hide member emoji." }],
-    example: `rostr edit work
-rostr edit work --emoji off`,
-  },
-  {
-    id: "recast",
-    usage: "rostr recast [<roster>] [--preset <id> | --names <list>]",
-    summary:
-      "Swap a roster's whole cast for a new one, keeping its name and the projects that use it. Pass neither --preset nor --names and rostr picks a random preset you're not already using. Agents already drafted keep their names until their sessions end, so nobody gets renamed mid-task; new sessions draft from the new cast. Recasts the current project's roster unless you name one.",
-    options: [
-      { flag: "--preset <id>", description: "Recast from a pre-built roster." },
-      { flag: "--names <list>", description: "Recast with your own comma-separated names. The first six are your A team." },
+    id: "agent-commands",
+    emoji: "🤖",
+    title: "Agent commands",
+    lede: "Your hooks, the rostr skill, and the /draft and /release slash commands run these.",
+    commands: [
+      {
+        id: "agent-draft",
+        heading: "agent draft / release",
+        badge: "⚙️ On session start and end",
+        usage: "rostr agent draft [--task <description>] [--session <id>] [--json]\nrostr agent release [<name>] [--session <id>]",
+        summary:
+          "Draft the next free agent when a session starts, A team first, and send it back to the bench when the session ends. The same session always gets the same name back.",
+        options: [
+          { flag: "--task <description>", description: "What the agent is working on. Shown in rostr list." },
+          { flag: "--session <id>", description: "The session to draft or release for. The hooks pass this, and it defaults to ROSTR_SESSION." },
+          { flag: "--json", description: "Print the drafted agent as JSON." },
+        ],
+        example: `$ rostr agent draft --task "Fix auth redirect loop"
+🧙 Gandalf is on it: Fix auth redirect loop
+
+$ rostr agent draft --json
+{"name": "Gandalf", "emoji": "🧙", "team": "A", "roster": "work", "display": "🧙 Gandalf"}
+
+$ rostr agent release gandalf
+🧙 Gandalf is back on the bench`,
+      },
+      {
+        id: "agent-task",
+        heading: "agent task",
+        usage: "rostr agent task [<name>] <description>",
+        summary: "Set or change what an agent is working on. Your hooks set the first task from your first prompt.",
+        options: [
+          { flag: "--session <id>", description: "Set the task for whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
+        ],
+        example: `$ rostr agent task "Migrate billing to Stripe v3"
+🌱 Samwise is now on: Migrate billing to Stripe v3
+
+$ rostr agent task samwise "Migrate billing to Stripe v3"
+🌱 Samwise is now on: Migrate billing to Stripe v3`,
+      },
     ],
-    example: `rostr recast work --preset smash-bros
-rostr recast`,
   },
   {
-    id: "transfer",
-    usage: "rostr transfer [--to cloud|local]",
-    summary:
-      "Move your whole setup between your machine and the cloud: every roster, your default, your project links, and who's currently drafted. Moving to the cloud creates your rostr key, and from then on every session, local or cloud, drafts through the rostr API. Do this once, when you start using cloud agents.",
-    options: [{ flag: "--to cloud|local", description: "Where to move your setup. Defaults to cloud." }],
-    example: `rostr transfer`,
-  },
-  {
-    id: "submit",
-    usage: "rostr submit <roster>",
-    summary:
-      "Submit one of your rosters to be considered as a pre-built roster. It opens a GitHub issue in your browser with the roster filled in, so you can add a note before sending it.",
-    example: `rostr submit side`,
-  },
-  {
-    id: "disband",
-    usage: "rostr disband <roster>",
-    summary: "Delete a roster. Projects that used it fall back to your default roster.",
-    example: `rostr disband side`,
-  },
-  {
-    id: "setup",
-    usage: "rostr setup [--claude-code] [--codex]",
-    summary:
-      "Install the rostr hooks and skill for your agents. With no flags, it sets up every agent it finds on your machine.",
-    options: [
-      { flag: "--claude-code", description: "Only set up Claude Code." },
-      { flag: "--codex", description: "Only set up Codex." },
+    id: "settings",
+    emoji: "⚙️",
+    title: "Settings",
+    lede: "Change anything you chose during assemble.",
+    commands: [
+      {
+        id: "config",
+        usage:
+          "rostr config\nrostr config default <roster>\nrostr config emoji on|off|only [--roster <roster>]\nrostr config auto-draft on|off\nrostr config cloud on|off\nrostr config key",
+        summary: "See and change your settings. Run it on its own to see them all.",
+        options: [
+          { flag: "default", description: "The roster projects use when they don't have a link." },
+          { flag: "emoji", description: "How agents show up: on (🧙 Gandalf), off (Gandalf), or only (🧙). only needs every member to have a different emoji." },
+          { flag: "auto-draft", description: "Draft new sessions automatically, or by hand with /draft and /release." },
+          { flag: "cloud", description: "Move your whole setup to the cloud, or back to this machine. Turn it on once, when you start using cloud agents." },
+          { flag: "key", description: "Print your rostr key, which puts a machine in cloud mode. There's no recovery, so keep it safe." },
+        ],
+        example: `$ rostr config
+default      work
+emoji        on
+auto-draft   on
+cloud        off
+
+$ rostr config emoji only
+🧙 Emoji only for work. Agents now show as: 🧙 · Fix auth redirect loop
+
+$ rostr config cloud on
+☁️ Moved your setup to the cloud
+   2 rosters, 3 project links, 4 active drafts
+   Your rostr key: rostr_sk_3f9c2b7e4a1d (saved to ~/.config/rostr/credentials)
+   Set it as ROSTR_KEY in your cloud environments so their sessions can draft too`,
+      },
     ],
-    example: `rostr setup`,
-  },
-  {
-    id: "key",
-    usage: "rostr key [rotate]",
-    summary:
-      "Print your rostr key. Having a key is what puts a machine in cloud mode: set it as ROSTR_KEY in a cloud environment so its sessions can reach your rosters. rostr key rotate replaces it if it leaks. There's no account and no recovery: keep your key somewhere safe.",
-    example: `rostr key
-rostr key rotate`,
   },
 ];
 ---
 
 <Layout
   title="rostr CLI docs"
-  description="Every rostr command: create, presets, use, draft, assign, list, release, edit, recast, transfer, submit, disband, setup, and key."
+  description="Every rostr command: roster commands, agent commands, and settings."
 >
   <section class="docs-hero">
     <h1>CLI docs</h1>
     <p class="lede">
-      rostr is a single program for macOS, Linux, and Windows. Your hooks call it at the start and end of every session,
+      rostr is a single program for macOS and Linux. Your hooks call it at the start and end of every session,
       and the rostr skill teaches your agent to use it too.
     </p>
-    <nav class="toc" aria-label="Commands">
-      {COMMAND_DOCS.map((command) => <a href={`#${command.id}`}><code>{command.id}</code></a>)}
-    </nav>
+    {COMMAND_GROUPS.map((group) => (
+      <nav class="toc" aria-label={group.title}>
+        <a class="toc-group" href={`#${group.id}`}>{group.emoji} {group.title}</a>
+        <div class="toc-chips">
+          {group.commands.map((command) => <a href={`#${command.id}`}><code>{command.heading ?? command.id}</code></a>)}
+        </div>
+      </nav>
+    ))}
   </section>
 
   <section class="section">
@@ -184,10 +242,11 @@ rostr key rotate`,
       <dd>Every roster has a small A team, six by default. Drafting picks from the A team first and only calls up the B team when every starter is busy.</dd>
       <dt>Local or cloud</dt>
       <dd>
-        Your whole setup lives in one place. Locally, everything is on disk. Once you <a href="#transfer">transfer</a>
-        to the cloud, everything lives on the rostr API at <code>api.getrostr.sh</code>, and every session, on your
-        machine or in a cloud environment, drafts from there. Having a rostr key (saved by <code>rostr transfer</code>,
-        or set as <code>ROSTR_KEY</code>) is what puts a machine in cloud mode.
+        Your whole setup lives in one place. Locally, everything is on disk. Once you turn on <a href="#config"
+          >cloud mode</a
+        >, everything lives on the rostr API at <code>api.getrostr.sh</code>, and every session, on your machine or in
+        a cloud environment, drafts from there. Having a rostr key (saved by <code>rostr config cloud on</code>, or set
+        as <code>ROSTR_KEY</code>) is what puts a machine in cloud mode.
       </dd>
       <dt>Projects</dt>
       <dd>
@@ -197,9 +256,9 @@ rostr key rotate`,
       <dt>Sessions</dt>
       <dd>
         Your hooks get each session's ID from Claude Code or Codex and pass it to rostr, so drafting, setting the first
-        task, and releasing all happen without your agent doing anything. The start hook also sets
-        <code>ROSTR_SESSION</code> in the session's shell, so any rostr command your agent runs knows which session it's
-        in.
+        task, and releasing all happen without your agent doing anything. The start hook also
+        sets <code>ROSTR_SESSION</code> in the session's shell, so any rostr command your agent runs knows which session
+        it's in.
       </dd>
       <dt>Which roster gets drafted</dt>
       <dd>
@@ -210,23 +269,55 @@ rostr key rotate`,
     </dl>
   </section>
 
-  {COMMAND_DOCS.map((command) => (
-    <section class="section command-doc" id={command.id}>
-      <h2><code>rostr {command.id}</code></h2>
-      <pre class="code usage">{command.usage}</pre>
-      <p>{command.summary}</p>
-      {command.options && (
-        <dl class="options">
-          {command.options.map((option) => (
+  {COMMAND_GROUPS.map((group) => (
+    <>
+      <section class="group-header" id={group.id}>
+        <h2><span aria-hidden="true">{group.emoji}</span> {group.title}</h2>
+        <p>{group.lede}</p>
+      </section>
+      {group.commands.map((command) => (
+        <section class="section command-doc" id={command.id}>
+          <div class="command-heading">
+            <h3><code>rostr {command.heading ?? command.id}</code></h3>
+            {command.badge && <span class="command-badge-pill">{command.badge}</span>}
+          </div>
+          <div class="usage"><Code code={command.usage} lang="text" frame="none" wrap /></div>
+          <p>{command.summary}</p>
+          {command.note && <p class="command-note">💡 {command.note}</p>}
+          {command.options && (
+            <dl class="options">
+              {command.options.map((option) => (
+                <div class="option-row">
+                  <dt><code>{option.flag}</code></dt>
+                  <dd>{option.description}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <Code code={toTerminalText(command.example)} lang="ansi" frame="terminal" />
+        </section>
+      ))}
+      {group.id === "agent-commands" && (
+        <section class="section" id="slash-commands">
+          <div class="command-heading">
+            <h3>Slash commands</h3>
+          </div>
+          <p>
+            If you'd rather draft by hand, turn auto-draft off and use these in Claude Code. <code>rostr assemble</code> installs them.
+          </p>
+          <dl class="options">
             <div class="option-row">
-              <dt><code>{option.flag}</code></dt>
-              <dd>{option.description}</dd>
+              <dt><code>/draft</code></dt>
+              <dd>Draft an agent for this session. Runs <code>rostr agent draft</code>.</dd>
             </div>
-          ))}
-        </dl>
+            <div class="option-row">
+              <dt><code>/release</code></dt>
+              <dd>Send this session's agent back to the bench. Runs <code>rostr agent release</code>.</dd>
+            </div>
+          </dl>
+        </section>
       )}
-      <pre class="code">{command.example}</pre>
-    </section>
+    </>
   ))}
 </Layout>
 
@@ -240,10 +331,31 @@ rostr key rotate`,
     margin: 0 0 16px;
   }
 
+  /* Quick links: a group label, then that group's commands, which wrap within their own column */
   .toc {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    align-items: start;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .toc .toc-group {
+    padding-top: 5px;
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .toc-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  @media (max-width: 640px) {
+    .toc {
+      grid-template-columns: 1fr;
+    }
   }
 
   .toc a {
@@ -251,6 +363,8 @@ rostr key rotate`,
   }
 
   .toc code {
+    color: var(--text);
+    font-weight: 400;
     display: inline-block;
     padding: 4px 10px;
     border: 1.5px solid var(--border);
@@ -273,7 +387,64 @@ rostr key rotate`,
     max-width: 40em;
   }
 
-  .command-doc h2 code {
+  /* Optional pill next to a command's heading, e.g. for commands the hooks run */
+  .command-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    margin-bottom: 16px;
+  }
+
+  .command-heading h3 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .command-badge-pill {
+    margin-left: auto;
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .command-note {
+    padding: 14px 18px;
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  /* Header that starts each command group: a heavier rule and larger title than the command sections under it.
+     The section above already ends with 56px of padding, so the header adds no top margin of its own. */
+  .group-header {
+    padding-top: 40px;
+    border-top: 2px solid var(--text);
+  }
+
+  .group-header h2 {
+    margin: 0 0 8px;
+    font-size: 36px;
+  }
+
+  .group-header p {
+    margin: 0;
+    max-width: 40em;
+    color: var(--muted);
+    font-size: 18px;
+  }
+
+  /* The group header already separates groups, so the first command under it sits closer and has no divider line */
+  .group-header + .command-doc {
+    padding-top: 40px;
+    border-top: none;
+  }
+
+  .command-doc h3 code {
+    color: var(--text);
     background: none;
     padding: 0;
     font-size: 0.9em;

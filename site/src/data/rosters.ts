@@ -1,4 +1,4 @@
-/** Pre-built rosters, shown on the home page and in the CLI docs. */
+/** Pre-built rosters, shown on the home page, the /rosters page, and in the CLI docs. */
 export const PRESET_ROSTERS = [
   {
     emoji: "💍",
@@ -49,10 +49,18 @@ export const PRESET_ROSTERS = [
     bTeam: ["🐈 Angela", "🧮 Oscar", "🧩 Stanley", "🧶 Phyllis", "🕵️ Creed", "💅 Kelly", "🔥 Ryan", "🥲 Toby"],
   },
   {
+    emoji: "💰",
+    id: "billionaires",
+    name: "Billionaires",
+    source: "Put them to work",
+    aTeam: ["🚀 Musk", "📦 Bezos", "🥽 Zuck", "🤖 Altman", "🧠 Amodei", "🧥 Huang"],
+    bTeam: ["🪟 Gates", "🍔 Buffett", "🎁 Oprah", "🏀 Cuban", "⛵ Ellison", "👜 Arnault", "🎈 Branson", "🥚 Andreessen"],
+  },
+  {
     emoji: "🧑‍💻",
-    id: "cs-all-stars",
-    name: "CS All-Stars",
-    source: "Computer science legends",
+    id: "cs-heroes",
+    name: "CS Heroes",
+    source: "Computer science",
     aTeam: ["🧮 Ada", "🐛 Hopper", "🔐 Turing", "🚀 Hamilton", "📖 Knuth", "🐧 Torvalds"],
     bTeam: ["💾 Ritchie", "🗺️ Dijkstra", "⏰ Lamport", "🧩 Liskov", "📡 Shannon", "🖥️ von Neumann", "🌐 Berners-Lee", "🧵 Thompson"],
   },
@@ -87,5 +95,47 @@ export const PRESET_ROSTERS = [
     source: "Greek mythology",
     aTeam: ["⚡ Zeus", "🦉 Athena", "☀️ Apollo", "🪽 Hermes", "🌙 Artemis", "🔱 Poseidon"],
     bTeam: ["🦚 Hera", "⚔️ Ares", "💘 Aphrodite", "🔨 Hephaestus", "🌾 Demeter", "🍇 Dionysus", "💀 Hades", "🌸 Persephone"],
+  },
+  {
+    emoji: "🔴",
+    id: "kanto",
+    name: "Kanto",
+    source: "Pokémon",
+    aTeam: ["⚡ Pikachu", "🔥 Charmander", "🌱 Bulbasaur", "💧 Squirtle", "🌟 Eevee", "😴 Snorlax"],
+    bTeam: ["🎤 Jigglypuff", "🦆 Psyduck", "👻 Gengar", "🧠 Mewtwo", "🐱 Meowth", "🪨 Onix", "🐟 Magikarp", "🐲 Dragonite"],
+  },
+  {
+    emoji: "🛸",
+    id: "galactica",
+    name: "Galactica",
+    source: "Battlestar Galactica",
+    aTeam: ["🎖️ Adama", "💥 Starbuck", "✈️ Apollo", "🗳️ Roslin", "🧠 Baltar", "🥃 Tigh"],
+    bTeam: ["🪂 Helo", "🦉 Athena", "💣 Boomer", "📊 Gaeta", "📡 Dualla", "🔧 Tyrol", "💃 Six", "🎸 Anders"],
+  },
+  {
+    emoji: "🪽",
+    id: "survey-corps",
+    name: "Survey Corps",
+    source: "Attack on Titan",
+    aTeam: ["🔥 Eren", "🧣 Mikasa", "📘 Armin", "🧹 Levi", "🔬 Hange", "🎖️ Erwin"],
+    bTeam: ["🐴 Jean", "🥔 Sasha", "🏃 Connie", "👑 Historia", "🛡️ Reiner", "💎 Annie", "🐒 Zeke", "🌋 Bertholdt"],
+  },
+  {
+    emoji: "🍥",
+    id: "konoha",
+    name: "Konoha",
+    source: "Naruto",
+    aTeam: ["🍜 Naruto", "⚡ Sasuke", "🌸 Sakura", "📕 Kakashi", "💜 Hinata", "🐦‍⬛ Itachi"],
+    bTeam: ["♟️ Shikamaru", "🏜️ Gaara", "🥋 Rock Lee", "🐸 Jiraiya", "🍶 Tsunade", "👁️ Neji", "🍖 Choji", "🌼 Ino"],
+  },
+  {
+    emoji: "🎲",
+    id: "free-agents",
+    name: "Free Agents",
+    source: "Feeling chaotic?",
+    /** Highlighted in the home page grid with a tag. */
+    featuredTag: "Random",
+    aTeam: ["🧙 Gandalf", "🍄 Mario", "📚 Hermione", "🍵 Picard", "☂️ Totoro", "🐸 Yoda"],
+    bTeam: ["⭐ Kirby", "🍷 Tyrion", "🐻 Dwight", "🧮 Ada", "🔨 Thor", "⚡ Zeus", "🛁 Chihiro", "🚀 Han"],
   },
 ];

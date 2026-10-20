@@ -3,37 +3,64 @@
 ## CLI design
 
 - [ ] Work through the open findings in [`cli-review.md`](cli-review.md) (#3–#15), then delete that file.
-- [ ] Emoji-only mode: show just the emoji, no names (e.g. `🧙 · Fix auth redirect loop`). Needs every member of a
-      roster to have a different emoji.
+- [ ] `rostr use` is now `rostr link` / `rostr unlink` (documented), and setting the default roster moved to
+      `rostr config default`. Still open: a way to see which roster the current project uses.
+- [ ] Keep `create` as a hidden alias for `rostr assemble`, so people who guess `create` still get a roster.
+- [ ] End-to-end encrypt tasks in cloud mode (decided). The CLI encrypts each task with AES-256-GCM using a key
+      derived from the rostr key; the server stores only ciphertext; any machine with the key decrypts, so
+      `rostr list` shows cloud tasks. The site's Privacy section and /privacy page describe this.
+      - Trade-offs: raw API calls return encrypted tasks (dashboards go through `rostr list --json`), the server still
+        sees task length and timing, and a future web dashboard or team rosters would need the key in the browser or
+        shared.
+- [ ] Derive separate keys from the rostr key with HKDF on the client: an auth token sent to the server (which stores
+      only its hash), an encryption key for tasks, and a fingerprint key for repo names. The last two never leave the
+      machine, which is what makes the Privacy section's claims true.
+- [ ] Interactive `rostr assemble` wizard (documented): preset, roster name, emoji, local or cloud, auto-draft. The
+      first run also installs hooks, skill, and slash commands. Agents run the same steps with flags.
+- [ ] Auto-draft setting (`rostr config auto-draft on|off`, documented). Off means sessions start unnamed.
+- [ ] Command groups (documented): roster commands at the top level, `rostr agent draft|release|task`, and
+      `rostr config default|emoji|auto-draft|cloud|key`.
+- [ ] Slash commands `/draft` and `/release`, installed by `rostr assemble`. Claude Code for now; add Codex's later.
+- [ ] `rostr config emoji on|off|only` (documented). `only` shows just the emoji (e.g. `🧙 · Fix auth redirect loop`) and
+      needs every member of a roster to have a different emoji.
 
 ## Project
 
 - [x] Pick a license (MIT).
 - [ ] Finalize the A team and B team for each preset roster.
-- [ ] Make a good icon (the site still uses Astro's default favicon).
+- [ ] Make a few more pre-built rosters (the /rosters page shows them all; the home page shows the first 10).
+- [ ] Design pass on the /rosters page.
+- [ ] Logo and iconography design: the logo, the favicon (the site still uses Astro's default), and icons for the site.
 - [ ] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
 - [ ] Write the agent setup instructions: what an agent reads and does when told "Set up rostr for me by following the
       instructions at https://getrostr.sh".
 
+## Legal
+
+- [ ] Terms of service and a privacy policy before launching the cloud API (the /privacy page explains the design but
+      isn't a formal policy).
+- [ ] Move rostr under Rosebud Labs: the `LICENSE` copyright, the getrostr.sh domain, and the Vercel, Railway, and
+      Cloudflare accounts.
+
 ## CLI build
 
-- [ ] One CLI in Go, built for macOS, Linux, and Windows, used the same way by local and cloud sessions.
+- [ ] One CLI in Go, built for macOS and Linux, used the same way by local and cloud sessions.
 
 ## Cloud auth
 
-- [ ] One secret key per person, no account. `rostr transfer` gets a `rostr_sk_…` key from the server and saves it to
+- [ ] One secret key per person, no account. `rostr config cloud on` gets a `rostr_sk_…` key from the server and saves it to
       `~/.config/rostr/credentials`. The key owns all of that person's rosters and project links.
 - [ ] A machine is in cloud mode whenever it has a key (`credentials` or `ROSTR_KEY`); otherwise everything is local.
       No mixing local and cloud rosters.
-- [ ] `rostr key` prints the key; `rostr key rotate` replaces it.
-- [ ] Server stores only a hash of each key and rate-limits key creation by IP.
+- [ ] `rostr config key` prints the key. No rotation in v1.
+- [ ] Server stores only a hash of each auth token (never the rostr key) and rate-limits key creation by IP.
 - [ ] No recovery in v1: a lost key means lost cloud rosters.
 
 ## Session-start hook
 
-- [ ] Read `session_id` from the hook's JSON input and run `rostr draft --session <id>`.
+- [ ] Read `session_id` from the hook's JSON input and run `rostr agent draft --session <id>`.
 - [ ] Write `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE` so rostr commands the agent runs know their session.
-- [ ] Set the agent's first task from the first prompt (`rostr assign --session <id> "<summary>"`).
+- [ ] Set the agent's first task from the first prompt (`rostr agent task --session <id> "<summary>"`).
 - [ ] Check what Codex's hooks provide: a session ID on start and end, and a way to set env vars for the agent's shell.
 - [ ] Tell the agent to sign anything it sends you outside the session (Slack messages, emails, PR comments, etc.)
       with its name, so you know which agent posted it.
@@ -61,7 +88,7 @@ Write the setup steps for Claude Code on the web and Codex cloud:
 
 ## GitHub
 
-- [ ] Make the repo public so `rostr submit` and the site's "Submit your own" link work.
+- [ ] Make the repo public so the site's "Submit your own" link works.
 - [ ] Polish the README for launch.
 - [ ] Add a contributing guide (`CONTRIBUTING.md`, linked from the README).
 - [ ] Add an issue template and a `roster-submission` label for submitted rosters.
@@ -79,4 +106,5 @@ Write the setup steps for Claude Code on the web and Codex cloud:
 
 ## Future roadmap
 
+- [ ] Windows support (not in v1).
 - [ ] Team rosters: share a roster with teammates (would need a team key on top of per-person keys).

@@ -4,11 +4,15 @@ The rostr API (`api.getrostr.sh`) stores cloud rosters in Postgres. Local roster
 
 Everything an owner has hangs off their key. There are no accounts: the key is the identity.
 
+The server never sees the rostr key itself. The CLI derives three keys from it with HKDF: an auth token (sent to the
+server), a task encryption key, and a repo fingerprint key. Only the auth token ever leaves the user's machine. See
+the site's /privacy page.
+
 ```sql
--- One row per rostr key. The key itself is never stored, only its SHA-256 hash.
+-- One row per rostr key. Only a SHA-256 hash of the derived auth token is stored.
 create table owners (
   id                uuid primary key default gen_random_uuid(),
-  key_hash          text not null unique,
+  auth_token_hash   text not null unique,
   default_roster_id uuid,  -- set after the first roster is created
   created_at        timestamptz not null default now()
 );
@@ -20,7 +24,7 @@ create table rosters (
   id            uuid primary key default gen_random_uuid(),
   owner_id      uuid not null references owners on delete cascade,
   name          text not null,
-  emoji_enabled boolean not null default true,
+  emoji_mode    text not null default 'on',  -- 'on', 'off', or 'only'
   members       jsonb not null,
   created_at    timestamptz not null default now(),
   unique (owner_id, name)
@@ -29,12 +33,14 @@ create table rosters (
 alter table owners
   add foreign key (default_roster_id) references rosters on delete set null;
 
--- Which roster a project uses (`rostr use`). Projects without a link use the owner's default roster.
+-- Which roster a project uses (`rostr link`). Projects without a link use the owner's default roster.
+-- The server never sees repo names: the CLI sends HMAC-SHA256("owner/repo", fingerprint key). The fingerprint key
+-- never leaves the user's machine, so the server can't compute or reverse these.
 create table project_links (
   owner_id  uuid not null references owners on delete cascade,
-  repo      text not null,  -- "owner/repo", from the git remote
+  repo_hash text not null,
   roster_id uuid not null references rosters on delete cascade,
-  primary key (owner_id, repo)
+  primary key (owner_id, repo_hash)
 );
 
 -- One row per draft. Rows are kept after release so a resumed session can ask for its old name back.
@@ -43,10 +49,10 @@ create table drafts (
   roster_id    uuid not null references rosters on delete cascade,
   member_name  text not null,
   session_id   text not null,
-  repo         text,
-  task         text,          -- set by `rostr draft --task` or `rostr assign`
+  repo_hash    text,          -- same keyed hash as project_links
+  task         bytea,         -- AES-256-GCM ciphertext, encrypted on the user's machine; the server can't read it
   drafted_at   timestamptz not null default now(),
-  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts and `rostr assign`
+  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts and `rostr agent task`
   released_at  timestamptz    -- null while the agent is active
 );
 
@@ -60,7 +66,7 @@ create index drafts_session on drafts (session_id, drafted_at desc);
 
 ## Drafting
 
-`rostr draft` runs in one transaction:
+`rostr agent draft` runs in one transaction:
 
 1. **Lock the roster row** (`select ... from rosters where id = $1 for update`). This serializes drafts within one
    roster, so two sessions starting at once can't both pick Gandalf. Contention is per roster, which means one
@@ -75,7 +81,7 @@ The unique indexes back this up: if the logic ever gets it wrong, the insert fai
 
 ## Releasing
 
-`rostr release` (and the session-end hook) sets `released_at = now()` on the active draft.
+`rostr agent release` (and the session-end hook) sets `released_at = now()` on the active draft.
 
 ## Not in the schema
 

@@ -1,5 +1,9 @@
 # CLI review findings (temporary)
 
+`rostr create` has since been renamed `rostr assemble` (with `create` as a hidden alias), and `rostr use` is now
+`rostr link` / `rostr unlink`. Commands are now grouped: `rostr agent draft|release|task` (formerly
+`draft`, `release`, `assign`) and `rostr config …` for settings. The findings below use the old names.
+
 From the subagent's review of the CLI design. Delete this file once each item is decided.
 
 **Done:** #2 (how commands know their session). Hooks get `session_id` in their JSON input at start and end, and

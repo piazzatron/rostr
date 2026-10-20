@@ -1,8 +1,16 @@
 ---
+import { Code } from "astro-expressive-code/components";
 import Layout from "../layouts/Layout.astro";
+import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
 import ClaudeIcon from "../assets/claude.svg";
-import { GITHUB_URL, SUBMIT_ROSTER_URL } from "../consts";
+import { GITHUB_URL } from "../consts";
 import { PRESET_ROSTERS } from "../data/rosters";
+
+// The home page grid shows 10 regular presets, the featured mix, and a "Your own" tile; /rosters shows them all
+const HOME_GRID_ROSTERS = [
+  ...PRESET_ROSTERS.filter((roster) => !("featuredTag" in roster)).slice(0, 10),
+  ...PRESET_ROSTERS.filter((roster) => "featuredTag" in roster),
+];
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
@@ -15,21 +23,26 @@ const ROSTER_MEMBERS = [
 
 const IDLE_MEMBERS = ["Legolas", "Gimli", "Boromir", "Pippin", "Merry", "Balrog"];
 
-const AUTOMATIC_COMMANDS = [
-  { command: "rostr draft", description: "Runs when a session starts. Drafts the next free agent, A team first, and tells it who it is." },
-  { command: "rostr assign", description: "Sets each agent's task from your first prompt, and updates it if the work changes." },
-  { command: "rostr release", description: "Runs when a session ends, or when your agent finishes its work." },
-];
-
-const CONTROL_COMMANDS = [
-  { command: "rostr list", description: "See who's working on what, and who's idle." },
-  { command: "rostr presets", description: "See all the pre-built rosters you can start from." },
-  { command: "rostr use <roster>", description: "Give a project its own roster. Projects without one use your default." },
-  { command: "rostr edit", description: "Add, remove, or rename members, pick your A team, or turn emoji on and off." },
-  { command: "rostr recast", description: "Swap a roster's cast for a new theme, or a random one, without touching your setup." },
-  { command: "rostr transfer", description: "Move your whole setup to the cloud, so cloud sessions can draft too." },
-  { command: "rostr submit <roster>", description: "Made a great roster? Submit it to be considered as a pre-built one." },
-  { command: "rostr disband <roster>", description: "Delete a roster." },
+// Short summaries of the CLI's command groups; each card links to that group in the CLI docs
+const COMMAND_GROUP_CARDS = [
+  {
+    href: "/cli#roster-commands",
+    title: "🎯 Roster commands",
+    description: "Assemble rosters, give projects their own, see who's on what, and edit your cast.",
+    commands: ["assemble", "link", "list", "edit", "presets", "disband"],
+  },
+  {
+    href: "/cli#agent-commands",
+    title: "🤖 Agent commands",
+    description: "Your hooks run these for you. Draft by hand with /draft and /release.",
+    commands: ["agent draft", "agent release", "agent task"],
+  },
+  {
+    href: "/cli#settings",
+    title: "⚙️ Settings",
+    description: "Emoji, auto-draft, cloud, and your default roster.",
+    commands: ["config"],
+  },
 ];
 
 // The "Build on it" dashboard example uses the Smash Bros roster
@@ -47,6 +60,25 @@ const DASHBOARD_IDLE_CHIPS = [...DASHBOARD_ROSTER.aTeam, ...DASHBOARD_ROSTER.bTe
 // Notification titles for the before/after comparison in the "poor human brain" section
 const NOTIFICATIONS_WITHOUT_ROSTR = ["New session"];
 const NOTIFICATIONS_WITH_ROSTR = ["📚 Hermione · Speed up the search API"];
+
+// Terminal examples, rendered with Expressive Code
+const HERO_LIST_EXAMPLE = toTerminalText(
+  [
+    "$ rostr list",
+    `${ANSI_DIM}work · A team: 4 of 6 drafted${ANSI_RESET}`,
+    "",
+    ...ROSTER_MEMBERS.map(
+      (member) => `${member.emoji} ${member.name.padEnd(9)} ${member.task.padEnd(30)} ${member.where.padEnd(12)} ${member.since}`,
+    ),
+    "",
+    `${ANSI_DIM}idle: ${IDLE_MEMBERS.join(", ")}${ANSI_RESET}`,
+  ].join("\n"),
+);
+// Command-only blocks use plain shell (no "$"), so their copy buttons copy runnable commands
+const INSTALL_EXAMPLE = `brew install piazzatron/tap/rostr
+rostr assemble`;
+const API_EXAMPLE = `curl https://api.getrostr.sh/v1/rosters/work \\
+  -H "Authorization: Bearer $ROSTR_KEY"`;
 
 const LIST_JSON_EXAMPLE = `{
   "roster": "work",
@@ -95,18 +127,10 @@ const LIST_JSON_EXAMPLE = `{
       <p class="works-with">
         Works out of the box with <strong>Claude Code</strong> and <strong>Codex</strong>, in local and cloud sessions.
         <br />
-        Runs on <strong>macOS</strong>, <strong>Linux</strong>, and <strong>Windows</strong>.
+        Runs on <strong>macOS</strong> and <strong>Linux</strong>.
       </p>
 
-      <div class="terminal" aria-label="Example output of rostr list">
-        <div class="terminal-bar"><span></span><span></span><span></span></div>
-        <pre><span class="prompt">$</span> rostr list
-<span class="dim">fellowship · A team: 4 of 6 drafted</span>
-{ROSTER_MEMBERS.map((member) => `\n${member.emoji} ${member.name.padEnd(9)} ${member.task.padEnd(30)} ${member.where.padEnd(12)} ${member.since}`).join("")}
-
-<span class="dim">idle: {IDLE_MEMBERS.join(", ")}</span>
-</pre>
-      </div>
+      <Code code={HERO_LIST_EXAMPLE} lang="ansi" frame="terminal" />
     </section>
 
     <!-- Why -->
@@ -166,21 +190,20 @@ const LIST_JSON_EXAMPLE = `{
       <p class="section-lede">rostr is a small CLI plus a skill that teaches your agent how to use it.</p>
       <ol class="steps">
         <li>
-          <h3>Pick a roster</h3>
-          <p>Run <code>rostr create</code> and choose one of the pre-built rosters, or bring your own list of names.</p>
+          <h3>Assemble your roster</h3>
+          <p>Run <code>rostr assemble</code> and choose one of the pre-built rosters, or bring your own list of names.</p>
         </li>
         <li>
-          <h3>Every session gets drafted</h3>
+          <h3>Sessions draft agents</h3>
           <p>
             When a session starts, a hook drafts the next available name and tells the agent who it is. The name goes
-            at the front of the session title: <code>🧙 Gandalf · Fix auth redirect loop</code>.
+            at the front of the session title: <span class="session-title">🧙 Gandalf · Fix auth redirect loop</span>.
           </p>
         </li>
         <li>
-          <h3>Agents go back to the bench</h3>
+          <h3>Done? Back to the bench</h3>
           <p>
-            The rostr skill has your agent release its name when the work is done, so the same familiar faces keep
-            coming back and your roster stays small.
+            When a session ends, its agent is free for the next one.
           </p>
         </li>
       </ol>
@@ -189,68 +212,17 @@ const LIST_JSON_EXAMPLE = `{
       <figure class="screenshot-placeholder">
         <span>Screenshot: named sessions in the Claude Code sidebar</span>
       </figure>
-    </section>
 
-    <!-- Local and cloud -->
-    <section class="section">
-      <h2>Works locally and in the cloud</h2>
-      <p class="section-lede">
-        rostr names your agents wherever they run: in a terminal on your laptop, or in a cloud session like Claude Code
-        on the web or Codex cloud.
-      </p>
-      <div class="cards">
-        <div class="card">
-          <h3>💻 Just your machine</h3>
-          <p>
-            Everything lives on disk. Drafting is instant, there's no account to make, and nothing goes over the
-            network.
-          </p>
-        </div>
-        <div class="card">
-          <h3>☁️ Cloud agents too</h3>
-          <p>
-            Run <code>rostr transfer</code> once and your setup moves to the rostr API at <code>api.getrostr.sh</code>.
-            From then on, every session, on your laptop or in the cloud, drafts from the same rosters, so no two agents
-            end up with the same name.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Commands -->
-    <section class="section">
-      <h2>Commands</h2>
-      <p class="section-lede">You only need to run one command. Everything else happens on its own, with more control there when you want it.</p>
-
-      <div class="command-hero">
-        <span class="command-badge">⭐ The only one you need</span>
-        <pre class="code"><span class="prompt">$</span> rostr create</pre>
-        <p>
-          rostr picks a random roster for you (or choose one with <code>--preset</code>), and every session you start from
-          then on gets drafted automatically.
-        </p>
-      </div>
-
-      <h3 class="command-group">⚙️ Runs automatically</h3>
-      <p class="command-group-lede">Your hooks and the rostr skill run these for you.</p>
-      <dl class="commands commands-automatic">
-        {AUTOMATIC_COMMANDS.map((item) => (
-          <div class="command-row">
-            <dt><code>{item.command}</code></dt>
-            <dd>{item.description}</dd>
-          </div>
+      <p class="section-lede">The commands, at a glance:</p>
+      <div class="group-cards">
+        {COMMAND_GROUP_CARDS.map((card) => (
+          <a class="card group-card" href={card.href}>
+            <h3>{card.title}</h3>
+            <p>{card.description}</p>
+            <span class="group-card-commands">{card.commands.map((command) => <code>{command}</code>)}</span>
+          </a>
         ))}
-      </dl>
-
-      <h3 class="command-group">🎛️ When you want more control</h3>
-      <dl class="commands">
-        {CONTROL_COMMANDS.map((item) => (
-          <div class="command-row">
-            <dt><code>{item.command}</code></dt>
-            <dd>{item.description}</dd>
-          </div>
-        ))}
-      </dl>
+      </div>
       <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
     </section>
 
@@ -258,13 +230,13 @@ const LIST_JSON_EXAMPLE = `{
     <section class="section">
       <h2>Squad up</h2>
       <p class="section-lede">
-        rostr comes with fun pre-built rosters, or you can make your own from any list of names. Hover over a roster to
-        meet its A team and B team. Every member gets an emoji; if that's not your thing, turn them off with
-        <code>rostr edit</code>.
+        Pick a pre-built roster or assemble your own. Every roster has an A team and a B team (hover to meet them), and
+        every agent gets its own emoji, which you can turn off if that's not your thing.
       </p>
       <ul class="rosters">
-        {PRESET_ROSTERS.map((roster) => (
-          <li tabindex="0">
+        {HOME_GRID_ROSTERS.map((roster) => (
+          <li tabindex="0" class:list={{ "roster-featured": "featuredTag" in roster }}>
+            {"featuredTag" in roster && <span class="roster-tag">{roster.featuredTag}</span>}
             <span class="roster-emoji">{roster.emoji}</span>
             <span>
               <strong>{roster.name}</strong>
@@ -297,26 +269,49 @@ const LIST_JSON_EXAMPLE = `{
         </li>
       </ul>
       <p class="docs-link">
-        Made a roster you love? <a href={SUBMIT_ROSTER_URL}>Submit your own →</a>
+        <a href="/rosters">See all pre-built rosters + submit your own →</a>
       </p>
 
       <div class="cards team-cards">
         <div class="card">
           <h3>🅰️ A team, B team</h3>
           <p>
-            Twenty names are too many to get to know, so every roster has a small A team: six by default, picked with
-            <code>rostr edit</code>. rostr always drafts from the A team first and only calls up the B team when all your
+            Twenty names are too many to get to know, so every roster has a small A team: six by default, picked
+            with <code>rostr edit</code>. rostr always drafts from the A team first and only calls up the B team when all your
             starters are busy.
           </p>
         </div>
         <div class="card">
           <h3>📁 A roster per project</h3>
           <p>
-            Make as many rosters as you like and give each project its own with <code>rostr use</code>. The Fellowship
+            Make as many rosters as you like and give each project its own with <code>rostr link</code>. The Fellowship
             works on rostr, the Smash Bros work on your app, and a name tells you the project as well as the task.
           </p>
         </div>
       </div>
+    </section>
+
+    <!-- Local and cloud -->
+    <section class="section" id="local-and-cloud">
+      <h2>Local and Cloud Rosters</h2>
+      <dl class="modes">
+        <div>
+          <dt>💻 Local</dt>
+          <dd>The default. Nothing leaves your machine.</dd>
+        </div>
+        <div>
+          <dt>☁️ Cloud</dt>
+          <dd>
+            For when you also run agents in the cloud. Every session shares one roster, with no account, just a key. Task
+            and repo metadata are end-to-end encrypted. <a class="accent-link" href="/privacy"
+              >Learn more about privacy →</a
+            >
+          </dd>
+        </div>
+      </dl>
+      <p class="modes-note">
+        Choose during <code>rostr assemble</code>, switch any time with <code>rostr config cloud</code>.
+      </p>
     </section>
 
     <!-- Build on it -->
@@ -363,15 +358,17 @@ const LIST_JSON_EXAMPLE = `{
       <div class="cards">
         <div class="card">
           <h3>From the CLI</h3>
-          <pre class="code"><span class="prompt">$</span> rostr list --json</pre>
+          <Code code="rostr list --json" lang="sh" />
           <h3 class="build-subhead">From the API</h3>
-          <pre class="code"><span class="prompt">$</span> curl https://api.getrostr.sh/v1/rosters/work \
-    -H "Authorization: Bearer $ROSTR_KEY"</pre>
-          <p class="build-note">Both return the same JSON.</p>
+          <Code code={API_EXAMPLE} lang="sh" />
+          <p class="build-note">
+            Both return the same JSON, except that the API's tasks are end-to-end encrypted. Decrypt them with your rostr
+            key, or let <code>rostr list --json</code> do it for you.
+          </p>
         </div>
         <div class="card">
           <h3>Response</h3>
-          <pre class="code">{LIST_JSON_EXAMPLE}</pre>
+          <Code code={LIST_JSON_EXAMPLE} lang="json" />
         </div>
       </div>
     </section>
@@ -390,10 +387,8 @@ const LIST_JSON_EXAMPLE = `{
         </div>
         <div class="card">
           <h3>Do it yourself</h3>
-          <p>Install with Homebrew, create a roster, then install the hooks and skill for your agents.</p>
-          <pre class="code"><span class="prompt">$</span> brew install piazzatron/tap/rostr
-<span class="prompt">$</span> rostr create work --preset fellowship
-<span class="prompt">$</span> rostr setup <span class="dim"># hooks + skill</span></pre>
+          <p>Install with Homebrew, then assemble your roster. It walks you through the choices and installs everything.</p>
+          <Code code={INSTALL_EXAMPLE} lang="sh" />
         </div>
       </div>
     </section>

@@ -34,8 +34,9 @@ const { title, description } = Astro.props;
     </main>
 
     <footer class="footer">
-      <span>Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a></span>
+      <span>Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a> · © {new Date().getFullYear()} Rosebud Labs</span>
       <span class="footer-links">
+        <a href="/privacy">Privacy</a>
         <a href={GITHUB_URL}>GitHub</a>
         <a href={X_URL}>X</a>
       </span>
@@ -51,8 +52,6 @@ const { title, description } = Astro.props;
     --muted: #6b675f;
     --border: #e6e2da;
     --accent: #d9480f;
-    --terminal-bg: #1c1b19;
-    --terminal-text: #ece8df;
     --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
@@ -65,7 +64,6 @@ const { title, description } = Astro.props;
       --muted: #9c978d;
       --border: #2e2c29;
       --accent: #ff7a3d;
-      --terminal-bg: #0d0c0b;
     }
   }
 
@@ -86,12 +84,34 @@ const { title, description } = Astro.props;
     color: inherit;
   }
 
+  /* Inline commands stand out in the accent color */
   code {
     font-family: var(--mono);
     font-size: 0.88em;
-    background: color-mix(in srgb, var(--text) 7%, transparent);
+    font-weight: 600;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
     padding: 0.1em 0.35em;
     border-radius: 4px;
+  }
+
+  /* An example session title, styled as plain UI text rather than a command */
+  .session-title {
+    padding: 0.1em 0.45em;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Code inside terminal windows keeps the terminal's own colors */
+  .expressive-code code {
+    font-weight: inherit;
+    color: inherit;
+    background: none;
+    padding: 0;
   }
 
   h1,
@@ -273,42 +293,6 @@ const { title, description } = Astro.props;
     margin: 16px 0 48px;
   }
 
-  .terminal {
-    background: var(--terminal-bg);
-    color: var(--terminal-text);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.35);
-  }
-
-  .terminal-bar {
-    display: flex;
-    gap: 6px;
-    padding: 12px 14px;
-  }
-
-  .terminal-bar span {
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background: #3a3834;
-  }
-
-  .terminal pre {
-    margin: 0;
-    padding: 4px 20px 22px;
-    overflow-x: auto;
-    font: 14px/1.7 var(--mono);
-  }
-
-  .prompt {
-    color: var(--accent);
-  }
-
-  .dim {
-    color: #8a857b;
-  }
-
   /* Sections */
   .section {
     padding: 56px 0;
@@ -403,88 +387,6 @@ const { title, description } = Astro.props;
 
   .card p:last-child {
     margin-bottom: 0;
-  }
-
-  .code {
-    margin: 0;
-    padding: 16px;
-    background: var(--terminal-bg);
-    color: var(--terminal-text);
-    border-radius: 8px;
-    overflow-x: auto;
-    font: 13px/1.7 var(--mono);
-  }
-
-  .commands {
-    margin: 0;
-  }
-
-  .command-row {
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    gap: 16px;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .command-row dt code {
-    background: none;
-    padding: 0;
-    font-weight: 600;
-  }
-
-  .command-row dd {
-    margin: 0;
-    color: var(--muted);
-  }
-
-  /* The one command people run themselves */
-  .command-hero {
-    position: relative;
-    margin: 8px 0 40px;
-    padding: 28px 24px 20px;
-    background: var(--surface);
-    border: 2px solid var(--accent);
-    border-radius: 14px;
-    box-shadow: 4px 4px 0 var(--accent);
-  }
-
-  .command-hero .code {
-    font-size: 16px;
-    white-space: pre-wrap;
-  }
-
-  .command-hero p {
-    margin: 14px 0 0;
-    color: var(--muted);
-  }
-
-  .command-badge {
-    position: absolute;
-    top: -14px;
-    left: 20px;
-    padding: 3px 12px;
-    background: var(--accent);
-    color: white;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .command-group {
-    margin: 32px 0 4px;
-    font-size: 19px;
-  }
-
-  .command-group-lede {
-    margin: 0 0 4px;
-    color: var(--muted);
-    font-size: 15px;
-  }
-
-  /* Automatic commands are dimmed: they're there to explain, not to run */
-  .commands-automatic .command-row {
-    opacity: 0.7;
   }
 
   /* Before/after notification mockup in the "poor human brain" section */
@@ -710,6 +612,71 @@ const { title, description } = Astro.props;
     font-size: 15px;
   }
 
+  .accent-link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  /* Command group cards on the home page, each linking to its group in the CLI docs */
+  .group-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .group-card {
+    display: block;
+    text-decoration: none;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .group-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  .group-card-commands {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Local and cloud: two short labeled lines instead of cards, so the section scans quickly */
+  .modes {
+    display: grid;
+    gap: 12px;
+    margin: 0 0 20px;
+    max-width: 44em;
+  }
+
+  .modes div {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 12px;
+  }
+
+  .modes dt {
+    font-weight: 700;
+  }
+
+  .modes dd {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .modes-note {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .modes div {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+  }
+
   .docs-link {
     margin: 20px 0 0;
     font-weight: 600;
@@ -763,6 +730,37 @@ const { title, description } = Astro.props;
   .rosters li:hover .roster-emoji,
   .rosters li:focus-visible .roster-emoji {
     animation: wiggle 0.5s ease;
+  }
+
+  /* A featured roster (Free Agents): accent outline and tint, a corner tag, and an emoji that rolls on hover */
+  .rosters li.roster-featured {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  }
+
+  .roster-tag {
+    position: absolute;
+    top: -9px;
+    right: 12px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .rosters li.roster-featured:hover .roster-emoji,
+  .rosters li.roster-featured:focus-visible .roster-emoji {
+    animation: roll 0.6s ease;
+  }
+
+  @keyframes roll {
+    to {
+      transform: rotate(360deg) scale(1.1);
+    }
   }
 
   /* A team / B team popover, shown on hover or keyboard focus. It opens up and to the right, overlapping the top of
@@ -879,6 +877,7 @@ const { title, description } = Astro.props;
     font-size: 24px;
   }
 
+
   .roster-custom {
     border-style: dashed !important;
   }
@@ -911,9 +910,5 @@ const { title, description } = Astro.props;
       padding-top: 48px;
     }
 
-    .command-row {
-      grid-template-columns: 1fr;
-      gap: 4px;
-    }
   }
 </style>
