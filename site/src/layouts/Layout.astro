@@ -404,15 +404,41 @@ const { title, description } = Astro.props;
     margin-top: 64px;
   }
 
-  /* The terminal fades up into place on load, landing before Claude's notification slides in */
-  .hero-terminal > .expressive-code {
-    animation: terminal-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.25s both;
+  /* On load, the hero's text fades up line by line, then the terminal, then Claude's notification slides in */
+  .hero > :is(h1, .hero-subtitle, .lede, .cta-title, .cta, .cta-alt) {
+    --rise: 12px;
+    animation: rise-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 
-  @keyframes terminal-in {
+  .hero > .hero-subtitle {
+    animation-delay: 70ms;
+  }
+
+  .hero > .lede {
+    animation-delay: 140ms;
+  }
+
+  .hero > .cta-title {
+    animation-delay: 210ms;
+  }
+
+  .hero > .cta {
+    animation-delay: 280ms;
+  }
+
+  .hero > .cta-alt {
+    animation-delay: 350ms;
+  }
+
+  .hero-terminal > .expressive-code {
+    --rise: 24px;
+    animation: rise-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s both;
+  }
+
+  @keyframes rise-in {
     from {
       opacity: 0;
-      transform: translateY(24px);
+      transform: translateY(var(--rise));
     }
   }
 
@@ -422,8 +448,8 @@ const { title, description } = Astro.props;
 
   .hero-notification-claude {
     animation:
-      notification-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.15) 1.2s both,
-      notification-float 3.2s ease-in-out 1.7s infinite;
+      notification-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.15) 1.3s both,
+      notification-float 3.2s ease-in-out 1.8s infinite;
   }
 
   .hero-notification-slack {
@@ -456,6 +482,7 @@ const { title, description } = Astro.props;
 
   @media (prefers-reduced-motion: reduce) {
     .hero-notification,
+    .hero > :is(h1, .hero-subtitle, .lede, .cta-title, .cta, .cta-alt),
     .hero-terminal > .expressive-code {
       animation: none !important;
     }

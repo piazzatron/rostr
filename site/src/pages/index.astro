@@ -479,8 +479,9 @@ const LIST_JSON_EXAMPLE = `{
       });
     });
 
-    // Every 1.3s the hero's status line ("🧙 Gandalf is on CI.") deals a new agent and task. The name springs in from
-    // below while the old one slides out; the task just flicks over. With reduced motion both simply swap.
+    // Every 1.3s the hero's status line ("🧙 Gandalf is on CI.") deals a new agent and task, starting once the hero has
+    // finished fading in. The name springs in from below while the old one slides out; the task just flicks over. With
+    // reduced motion both simply swap.
     const flipper = document.querySelector<HTMLElement>(".name-flipper");
     const taskText = document.querySelector<HTMLElement>(".task-text");
     if (flipper && taskText) {
@@ -532,7 +533,7 @@ const LIST_JSON_EXAMPLE = `{
       // The name slot is as wide as its current name, so " is on" sits right after it
       flipper.style.width = `${(flipper.firstElementChild as HTMLElement).offsetWidth}px`;
 
-      setInterval(() => {
+      const deal = () => {
         const outgoing = flipper.lastElementChild as HTMLElement;
         const incoming = document.createElement("span");
         fillName(incoming, dealName());
@@ -550,7 +551,11 @@ const LIST_JSON_EXAMPLE = `{
         taskText.classList.remove("is-swapping");
         void taskText.offsetWidth; // restart the task's animation
         taskText.classList.add("is-swapping");
-      }, 1300);
+      };
+      setTimeout(() => {
+        deal();
+        setInterval(deal, 1300);
+      }, 2600);
     }
 
     // The hero's Slack notification waits until the visitor scrolls a little

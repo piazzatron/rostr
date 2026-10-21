@@ -24,6 +24,19 @@
     display: block;
     width: 100%;
     height: 100%;
+    animation: grid-in 1.2s ease both;
+  }
+
+  @keyframes grid-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    canvas {
+      animation: none;
+    }
   }
 
 </style>
@@ -65,6 +78,7 @@
     let nextDraft = 0;
     let visible = true;
     let frame = 0;
+    let waveStart = 0; // when the first sweep began, on load
 
     const random = (min: number, max: number) => min + Math.random() * (max - min);
     const overlaps = (a: Rect, b: Rect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
@@ -89,18 +103,28 @@
       originX = (width - (columns - 1) * PITCH) / 2;
       originY = (height - (rows - 1) * PITCH) / 2;
 
+      // The hero's text by layout position, which ignores its fade-up on load; the nav doesn't move, so it's measured
       const pad = 10;
-      const nav = document.querySelector(".nav");
-      textRects = [...hero!.children, ...(nav ? [nav] : [])]
-        .filter((child) => child !== grid && !child.classList.contains("expressive-code"))
-        .map((child) => child.getBoundingClientRect())
-        .filter((rect) => rect.width > 0)
-        .map((rect) => ({
-          left: rect.left - box.left - pad,
-          top: rect.top - box.top - pad,
-          right: rect.right - box.left + pad,
-          bottom: rect.bottom - box.top + pad,
+      const nav = document.querySelector(".nav")?.getBoundingClientRect();
+      const blocks = [...hero!.children]
+        .filter((child): child is HTMLElement => child instanceof HTMLElement && child !== grid)
+        .map((child) => ({
+          left: child.offsetLeft - grid!.offsetLeft,
+          top: child.offsetTop - grid!.offsetTop,
+          right: child.offsetLeft - grid!.offsetLeft + child.offsetWidth,
+          bottom: child.offsetTop - grid!.offsetTop + child.offsetHeight,
         }));
+      if (nav) {
+        blocks.push({
+          left: nav.left - box.left,
+          top: nav.top - box.top,
+          right: nav.right - box.left,
+          bottom: nav.bottom - box.top,
+        });
+      }
+      textRects = blocks
+        .filter((rect) => rect.right > rect.left)
+        .map((rect) => ({ left: rect.left - pad, top: rect.top - pad, right: rect.right + pad, bottom: rect.bottom + pad }));
 
       // Drafted squares from the old layout don't line up anymore
       agents.clear();
@@ -146,10 +170,14 @@
 
 
     // The wave: a soft gray band that sweeps diagonally across the bench, then rests before the next sweep
+    // How far the band's middle travels in a sweep, measured along x + y * WAVE_SLANT
+    const waveSpan = () => width + height * WAVE_SLANT + 2 * WAVE_WIDTH;
+
     function drawWave(now: number) {
-      const phase = (now % (WAVE_SWEEP_MS + WAVE_GAP_MS)) / WAVE_SWEEP_MS;
-      if (phase > 1) return;
-      const span = width + height * WAVE_SLANT + 2 * WAVE_WIDTH;
+      const elapsed = now - waveStart;
+      const phase = (elapsed % (WAVE_SWEEP_MS + WAVE_GAP_MS)) / WAVE_SWEEP_MS;
+      if (elapsed < 0 || phase > 1) return;
+      const span = waveSpan();
       const front = -WAVE_WIDTH + phase * span; // where the band's middle is, measured along x + y * WAVE_SLANT
       ctx!.fillStyle = colors.muted;
       const peak = darkMode.matches ? 0.45 : 0.4;
@@ -206,6 +234,7 @@
           agents.delete(index);
           continue;
         }
+        if (age < 0) continue; // waiting for the first sweep to reach it
 
         // Each pulse snaps on and decays to a faint glow until the next; a released square fades out quickly
         const beat = (age % agent.period) / agent.period;
@@ -242,13 +271,23 @@
       return Math.min(10, Math.max(4, Math.round(columns * rows * 0.0035)));
     }
 
-    // Start with the grid already at its usual number of drafted squares, rather than filling it up
+    // Start with the usual number of drafted squares, rather than filling the grid up. On load, the first sweep calls
+    // them up: each starts pulsing as the wave reaches it, and the regular drafting begins once the sweep is done.
     function start() {
       cancelAnimationFrame(frame);
       layout();
       const now = performance.now();
+      waveStart ||= now + 200;
       for (let i = 0; i < 40 && agents.size < draftTarget(); i++) draft(now - random(0, 2000));
       nextDraft = now + random(700, 1800);
+      if (!reducedMotion.matches && now < waveStart + WAVE_SWEEP_MS) {
+        for (const agent of agents.values()) {
+          const reached = waveStart + ((agent.x + agent.y * WAVE_SLANT + WAVE_WIDTH) / waveSpan()) * WAVE_SWEEP_MS;
+          agent.end += Math.max(reached, now) - agent.start;
+          agent.start = Math.max(reached, now);
+        }
+        nextDraft = waveStart + WAVE_SWEEP_MS;
+      }
       if (reducedMotion.matches) {
         // One still frame
         for (const agent of agents.values()) agent.end = Infinity;
