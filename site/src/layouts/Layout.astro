@@ -707,15 +707,16 @@ const { title, description } = Astro.props;
     line-height: 1.4;
   }
 
-  /* Example dashboard in the "Build on it" section: something a user built, so it has its own look (flat, strong
-     purple, lime for working) in fixed colors, like a screenshot, the same in both themes */
+  /* Example dashboard in the "Build on it" section: something a user built, so it has its own look (flat, pale
+     lavender with purple accents) in fixed colors, like a screenshot, the same in both themes */
   .dashboard {
-    --dash-bg: #5b34e6;
-    --dash-card: #6d4af2;
-    --dash-deep: #4a26cc;
-    --dash-ink: #ffffff;
-    --dash-soft: #d4caff;
-    --dash-lime: #c6f24e;
+    --dash-bg: #f2efff;
+    --dash-card: #ffffff;
+    --dash-deep: #e7e1ff;
+    --dash-ink: #1f1842;
+    --dash-soft: #6e64a3;
+    --dash-accent: #5b34e6;
+    --dash-accent-soft: #e5ddff;
     margin: 0 0 32px;
   }
 
@@ -738,14 +739,14 @@ const { title, description } = Astro.props;
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: rgb(255 255 255 / 0.25);
+    background: #cfc5f7;
   }
 
   .dashboard-url {
     margin-left: 12px;
     padding: 2px 12px;
     border-radius: 999px;
-    background: rgb(255 255 255 / 0.12);
+    background: var(--dash-card);
     color: var(--dash-soft);
     font: 12px var(--mono);
   }
@@ -802,8 +803,8 @@ const { title, description } = Astro.props;
     margin-left: auto;
     padding: 2px 8px;
     border-radius: 999px;
-    background: var(--dash-lime);
-    color: #24104f;
+    background: var(--dash-accent-soft);
+    color: var(--dash-accent);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -835,7 +836,7 @@ const { title, description } = Astro.props;
 
   .dashboard-bench .chip {
     border: 0;
-    background: rgb(255 255 255 / 0.14);
+    background: var(--dash-card);
     color: var(--dash-ink);
   }
 
