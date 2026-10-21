@@ -15,8 +15,28 @@ const HOME_GRID_ROSTERS = [
 // On phones the grid is trimmed to these presets plus the "Your own" tile
 const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires"];
 
-// Every member of every preset roster, for the hero's flipping name
-const HERO_FLIPPER_NAMES = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam, ...roster.bTeam]))];
+// The preset roster members easy to place on their own, for the hero's flipping name. Names that read as a common
+// first name, a surname, or a plain word ("Jim", "Brown", "Data") are left out
+const HERO_FLIPPER_NAMES = [
+  ...["🧙 Gandalf", "💍 Frodo", "🌱 Samwise", "👑 Aragorn", "🏹 Legolas", "🪓 Gimli", "✨ Galadriel", "👁️ Sauron", "🐟 Gollum"],
+  ...["⚡ Harry", "📚 Hermione", "🧙‍♂️ Dumbledore", "🧪 Snape", "🐉 Hagrid"],
+  ...["🍄 Mario", "👻 Luigi", "🗡️ Link", "⭐ Kirby", "🦖 Yoshi", "🦍 Donkey Kong", "🐢 Bowser"],
+  ...["🐐 Jordan", "👑 LeBron", "🐍 Kobe", "🦈 Shaq"],
+  ...["🍩 Leia", "🐻 Chewie", "🐸 Yoda", "🤖 R2-D2", "🥇 C-3PO", "🏜️ Obi-Wan"],
+  ...["🐻 Dwight"],
+  ...["🚀 Musk", "📦 Bezos", "🥽 Zuck", "🤖 Altman", "🧠 Amodei", "🪟 Gates", "🍔 Buffett", "🎁 Oprah"],
+  ...["🧮 Ada", "🔐 Turing", "📖 Knuth", "🐧 Torvalds", "🗺️ Dijkstra"],
+  ...["🦾 Iron Man", "🔨 Thor", "💚 Hulk", "🕷️ Black Widow", "🕸️ Spider-Man", "🐆 Black Panther"],
+  ...["🍵 Picard", "⚔️ Worf"],
+  ...["🗡️ Arya", "🍷 Tyrion", "🐉 Daenerys", "🦁 Cersei", "🚪 Hodor"],
+  ...["☂️ Totoro", "🛁 Chihiro", "🧹 Kiki", "🐠 Ponyo"],
+  ...["⚡ Zeus", "🦉 Athena", "🪽 Hermes", "🔱 Poseidon", "💘 Aphrodite", "💀 Hades"],
+  ...["⚡ Pikachu", "🔥 Charmander", "🌱 Bulbasaur", "💧 Squirtle", "😴 Snorlax", "🦆 Psyduck", "🧠 Mewtwo"],
+  ...["🍜 Naruto", "⚡ Sasuke", "📕 Kakashi"],
+  ...["🦄 Ohtani", "🧢 Jeter", "🎯 Ichiro"],
+  ...["🐐 Brady", "🪄 Mahomes", "🎉 Gronk"],
+  ...["👑 Gretzky", "🧒 Crosby", "🚨 Ovechkin"],
+];
 // What the hero's flipping agent is on: "🧙 Gandalf is on CI."
 // Kept short so the status fits on the same line as "Remember who's doing what." on desktop
 const HERO_STATUS_TASKS = ["CI", "billing", "auth", "the docs", "the API", "dark mode", "tests", "search", "perf", "deploys", "logging", "caching"];
