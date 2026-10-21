@@ -34,13 +34,18 @@ const { title, description } = Astro.props;
     </main>
 
     <footer class="footer">
-      <span>Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a> · © {new Date().getFullYear()} Rosebud Labs</span>
-      <span class="footer-links">
+      <a class="wordmark footer-wordmark" href="/">rostr</a>
+      <nav class="footer-links" aria-label="Footer">
         <a href="/privacy-policy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href={GITHUB_URL}>GitHub</a>
         <a href={X_URL}>X</a>
-      </span>
+      </nav>
+      <p class="footer-credit">
+        Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a>{" "}
+        <span class="footer-separator">·</span>{" "}
+        <span class="footer-copyright">© {new Date().getFullYear()} Rosebud Labs</span>
+      </p>
     </footer>
   </body>
 </html>
@@ -70,6 +75,12 @@ const { title, description } = Astro.props;
 
   * {
     box-sizing: border-box;
+  }
+
+  /* Stop iOS Safari from enlarging small text on its own, which pushes text like the number circles out of their boxes */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
@@ -243,7 +254,6 @@ const { title, description } = Astro.props;
   .name-flipper {
     position: relative;
     display: inline-block;
-    width: 4.6em;
     transition: width 0.2s ease;
     height: 1.5em;
     padding-top: 0.2em;
@@ -261,6 +271,11 @@ const { title, description } = Astro.props;
     position: absolute;
     top: 0.2em;
     left: 0;
+  }
+
+  /* A name on its own, like the first one before the script runs, stays in the flow so the slot fits it */
+  .name-flipper > span:only-child {
+    position: static;
   }
 
   /* The landing is a light spring (damping ratio 0.55, sampled into linear()): it overshoots by about an eighth of a
@@ -598,6 +613,7 @@ const { title, description } = Astro.props;
     color: white;
     font-weight: 700;
     font-size: 14px;
+    line-height: 1;
   }
 
   .steps h3 {
@@ -608,6 +624,23 @@ const { title, description } = Astro.props;
   .steps p {
     margin: 0;
     color: var(--muted);
+  }
+
+  /* On phones the steps stack, so each number sits beside its heading, like the reasons list */
+  @media (max-width: 640px) {
+    .steps li {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      column-gap: 14px;
+    }
+
+    .steps li::before {
+      grid-row: span 2;
+    }
+
+    .steps h3 {
+      margin-top: 3px;
+    }
   }
 
 
@@ -669,6 +702,7 @@ const { title, description } = Astro.props;
     color: white;
     font-size: 13px;
     font-weight: 700;
+    line-height: 1;
   }
 
   .value-list h3 {
@@ -1318,20 +1352,58 @@ const { title, description } = Astro.props;
   }
 
   /* Inset by the page's side padding, so its top border lines up with the section dividers */
+  /* Footer: the wordmark and quiet links on one row, then the credit and copyright on a small line beneath */
   .footer {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 14px 24px;
     width: calc(100% - 48px);
     max-width: 912px;
-    padding: 32px 0 48px;
+    padding: 40px 0 56px;
     border-top: 1px solid var(--border);
     color: var(--muted);
-    font-size: 15px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .footer-wordmark {
+    justify-self: start;
+    font-size: 17px;
+    color: var(--text);
   }
 
   .footer-links {
     display: flex;
-    gap: 20px;
+    flex-wrap: wrap;
+    gap: 24px;
+  }
+
+  .footer-links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .footer-credit {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .footer-copyright {
+    white-space: nowrap;
+  }
+
+  .footer-credit a {
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .footer-credit a:hover,
+  .footer-links a:hover {
+    color: var(--accent);
   }
 
   @media (max-width: 640px) {
@@ -1343,13 +1415,17 @@ const { title, description } = Astro.props;
       padding-top: 48px;
     }
 
-    .footer {
-      flex-direction: column;
-      gap: 12px;
+    .footer-links {
+      gap: 16px;
     }
 
-    .footer-links {
-      flex-wrap: wrap;
+    /* The copyright gets its own line, so no separator */
+    .footer-separator {
+      display: none;
+    }
+
+    .footer-copyright {
+      display: block;
     }
 
   }
