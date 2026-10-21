@@ -25,18 +25,17 @@ var hookEvents = []struct {
 	event      string
 	matcher    string
 	subcommand string
-	async      bool // runs in the background, so Claude doesn't wait on it
 }{
-	{"SessionStart", "", "session-start", false},
-	{"UserPromptSubmit", "", "prompt", false},
-	{"Stop", "", "title", false},
-	{"PostToolUse", "mcp__claude-code-remote__set_session_title", "title-set", true},
-	{"SessionEnd", "", "session-end", false},
+	{"SessionStart", "", "session-start"},
+	{"UserPromptSubmit", "", "prompt"},
+	{"PostToolUse", RemoteTitleTool + "|" + LocalTitleTool + "|Bash", "title-set"},
+	{"SessionEnd", "", "session-end"},
 }
 
 // permissions are pre-approved so the draft step's instructions don't stop on a permission prompt.
 var permissions = []string{
-	"mcp__claude-code-remote__set_session_title",
+	RemoteTitleTool,
+	LocalTitleTool,
 	"Bash(rostr agent task:*)",
 }
 
@@ -127,8 +126,8 @@ func installSettings(path string) (bool, error) {
 
 	changed := false
 
-	// Hooks: drop rostr hooks that don't match the current set (older installs ran the title step, and before that the
-	// prompt hook, in the background on UserPromptSubmit), then add one entry per event that's missing its rostr hook
+	// Hooks: drop rostr hooks that don't match the current set (older installs ran a title step on Stop, or in the
+	// background on UserPromptSubmit), then add one entry per event that's missing its rostr hook
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
@@ -144,9 +143,6 @@ func installSettings(path string) (bool, error) {
 			continue
 		}
 		hook := map[string]any{"type": "command", "command": HookCommand(h.subcommand)}
-		if h.async {
-			hook["async"] = true
-		}
 		group := map[string]any{"hooks": []any{hook}}
 		if h.matcher != "" {
 			group["matcher"] = h.matcher
@@ -304,9 +300,9 @@ func isRostrHook(hook map[string]any) bool {
 func isCurrentRostrHook(event, matcher string, hook map[string]any) bool {
 	command, _ := hook["command"].(string)
 	_, asyncRewake := hook["asyncRewake"]
-	async, _ := hook["async"].(bool)
+	_, async := hook["async"]
 	for _, h := range hookEvents {
-		if h.event == event && h.matcher == matcher && command == HookCommand(h.subcommand) && async == h.async && !asyncRewake {
+		if h.event == event && h.matcher == matcher && command == HookCommand(h.subcommand) && !async && !asyncRewake {
 			return true
 		}
 	}

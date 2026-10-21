@@ -1,0 +1,258 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout
+  title="How rostr names your sessions"
+  description="How rostr uses Claude Code hooks to name each session, and why the agent writes its own title."
+>
+  <section class="page-hero">
+    <h1>How rostr names your sessions</h1>
+    <p class="lede">
+      Every Claude Code session gets a name from your roster and a short summary of what it's doing, like <span
+        class="session-title">🧹 Ginny · Fix flaky login test</span>. Here's how that works under the hood, and why it
+      works this way.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>The short version</h2>
+    <p>
+      When a session starts, rostr drafts a name from your roster, like 🧹 Ginny. During its first reply, the agent
+      writes a 3-5 word summary of the task and sets the session's title to <span class="session-title"
+        >🧹 Ginny · &lt;summary&gt;</span>. When the session ends, Ginny goes back to the bench for the next one.
+    </p>
+    <p>All of it runs on Claude Code hooks that call the <code>rostr</code> CLI.</p>
+  </section>
+
+  <section class="section">
+    <h2>The hooks</h2>
+    <p><code>rostr assemble</code> installs four hooks into <code>~/.claude/settings.json</code>.</p>
+    <dl class="rows">
+      <div class="row">
+        <dt><code>SessionStart</code></dt>
+        <dd>
+          Records the session and sets <code>ROSTR_SESSION</code>, so any rostr command run later knows which session
+          it's in.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>UserPromptSubmit</code></dt>
+        <dd>
+          On the first prompt, drafts a name before Claude sees the prompt, tells the agent who it is as additional
+          context, and asks it to title the session as part of its first reply. Later prompts keep the name alive.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>PostToolUse</code></dt>
+        <dd>
+          Runs after a title tool, or after the agent records its task in a terminal. Records the summary from the title as the agent's task, so <code>rostr list</code> shows
+          what everyone is doing. If the title call came with a plain answer, it ends the turn so Claude doesn't
+          have to reply to the tool's result.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>SessionEnd</code></dt>
+        <dd>Releases the name.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="section">
+    <h2>Why the agent sets the title</h2>
+    <p>The obvious design is for rostr's hook to set the whole title itself. Claude Code doesn't allow that today:</p>
+    <ul class="terse-list">
+      <li>
+        <strong>Hooks can set a title at only two moments.</strong> Claude Code lets a hook set the session's title
+        when the session starts or when a prompt arrives.
+      </li>
+      <li>
+        <strong>Hook titles don't reach every session.</strong> In the desktop app, a hook's title shows up for Local
+        sessions, but not for Remote Control or cloud sessions. That's a known Claude Code issue. Those sessions can
+        only be renamed through a title tool.
+      </li>
+      <li>
+        <strong>The app's own summary lands too late.</strong> The desktop app writes its own short title about a
+        second after your first message, but only saves it where other programs can read it a few seconds later, after
+        rostr's first-prompt hook has already run. Nothing outside the app can make it save sooner.
+      </li>
+    </ul>
+    <p>
+      So rostr hands that part to the agent. It already knows what the task is, so it writes a 3-5 word summary and
+      sets <span class="session-title">&lt;emoji name&gt; · &lt;summary&gt;</span> with the session's title tool,
+      during its first reply.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>Which tool sets the title</h2>
+    <p>It depends on where the session runs.</p>
+    <table class="surface-table">
+      <thead>
+        <tr>
+          <th>Where the session runs</th>
+          <th>How the title is set</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Desktop app, Local session</th>
+          <td>The app's own session tool: <code>set_session_title</code> with session <code>"self"</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Desktop app via Remote Control, and cloud sessions</th>
+          <td>Claude Code's remote <code>set_session_title</code>, with the session's server ID</td>
+        </tr>
+        <tr>
+          <th scope="row">Terminal</th>
+          <td>
+            The agent runs <code>rostr agent task "&lt;summary&gt;"</code>, and rostr's hook puts <span
+              class="session-title">&lt;name&gt; · &lt;summary&gt;</span> in the terminal title on the next prompt
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Why there's no extra message</h2>
+    <p>
+      Any tool call normally makes Claude reply again, and Claude Code doesn't let a turn end with no visible text.
+      Left alone, a title call would make Claude add one more message after your answer. rostr avoids that:
+    </p>
+    <ul class="terse-list">
+      <li>
+        <strong>Quick questions.</strong> The agent writes its answer and makes the title call in the same reply.
+        rostr's PostToolUse hook sees that the turn was a plain answer and ends it right there, so the answer stays
+        the last thing on screen.
+      </li>
+      <li>
+        <strong>Real work.</strong> When Claude is running commands or reading files, it makes the title call alongside
+        its other tool calls, and the turn carries on as normal.
+      </li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>What didn't work</h2>
+    <p>Each of these looked simpler, and none held up:</p>
+    <ul class="terse-list">
+      <li>
+        <strong>Asking for the title after the answer, with a Stop hook.</strong> Claude Code shows it as a hook error,
+        and the title line becomes the session's last message.
+      </li>
+      <li>
+        <strong>Waking Claude in the background once the app's summary exists.</strong> The wake-up only arrives after
+        the reply, and applying a title from it either shows you a blocked-prompt notice or makes Claude take another
+        visible turn.
+      </li>
+      <li>
+        <strong>Reading the app's own summary.</strong> It's saved where other programs can read it seconds too late.
+      </li>
+      <li>
+        <strong>Generating the summary outside Claude</strong>, with a separate <code>claude -p</code> call or an
+        on-device model. Slow, may cost money, and depends on the platform.
+      </li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>What it costs</h2>
+    <p>
+      One short summary written by the agent and one or two small tool calls on the first reply. No extra round trips
+      for the answer, and no extra messages.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>What's next</h2>
+    <p>
+      If Claude Code lets a hook's title reach Remote Control and cloud sessions, rostr can drop the agent's part and
+      title those sessions straight from the hook.
+    </p>
+    <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
+  </section>
+</Layout>
+
+<style>
+  .page-hero {
+    padding: 72px 0 40px;
+  }
+
+  .page-hero h1 {
+    font-size: clamp(36px, 6vw, 52px);
+    margin: 0 0 16px;
+  }
+
+  .section p {
+    max-width: 40em;
+  }
+
+  .rows {
+    margin: 0;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .row dt code {
+    background: none;
+    padding: 0;
+  }
+
+  .row dd {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  @media (max-width: 640px) {
+    .row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+
+  .surface-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+
+  .surface-table th,
+  .surface-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .surface-table thead th {
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .surface-table tbody th {
+    font-weight: 600;
+  }
+
+  .surface-table td {
+    color: var(--muted);
+  }
+
+  .terse-list {
+    margin: 16px 0;
+    padding-left: 20px;
+    max-width: 44em;
+  }
+
+  .terse-list li {
+    margin-bottom: 8px;
+  }
+</style>

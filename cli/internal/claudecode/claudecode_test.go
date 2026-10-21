@@ -74,6 +74,19 @@ func TestServerSessionID(t *testing.T) {
 	}
 }
 
+func TestIsDesktopLocal(t *testing.T) {
+	claudeDir := t.TempDir()
+	sessions := filepath.Join(claudeDir, "sessions")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(sessions, "1.json"), `{"sessionId":"local","entrypoint":"claude-desktop","bridgeSessionId":"session_l"}`)
+	write(t, filepath.Join(sessions, "2.json"), `{"sessionId":"remote-control","entrypoint":"sdk-cli","bridgeSessionId":"session_r"}`)
+	if !IsDesktopLocal(claudeDir, "local") || IsDesktopLocal(claudeDir, "remote-control") || IsDesktopLocal(claudeDir, "unknown") {
+		t.Error("IsDesktopLocal")
+	}
+}
+
 func TestReadHookInput(t *testing.T) {
 	input, err := ReadHookInput(strings.NewReader(`{"session_id":"s1","hook_event_name":"SessionStart","source":"resume","cwd":"/x","extra":1}`))
 	if err != nil || input.SessionID != "s1" || input.Source != "resume" || input.Cwd != "/x" {
@@ -126,13 +139,23 @@ func TestIdentityText(t *testing.T) {
 }
 
 func TestTitleInstruction(t *testing.T) {
-	desktop := TitleInstruction("🧙 Gandalf", "session_abc", "s1")
-	if !strings.Contains(desktop, `set_session_title with session_id "session_abc"`) || !strings.Contains(desktop, `"🧙 Gandalf · <your 3-5 word summary`) ||
-		strings.Contains(desktop, "rostr agent task") {
-		t.Errorf("desktop: %s", desktop)
+	const title = `"🧙 Gandalf · <3-5 word summary of what the user wants>"`
+	local := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{DesktopLocal: true, ServerSessionID: "session_abc"})
+	if !strings.Contains(local, LocalTitleTool+" (load it with ToolSearch first") || !strings.Contains(local, `session_id "self" and title `+title) {
+		t.Errorf("local: %s", local)
 	}
-	if terminal := TitleInstruction("🧙 Gandalf", "", "s1"); strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, "rostr agent task --session s1") {
+	remote := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{ServerSessionID: "session_abc"})
+	if !strings.Contains(remote, RemoteTitleTool+` with session_id "session_abc" and title `+title) || strings.Contains(remote, "ToolSearch") {
+		t.Errorf("remote: %s", remote)
+	}
+	terminal := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{})
+	if strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, `rostr agent task --session s1 "<3-5 word summary`) {
 		t.Errorf("terminal: %s", terminal)
+	}
+	for _, text := range []string{local, remote, terminal} {
+		if !strings.Contains(text, "write your answer first, then make this call at the end of that same message") {
+			t.Errorf("when: %s", text)
+		}
 	}
 }
 
@@ -144,6 +167,8 @@ func TestPlaceholderTask(t *testing.T) {
 		"":                               "",
 		"/rostr":                         "",
 		"<task-notification> <summary>":  "",
+		"<system-reminder>\nNo project folder.\n</system-reminder>\nWhat is the largest desert?": "What is the largest desert?",
+		"<system-reminder>never closed": "",
 	} {
 		if got := PlaceholderTask(in); got != want {
 			t.Errorf("PlaceholderTask(%q) = %q", in, got)
@@ -196,24 +221,24 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	if err := json.Unmarshal(second, &settings); err != nil {
 		t.Fatal(err)
 	}
-	if settings.Model != "opus" || len(settings.Permissions.Allow) != 3 || settings.Permissions.Allow[0] != "Bash(ls:*)" {
+	if settings.Model != "opus" || len(settings.Permissions.Allow) != 4 || settings.Permissions.Allow[0] != "Bash(ls:*)" {
 		t.Errorf("other settings lost: %+v", settings)
 	}
 	if !strings.Contains(string(second), ">/dev/null") {
 		t.Error("the hook command was HTML-escaped")
 	}
 
-	// The prompt hook runs before Claude; the title step runs when Claude finishes a turn
+	// The prompt hook runs before Claude; the title hook runs, in the foreground, after the title tools and Bash
 	prompt := settings.Hooks["UserPromptSubmit"]
 	if len(prompt) != 2 || prompt[0].Hooks[0].Command != "echo mine" ||
 		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake {
 		t.Errorf("UserPromptSubmit: %+v", prompt)
 	}
-	if stop := settings.Hooks["Stop"]; len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("title") || stop[0].Hooks[0].AsyncRewake {
+	if stop, ok := settings.Hooks["Stop"]; ok {
 		t.Errorf("Stop: %+v", stop)
 	}
-	if post := settings.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != "mcp__claude-code-remote__set_session_title" ||
-		post[0].Hooks[0].Command != HookCommand("title-set") || !post[0].Hooks[0].Async {
+	if post := settings.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" ||
+		post[0].Hooks[0].Command != HookCommand("title-set") || post[0].Hooks[0].Async {
 		t.Errorf("PostToolUse: %+v", post)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {
@@ -292,23 +317,29 @@ func TestInstallReplacesTheOldBackgroundHooks(t *testing.T) {
 	asyncHook := func(subcommand string) string {
 		return `{"hooks": [{"type": "command", "asyncRewake": true, "command": "` + strings.ReplaceAll(HookCommand(subcommand), `"`, `\"`) + `"}]}`
 	}
-	write(t, settingsPath, `{"hooks": {"UserPromptSubmit": [`+asyncHook("prompt")+`, `+asyncHook("title")+`]}}`)
+	command := func(subcommand string) string { return strings.ReplaceAll(HookCommand(subcommand), `"`, `\"`) }
+	write(t, settingsPath, `{"hooks": {"UserPromptSubmit": [`+asyncHook("prompt")+`, `+asyncHook("title")+`],
+		"Stop": [{"hooks": [{"type": "command", "command": "`+command("title")+`"}]}],
+		"PostToolUse": [{"matcher": "`+RemoteTitleTool+`", "hooks": [{"type": "command", "async": true, "command": "`+command("title-set")+`"}]}]}}`)
 	if _, err := Install(claudeDir); err != nil {
 		t.Fatal(err)
 	}
 	var settings struct {
 		Hooks map[string][]struct {
-			Hooks []struct {
+			Matcher string
+			Hooks   []struct {
 				Command     string
+				Async       bool
 				AsyncRewake bool
 			}
 		}
 	}
 	data, _ := os.ReadFile(settingsPath)
 	json.Unmarshal(data, &settings)
-	prompt, stop := settings.Hooks["UserPromptSubmit"], settings.Hooks["Stop"]
-	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake ||
-		len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("title") || stop[0].Hooks[0].AsyncRewake {
+	prompt, post := settings.Hooks["UserPromptSubmit"], settings.Hooks["PostToolUse"]
+	_, hasStop := settings.Hooks["Stop"]
+	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake || hasStop ||
+		len(post) != 1 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" || post[0].Hooks[0].Async {
 		t.Fatalf("hooks: %s", data)
 	}
 }

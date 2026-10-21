@@ -136,3 +136,74 @@ The name is derived from a hash of the session ID, so both modes pick the same o
   a generated title "isn't a custom title and doesn't appear in `session_title`". Terminal sessions still write it to
   the transcript as `ai-title` only when no custom title is set, and desktop, Remote Control, and cloud sessions
   generate it server-side, where only Claude can read it (`get_session`). So the agent's own summary stays.
+- **Asking after the answer is the wrong shape (v0.1.4).** A desktop session (🎆 Fred, Claude Code 2.1.292) on the
+  one-call, async, marker-name version still went badly:
+  - The app showed "Stop hook error occurred · ctrl+o to see": a `Stop` hook that exits 2 is reported as an error.
+    Claude Code's documented `{"decision": "block", "reason": …}` output (exit 0) might not be; untested.
+  - The session's last message, and its `result`, became the title line ("🎆 Fred · Is kiwi a fruit") instead of the
+    answer. Anything the agent writes after its answer replaces the answer as the last thing shown, and writing
+    nothing forces a continuation, so this comes with asking after the answer.
+  - It took ~11s after the answer: ~1.5s of Claude Code's own work before the `Stop` hook ran (the hook took ~30ms),
+    ~7.2s for the model to make the `set_session_title` call (time to first token on the continuation), and ~2s for
+    the title line.
+  - The alternative: ask for the title in the first prompt's `additionalContext` ("as part of your first reply, call
+    `set_session_title`…; if you call other tools first, include it in that batch"). The answer stays last, there's no
+    continuation and no hook error, and a first tool call costs nothing extra; an agent that would answer straight
+    away pays one quick tool call first. The `Stop` hook would stay only as a backup, with the `PostToolUse` hook
+    clearing the pending marker when the agent's call succeeds.
+- **What #103336 would fix.** Once a hook's `sessionTitle` reaches the app, the prompt hook's `<name> · <start of the
+  prompt>` shows in the app before Claude answers, with no agent involvement. The whole title step (the `Stop` hook,
+  the follow-up turn, the hook error, the title as last message) only exists to get the name into the app, so it can
+  go. A summary instead of the start of the prompt would still need the agent: it sets its task with
+  `rostr agent task`, and the next prompt's hook retitles the session, as terminal sessions do today. Until then the
+  title shows the first ~50 characters of the prompt, which reads badly when a prompt starts with pasted text. The
+  fix isn't in 2.1.292 (desktop) or 2.1.306 (cloud) as of October 21.
+- **The app's titles are readable locally, on the desktop app (correction).** "Only Claude can read the server title"
+  was wrong for the desktop app. Its web view caches the claude.ai session list in IndexedDB
+  (`~/Library/Application Support/Claude/IndexedDB/https_claude.ai_0.indexeddb.blob/…` on macOS), as Chromium's
+  snappy-compressed V8 serialization (header `ff 11 02`). Decompressed, it holds each session's server ID and current
+  title, rostr's ("🎆 Fred · Is kiwi a fruit", "🌙 Luna · Find latest modified folder") and the app's own generated
+  ones alike. Older desktop session files (`claude-code-sessions/<account>/<org>/local_*.json`, last written
+  October 19) also carried `title`, `titleSource: "auto"`, and `cliSessionId`, the session ID hooks get.
+  Caveats: it's undocumented internal storage that any app update can change; the blob file is rewritten (and renamed)
+  as the app refreshes, so how soon a new title lands there is untested; it only exists where the desktop app runs (not
+  in cloud containers or terminal-only setups); and it's the user's whole session list. It also only helps with
+  reading: a hook still can't write the app's title until #103336 ships, so today the agent's `set_session_title`
+  call stays either way. Once #103336 ships, a hook could prefix the app's generated title with the name on a later
+  prompt, if the app still generates one for a session a hook has already titled (untested).
+
+## Final design (v0.1.5)
+
+The agent titles the session during its reply, and a `PostToolUse` hook ends the turn when that reply was a plain
+answer. Findings that led there, all on October 21 (desktop app with Claude Code 2.1.292 for Remote Control sessions
+and 2.1.304 for Local ones):
+
+- **Local and Remote Control sessions differ.** Their `~/.claude/sessions/<pid>.json` says `entrypoint:
+  claude-desktop` (with a `hostSessionId`) for a session the app runs as Local, and `sdk-cli` (run in tmux by the
+  Remote Control host) otherwise. Local sessions also get a server ID when Remote Control is on. The app adopts a
+  hook's `sessionTitle` for Local sessions (`takeEngineReportedTitle`, ~3s after the prompt) and refuses it for
+  Remote Control ones (`remoteControlSpawn`). Local sessions have the app's own title tool,
+  `mcp__ccd_session_mgmt__set_session_title` (deferred, so loaded with ToolSearch; `session_id: "self"`; it replaces
+  titles the app generated, or a hook's, without asking, and asks only when the user named the session; it sets
+  `titleSource: "tool"`, after which the app ignores hook titles). Remote Control and cloud sessions have
+  `mcp__claude-code-remote__set_session_title` instead.
+- **The app's own summary is ready ~1s after the first message but readable only after ~4-5s.** The app's web view
+  generates it, independently of hooks, before Claude Code has even started (its startup took 2-6s in these tests).
+  The main process keeps it in memory and saves `claude-code-sessions/<account>/<org>/<host session>.json` on a
+  debounce (`SAVE_SESSION_ACTIVE_DEBOUNCE_MS` = 3s while running), where it stays in `previousTitles` after a later
+  rename. Recording every file the app wrote after a message found no earlier copy. It reaches Claude Code ~70ms
+  after the first-prompt hook finishes, so a hook waiting for it only delays it.
+- **No hook can set a title after the first prompt without a prompt.** A background (`asyncRewake`) wake-up is held
+  until a text-only turn ends. On the wake-up prompt, `decision: block` discards `sessionTitle` (documented) and shows
+  the user "A hook blocked your prompt", and `continue: false` discards it too ("Operation stopped by hook"). Letting
+  it through applies the title, but Claude must then write something: a reply with only thinking gets "[Your previous
+  response had no visible output. Please continue and produce a user-visible response.]", and Claude repeats its
+  answer. `mcp_tool` hooks can only pass values from their own input, so they can't compose a per-session title.
+  Appending a `custom-title` line to the transcript doesn't work: Claude Code writes its own title back after it.
+- **A `PostToolUse` hook can end the turn.** Returning `continue: false` after a tool call ends the turn without
+  Claude replying to the result and without anything visible. rostr does that only when every tool call in the turn
+  was titling and Claude has written text. Claude Code writes an assistant message to the transcript once the message
+  is complete, which can be after its first tool call ran, so the hook waits up to 0.5s for the call to appear.
+- **Measured:** a Local plain answer ("deepest lake") answered at +5.3s, the same as without titling, with the title
+  at +11s and no second reply. With a tool-using first turn the title call went alongside `ls` and the turn carried
+  on. A Remote Control session worked the same way.
