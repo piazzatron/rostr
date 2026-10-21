@@ -18,9 +18,9 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/piazzatron/rostr?color=6b675f" /></a>
 </p>
 
-rostr drafts a name for each of your coding agents from a roster you set, and puts it at the front of the session
-title: `🧙 Gandalf · Fix auth redirect loop`. It works across Claude Code, Codex, and terminal multiplexers, locally
-and in the cloud.
+rostr drafts a name for each of your coding agents from a roster you set and puts it at the front of the session
+title: `🧙 Gandalf · Fix auth redirect loop`. It also teaches your agent to reach out as that identity, so when Gandalf
+pings you on Slack, GitHub, or email, you know exactly which session needs you.
 
 <p align="center">
   <img alt="New sessions get drafted names; Samwise asks for input and his notification says who it is; Gandalf finishes and goes back to the bench." src=".github/assets/demo.gif" width="720" />
@@ -40,6 +40,17 @@ Or do it yourself:
 brew install piazzatron/tap/rostr   # or: curl -fsSL https://getrostr.sh/install | sh
 rostr assemble
 ```
+
+## Works with
+
+| | Support |
+|---|---|
+| **Claude Code** | Terminal and cloud |
+| **Codex** | Terminal and cloud |
+| **tmux** | Names the window and tags the pane (`#{@rostr}`) |
+| **herdr** | Shows the name in the sidebar |
+
+Using something else? [Request support](https://github.com/piazzatron/rostr/issues/new?title=Support+for%3A+).
 
 ## Commands
 
