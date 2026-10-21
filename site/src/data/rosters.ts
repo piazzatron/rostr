@@ -84,8 +84,8 @@ export const PRESET_ROSTERS = [
     id: "seminar",
     name: "The Seminar",
     source: "Philosophy & critical theory",
-    aTeam: ["🔨 Nietzsche", "🚩 Marx", "🦉 Hegel", "👁️ Foucault", "👻 Derrida", "🎻 Adorno"],
-    bTeam: ["⏰ Kant", "☕ Sartre", "🖋️ Beauvoir", "🪨 Camus", "👼 Benjamin", "🎭 Butler", "🍿 Žižek", "🌿 Deleuze"],
+    aTeam: ["🔨 Nietzsche", "🚩 Marx", "⏰ Kant", "🦉 Hegel", "👁️ Foucault", "🍿 Žižek"],
+    bTeam: ["👻 Derrida", "⚖️ Arendt", "☕ Sartre", "🖋️ Beauvoir", "🪨 Camus", "👼 Benjamin", "🎭 Butler", "🌿 Deleuze"],
   },
   {
     emoji: "🛡️",
