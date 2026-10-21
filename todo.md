@@ -13,8 +13,9 @@ Get everything working end to end, then a final pass over the landing page.
    allowlist, setup-script install, hooks committed to the repo, `origin` behind the proxy). Becomes the cloud access
    instructions.
    - [ ] Cloud environments cache the setup script's result ("Setup script cached from previous run"), so a new rostr
-         release doesn't reach an environment until the cache is invalidated. Find what invalidates it and how users
-         pick up new releases.
+         release doesn't reach an environment until the cache is invalidated. Per the docs, it's rebuilt when the
+         setup script or allowed network hosts change, or after about 7 days. Decide how users pick up new releases
+         (tell them to edit the script, or have rostr update itself in the background from a SessionStart hook).
 4. [ ] **Codex** (agent): `rostr hook codex …`, a skill-based `/draft`, thread renaming.
 5. [ ] **tmux and herdr** (agent): pane tag and window name in tmux; `herdr pane report-metadata` in herdr.
 6. [ ] **Cleanup**: review findings N10 and N11 (then delete `cli-review.md`), Uptime Robot with Discord alerts.

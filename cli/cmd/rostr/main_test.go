@@ -425,8 +425,30 @@ func TestClaudeCodeHooks(t *testing.T) {
 	os.WriteFile(filepath.Join(sessionsDir, "4242.json"), []byte(`{"sessionId":"s2","bridgeSessionId":"session_xyz"}`), 0o644)
 	readPromptOutput(hook("prompt", firstPrompt("s2")))
 	r = hook("title", stop("s2", false))
-	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_xyz" and title "💍 Frodo · <your 3-5 word summary`) {
+	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_xyz" and title "💍 Frodo · <your 3-5 word summary`) ||
+		strings.Contains(r.stderr, "rostr agent task") {
 		t.Fatalf("desktop title step: exit %d, stderr %q", r.code, r.stderr)
+	}
+
+	// Setting the app's title "<name> · <summary>" records the summary as the task; other titles are left alone
+	titleSet := func(title string) string {
+		return fmt.Sprintf(`{"session_id":"s2","hook_event_name":"PostToolUse","tool_name":"mcp__claude-code-remote__set_session_title","tool_input":{"session_id":"session_xyz","title":%q}}`, title)
+	}
+	frodoTask := func() string {
+		for _, d := range s.list().Rosters[0].Drafted {
+			if d.Name == "Frodo" {
+				return d.Task
+			}
+		}
+		return ""
+	}
+	expectQuiet("title set", hook("title-set", titleSet("💍 Frodo · Untangle the auth flow")), 0)
+	if task := frodoTask(); task != "Untangle the auth flow" {
+		t.Fatalf("task after title set: %q", task)
+	}
+	expectQuiet("other title set", hook("title-set", titleSet("My own title")), 0)
+	if task := frodoTask(); task != "Untangle the auth flow" {
+		t.Fatalf("task after another title: %q", task)
 	}
 
 	// Cloud session: the same, through the server session its container names
