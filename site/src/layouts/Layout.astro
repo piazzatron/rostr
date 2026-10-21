@@ -734,7 +734,7 @@ const { title, description } = Astro.props;
     background: var(--dash-deep);
   }
 
-  .dashboard-bar > span:not(.dashboard-url) {
+  .dashboard-bar > span:empty {
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -798,11 +798,8 @@ const { title, description } = Astro.props;
     font-size: 22px;
   }
 
-  /* Status pills: working (purple, a spinner), testing (blue, dot dot dot), and waiting on you (amber, blinking) */
-  .agent-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+  /* The agent's team, from the API: the A team in purple, the B team in gray */
+  .agent-team {
     margin-left: auto;
     padding: 2px 8px;
     border-radius: 999px;
@@ -815,150 +812,94 @@ const { title, description } = Astro.props;
     white-space: nowrap;
   }
 
-  .agent-status-testing {
-    background: #d3e2ff;
-    color: #1d4fb8;
+  .agent-team-b {
+    background: #dcd8ea;
+    color: #5f5a78;
   }
 
-  .agent-status-waiting {
-    background: #ffe5b8;
-    color: #8a4d00;
+  .agent-time {
+    font-variant-numeric: tabular-nums;
   }
 
-  .status-spinner {
-    width: 9px;
-    height: 9px;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  /* Each dot appears after the one before; they keep their space while hidden, so the pill doesn't change size */
-  .status-dots i {
-    font-style: normal;
-    animation: dot 1.2s steps(1) infinite;
-  }
-
-  .status-dots i:nth-child(2) {
-    animation-delay: 0.3s;
-  }
-
-  .status-dots i:nth-child(3) {
-    animation-delay: 0.6s;
-  }
-
-  .status-light {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #f08c00;
-    animation: blink 1s ease-in-out infinite;
-  }
-
-  /* A thin bar with a segment sliding across it while an agent is busy; an agent waiting on you has a still track */
-  .agent-progress {
-    position: relative;
-    height: 3px;
-    margin-top: 12px;
-    overflow: hidden;
-    border-radius: 2px;
-    background: #d7cbff;
-  }
-
-  .agent-progress::after {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 35%;
-    border-radius: 2px;
-    background: var(--dash-accent);
-    animation: progress-slide 1.8s ease-in-out infinite;
-  }
-
-  .agent-progress-testing {
-    background: #d3e2ff;
-  }
-
-  .agent-progress-testing::after {
-    background: #2f6fe0;
-  }
-
-  .agent-progress-waiting {
-    background: #ffe5b8;
-  }
-
-  .agent-progress-waiting::after {
-    display: none;
-  }
-
-  /* "Live", with a green light that sends out a ring */
-  .dashboard-live {
+  /* Polls and changes: the "Updated" dot flashes on each poll, a card whose agent or task changed glows briefly, a
+     released agent's card fades out and back in with the new one, and their chip lands on the bench highlighted */
+  .dashboard-updated {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-right: 10px;
-    color: #2b8a3e;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    margin-left: auto;
+    color: var(--dash-soft);
+    font: 12px var(--mono);
+    white-space: nowrap;
   }
 
-  .dashboard-live::before {
+  .dashboard-updated::before {
     content: "";
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #2f9e44;
-    animation: live-ping 1.6s ease-out infinite;
   }
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .dashboard-updated.is-polling::before {
+    animation: poll-flash 0.8s ease-out;
   }
 
-  @keyframes dot {
-    0% {
-      opacity: 0;
-    }
-    25% {
-      opacity: 1;
-    }
+  .agent-card {
+    transition: opacity 0.3s ease, transform 0.3s ease;
   }
 
-  @keyframes blink {
-    50% {
-      opacity: 0.25;
-    }
+  .agent-card.is-leaving {
+    opacity: 0;
+    transform: translateY(4px);
   }
 
-  @keyframes progress-slide {
+  .agent-card.is-updated {
+    animation: card-glow 1.4s ease-out;
+  }
+
+  .dashboard-bench .chip {
+    transition: opacity 0.3s ease;
+  }
+
+  .dashboard-bench .chip.is-leaving {
+    opacity: 0;
+  }
+
+  .dashboard-bench .chip.is-new {
+    animation: chip-glow 1.4s ease-out;
+  }
+
+  @keyframes poll-flash {
     from {
-      transform: translateX(-100%);
+      box-shadow: 0 0 0 0 rgb(47 158 68 / 0.6);
     }
     to {
-      transform: translateX(290%);
+      box-shadow: 0 0 0 6px rgb(47 158 68 / 0);
     }
   }
 
-  @keyframes live-ping {
+  @keyframes card-glow {
     from {
-      box-shadow: 0 0 0 0 rgb(47 158 68 / 0.5);
+      background: #d2c4ff;
     }
-    to {
-      box-shadow: 0 0 0 7px rgb(47 158 68 / 0);
+  }
+
+  @keyframes chip-glow {
+    from {
+      background: #c9b8ff;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .status-spinner,
-    .status-dots i,
-    .status-light,
-    .agent-progress::after,
-    .dashboard-live::before {
+    .agent-card,
+    .dashboard-bench .chip {
+      transition: none;
+    }
+
+    .dashboard-updated.is-polling::before,
+    .agent-card.is-updated,
+    .dashboard-bench .chip.is-new {
       animation: none;
     }
   }

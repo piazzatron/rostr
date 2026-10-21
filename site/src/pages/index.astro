@@ -69,16 +69,34 @@ const COMMAND_GROUP_CARDS = [
 
 // The "Build on it" dashboard example uses the Smash Bros roster
 const DASHBOARD_ROSTER = PRESET_ROSTERS.find((roster) => roster.id === "smash-bros")!;
-// Each agent shows a live status: working (a spinner), testing (dot dot dot), or waiting on you (a blinking light)
+// What GET /v1/rosters gives a dashboard: each drafted agent's name, emoji, team, task, repo, and when it was drafted
+// (here, minutes ago), and everyone idle
 const DASHBOARD_MEMBERS = [
-  { emoji: "🍄", name: "Mario", task: "Ship the onboarding redesign", where: "acme/web", since: "25m", status: "working" },
-  { emoji: "🗡️", name: "Link", task: "Fix flaky checkout test", where: "acme/api", since: "8m", status: "testing" },
-  { emoji: "⭐", name: "Kirby", task: "Upgrade the image pipeline", where: "acme/api", since: "2h", status: "working" },
-  { emoji: "🚀", name: "Samus", task: "Add rate limiting to the API", where: "cloud", since: "50m", status: "waiting" },
+  { emoji: "🍄", name: "Mario", team: "A", task: "Ship the onboarding redesign", repo: "acme/web", minutes: 25 },
+  { emoji: "🗡️", name: "Link", team: "A", task: "Fix flaky checkout test", repo: "acme/api", minutes: 8 },
+  { emoji: "⭐", name: "Kirby", team: "A", task: "Upgrade the image pipeline", repo: "acme/api", minutes: 124 },
+  { emoji: "🚀", name: "Samus", team: "A", task: "Add rate limiting to the API", repo: "acme/billing", minutes: 50 },
 ];
-const DASHBOARD_IDLE_CHIPS = [...DASHBOARD_ROSTER.aTeam, ...DASHBOARD_ROSTER.bTeam].filter(
-  (member) => !DASHBOARD_MEMBERS.some((working) => member.endsWith(` ${working.name}`)),
-);
+const DASHBOARD_IDLE = [
+  ...DASHBOARD_ROSTER.aTeam.map((member) => ({ member, team: "A" })),
+  ...DASHBOARD_ROSTER.bTeam.map((member) => ({ member, team: "B" })),
+].filter(({ member }) => !DASHBOARD_MEMBERS.some((working) => member.endsWith(` ${working.name}`)));
+// Tasks the demo deals out when an agent's task changes or a new one is drafted
+const DASHBOARD_TASKS = [
+  "Write the invoices migration",
+  "Speed up search indexing",
+  "Review the auth PR",
+  "Bump Node to 24",
+  "Add dark mode to settings",
+  "Clean up feature flags",
+  "Fix the CSV export",
+  "Profile the slow dashboard query",
+  "Add retries to the webhook worker",
+  "Split up the billing service",
+];
+// Time since drafting, like a stopwatch: 8:00, or 2:04:00 past an hour
+const formatElapsed = (minutes: number) =>
+  minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:00` : `${minutes}:00`;
 
 // Terminal examples, rendered with Expressive Code
 const HERO_LIST_EXAMPLE = toTerminalText(
@@ -353,54 +371,43 @@ const LIST_JSON_EXAMPLE = `{
         monitoring, and integrations.
       </p>
 
-      <figure class="dashboard" aria-label="Example team dashboard built on rostr list --json">
+      <figure
+        class="dashboard"
+        aria-label="Example team dashboard built on rostr list --json"
+        data-tasks={JSON.stringify(DASHBOARD_TASKS)}
+      >
         <div class="dashboard-app">
           <div class="dashboard-bar">
             <span></span><span></span><span></span>
             <span class="dashboard-url">localhost:3000</span>
+            <span class="dashboard-updated">Updated just now</span>
           </div>
           <div class="dashboard-body">
             <div class="dashboard-header">
               <strong>{DASHBOARD_ROSTER.emoji} app</strong>
-              <span>
-                <span class="dashboard-live">Live</span>
-                {DASHBOARD_MEMBERS.length} working · {DASHBOARD_IDLE_CHIPS.length} on the bench
-              </span>
+              <span>{DASHBOARD_MEMBERS.length} working · {DASHBOARD_IDLE.length} on the bench</span>
             </div>
             <div class="dashboard-grid">
               {DASHBOARD_MEMBERS.map((member) => (
-                <div class="agent-card">
+                <div class="agent-card" data-minutes={member.minutes}>
                   <div class="agent-top">
                     <span class="agent-emoji">{member.emoji}</span>
-                    <strong>{member.name}</strong>
-                    {member.status === "working" && (
-                      <span class="agent-status">
-                        <span class="status-spinner" aria-hidden="true"></span>Working
-                      </span>
-                    )}
-                    {member.status === "testing" && (
-                      <span class="agent-status agent-status-testing">
-                        Testing<span class="status-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span>
-                      </span>
-                    )}
-                    {member.status === "waiting" && (
-                      <span class="agent-status agent-status-waiting">
-                        <span class="status-light" aria-hidden="true"></span>Waiting
-                      </span>
-                    )}
+                    <strong class="agent-name">{member.name}</strong>
+                    <span class:list={["agent-team", { "agent-team-b": member.team === "B" }]}>{member.team} team</span>
                   </div>
                   <p class="agent-task">{member.task}</p>
                   <div class="agent-meta">
-                    <span>{member.where}</span>
-                    <span>{member.since}</span>
+                    <span class="agent-repo">{member.repo}</span>
+                    <span class="agent-time">{formatElapsed(member.minutes)}</span>
                   </div>
-                  <div class={`agent-progress agent-progress-${member.status}`} aria-hidden="true"></div>
                 </div>
               ))}
             </div>
             <div class="dashboard-bench">
               <span class="bench-label">On the bench</span>
-              {DASHBOARD_IDLE_CHIPS.map((member) => <span class="chip">{member}</span>)}
+              {DASHBOARD_IDLE.map(({ member, team }) => (
+                <span class="chip" data-team={team}>{member}</span>
+              ))}
             </div>
           </div>
         </div>
@@ -614,5 +621,95 @@ const LIST_JSON_EXAMPLE = `{
       if (openTile.contains(event.target as Node)) event.preventDefault();
       openTile.blur();
     });
+    // The "Build on it" dashboard behaves like one polling GET /v1/rosters every few seconds, so it only animates what
+    // the API gives it: time since each agent was drafted ticks up, and some polls bring news: an agent's task changes,
+    // or an agent goes back to the bench and someone from the bench is drafted in their place.
+    const dashboard = document.querySelector<HTMLElement>(".dashboard");
+    if (dashboard) {
+      const POLL_MS = 4000;
+      const tasks: string[] = JSON.parse(dashboard.dataset.tasks ?? "[]");
+      const repos = ["acme/web", "acme/api", "acme/billing"];
+      const cards = [...dashboard.querySelectorAll<HTMLElement>(".agent-card")];
+      const bench = dashboard.querySelector<HTMLElement>(".dashboard-bench")!;
+      const updated = dashboard.querySelector<HTMLElement>(".dashboard-updated")!;
+      const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
+      const part = (card: HTMLElement, name: string) => card.querySelector<HTMLElement>(`.agent-${name}`)!;
+
+      const draftedAt = new Map(cards.map((card) => [card, Date.now() - Number(card.dataset.minutes) * 60_000]));
+      const formatElapsed = (ms: number) => {
+        const seconds = Math.floor(ms / 1000);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const minutes = Math.floor(seconds / 60);
+        return minutes >= 60
+          ? `${Math.floor(minutes / 60)}:${pad(minutes % 60)}:${pad(seconds % 60)}`
+          : `${minutes}:${pad(seconds % 60)}`;
+      };
+
+      // Restart a one-shot CSS animation
+      const replay = (element: HTMLElement, className: string) => {
+        element.classList.remove(className);
+        void element.offsetWidth;
+        element.classList.add(className);
+      };
+
+      const changeTask = (card: HTMLElement) => {
+        const current = new Set(cards.map((other) => part(other, "task").textContent));
+        part(card, "task").textContent = pick(tasks.filter((task) => !current.has(task)));
+        replay(card, "is-updated");
+      };
+
+      // The card's agent is released to the front of the bench, and a bench agent is drafted into the card: from the A
+      // team while any of them are free, as rostr does
+      const swapAgent = (card: HTMLElement) => {
+        const chips = [...bench.querySelectorAll<HTMLElement>(".chip:not(.is-leaving)")];
+        const aTeam = chips.filter((chip) => chip.dataset.team === "A");
+        const incoming = pick(aTeam.length > 0 ? aTeam : chips);
+        const [emoji, ...name] = (incoming.textContent ?? "").split(" ");
+        const released = document.createElement("span");
+        released.className = "chip";
+        released.dataset.team = part(card, "team").textContent?.startsWith("B") ? "B" : "A";
+        released.textContent = `${part(card, "emoji").textContent} ${part(card, "name").textContent}`;
+        const team = incoming.dataset.team ?? "A";
+
+        incoming.classList.add("is-leaving");
+        card.classList.add("is-leaving");
+        setTimeout(() => {
+          incoming.remove();
+          bench.querySelector(".bench-label")!.after(released);
+          replay(released, "is-new");
+
+          const current = new Set(cards.map((other) => part(other, "task").textContent));
+          part(card, "emoji").textContent = emoji;
+          part(card, "name").textContent = name.join(" ");
+          part(card, "team").textContent = `${team} team`;
+          part(card, "team").classList.toggle("agent-team-b", team === "B");
+          part(card, "task").textContent = pick(tasks.filter((task) => !current.has(task)));
+          part(card, "repo").textContent = pick(repos);
+          draftedAt.set(card, Date.now());
+          card.classList.remove("is-leaving");
+          replay(card, "is-updated");
+        }, 300);
+      };
+
+      let lastPoll = Date.now();
+      let polls = 0;
+      const tick = () => {
+        for (const card of cards) part(card, "time").textContent = formatElapsed(Date.now() - draftedAt.get(card)!);
+        const ago = Math.round((Date.now() - lastPoll) / 1000);
+        updated.textContent = ago < 1 ? "Updated just now" : `Updated ${ago}s ago`;
+      };
+      // Every other poll has news, alternating between a task change and a draft
+      const poll = () => {
+        lastPoll = Date.now();
+        polls++;
+        replay(updated, "is-polling");
+        if (polls % 4 === 1) changeTask(pick(cards));
+        if (polls % 4 === 3) swapAgent(pick(cards));
+        tick();
+      };
+      tick();
+      setInterval(tick, 1000);
+      setInterval(poll, POLL_MS);
+    }
   </script>
 </Layout>
