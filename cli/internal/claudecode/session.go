@@ -1,5 +1,5 @@
 // Package claudecode holds what rostr knows about Claude Code: its hook input and output shapes, how to tell a
-// session's first prompt, how to find a desktop session's server ID, what the agent is told, and installing the
+// session's first prompt, how to find a desktop or cloud session's server ID, what the agent is told, and installing the
 // hooks, skill, and /draft command.
 package claudecode
 
@@ -23,7 +23,8 @@ type HookInput struct {
 	Source         string `json:"source"` // SessionStart: startup, resume, clear, or compact
 	Prompt         string `json:"prompt"`
 	PromptID       string `json:"prompt_id"`
-	SessionTitle   string `json:"session_title"` // the session's custom title, if it has one
+	SessionTitle   string `json:"session_title"`    // the session's custom title, if it has one
+	StopHookActive bool   `json:"stop_hook_active"` // Stop: Claude is already continuing because of a Stop hook
 }
 
 // ReadHookInput decodes a hook's stdin.
@@ -69,9 +70,11 @@ func IsFirstPrompt(input HookInput) bool {
 	}
 }
 
-// BridgeSessionID returns the server session ID of a desktop or Remote Control session, from the per-process session
-// files Claude Code writes to ~/.claude/sessions/. Terminal sessions have none, so it returns "".
-func BridgeSessionID(claudeDir, sessionID string) string {
+// ServerSessionID returns the server session ID the app's title is set on. Desktop and Remote Control sessions have it
+// in the per-process session files Claude Code writes to ~/.claude/sessions/; a cloud session's container has it in
+// CLAUDE_CODE_REMOTE_SESSION_ID, as "cse_<id>" for the server's "session_<id>". Terminal sessions have none, so it
+// returns "".
+func ServerSessionID(claudeDir, sessionID string) string {
 	paths, _ := filepath.Glob(filepath.Join(claudeDir, "sessions", "*.json"))
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
@@ -85,6 +88,9 @@ func BridgeSessionID(claudeDir, sessionID string) string {
 		if json.Unmarshal(data, &session) == nil && session.SessionID == sessionID {
 			return session.BridgeSessionID
 		}
+	}
+	if cloudID, ok := strings.CutPrefix(os.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID"), "cse_"); ok {
+		return "session_" + cloudID
 	}
 	return ""
 }
@@ -135,15 +141,15 @@ func Identity(display, rosterName, sessionID string) string {
 	}, "\n")
 }
 
-// TitleInstruction asks the agent to title the session and record the same summary as its task. Desktop and Remote
-// Control sessions (with a bridge session ID) can set the app's title; terminal sessions only record the task.
-func TitleInstruction(display, bridgeSessionID, sessionID string) string {
-	if bridgeSessionID == "" {
+// TitleInstruction asks the agent to title the session and record the same summary as its task. Desktop, Remote
+// Control, and cloud sessions (with a server session ID) can set the app's title; terminal sessions only record the task.
+func TitleInstruction(display, serverSessionID, sessionID string) string {
+	if serverSessionID == "" {
 		return fmt.Sprintf("Now run: %s \"<your 3-5 word summary of this conversation>\".", taskCommand(sessionID))
 	}
 	return fmt.Sprintf("Now call mcp__claude-code-remote__set_session_title with session_id %q and title "+
 		"\"%s · <your 3-5 word summary of this conversation>\", then run: %s \"<the same summary>\".",
-		bridgeSessionID, display, taskCommand(sessionID))
+		serverSessionID, display, taskCommand(sessionID))
 }
 
 // taskCommand is the command the agent runs to set its task, naming its session.

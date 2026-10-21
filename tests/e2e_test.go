@@ -363,13 +363,14 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatal("session start drafted")
 	}
 
-	// The first prompt drafts and tells the agent who it is; the title step then wakes Claude to set its task
+	// The first prompt drafts and tells the agent who it is; when the turn ends, the title step asks Claude to set its task
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
 	if r.code != 0 || !strings.Contains(r.stdout, `You're 🧙 Gandalf for this session`) || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
-	if r := hook("title", prompt); r.code != 2 || !strings.Contains(r.stderr, "rostr agent task") {
+	stop := `{"session_id":"hs1","hook_event_name":"Stop","stop_hook_active":false}`
+	if r := hook("title", stop); r.code != 2 || !strings.Contains(r.stderr, "rostr agent task") {
 		t.Fatalf("title step: exit %d, stderr %q", r.code, r.stderr)
 	}
 	l := m.list()

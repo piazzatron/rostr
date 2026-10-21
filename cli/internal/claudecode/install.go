@@ -21,14 +21,13 @@ var (
 
 // hookEvents maps each Claude Code event rostr hooks into to its `rostr hook claude-code` subcommand.
 var hookEvents = []struct {
-	event       string
-	subcommand  string
-	asyncRewake bool
+	event      string
+	subcommand string
 }{
-	{"SessionStart", "session-start", false},
-	{"UserPromptSubmit", "prompt", false},
-	{"UserPromptSubmit", "title", true},
-	{"SessionEnd", "session-end", false},
+	{"SessionStart", "session-start"},
+	{"UserPromptSubmit", "prompt"},
+	{"Stop", "title"},
+	{"SessionEnd", "session-end"},
 }
 
 // permissions are pre-approved so the draft step's instructions don't stop on a permission prompt.
@@ -109,7 +108,7 @@ func Uninstall(claudeDir string) ([]string, error) {
 }
 
 // HookCommand is the installed command for a subcommand. It does nothing when rostr isn't installed (hooks committed
-// to a repo also run for teammates without it), and otherwise keeps rostr's exit code, which asyncRewake needs.
+// to a repo also run for teammates without it), and otherwise keeps rostr's exit code, which the Stop hook needs.
 func HookCommand(subcommand string) string {
 	return "if command -v rostr >/dev/null; then rostr hook claude-code " + subcommand + "; fi"
 }
@@ -124,29 +123,23 @@ func installSettings(path string) (bool, error) {
 
 	changed := false
 
-	// Hooks: one entry per event, unless a rostr hook for that subcommand is already there
+	// Hooks: drop rostr hooks that don't match the current set (older installs ran the title step, and before that the
+	// prompt hook, in the background on UserPromptSubmit), then add one entry per event that's missing its rostr hook
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
+	if removeHooks(hooks, func(event string, hook map[string]any) bool {
+		return isRostrHook(hook) && !isCurrentRostrHook(event, hook)
+	}) {
+		changed = true
+	}
 	for _, h := range hookEvents {
 		groups, _ := hooks[h.event].([]any)
-		if existing := rostrHook(groups, h.subcommand); existing != nil {
-			// Older installs ran the prompt hook in the background; keep each hook's mode current
-			if async, _ := existing["asyncRewake"].(bool); async != h.asyncRewake {
-				if h.asyncRewake {
-					existing["asyncRewake"] = true
-				} else {
-					delete(existing, "asyncRewake")
-				}
-				changed = true
-			}
+		if rostrHook(groups, h.subcommand) != nil {
 			continue
 		}
 		hook := map[string]any{"type": "command", "command": HookCommand(h.subcommand)}
-		if h.asyncRewake {
-			hook["asyncRewake"] = true
-		}
 		hooks[h.event] = append(groups, map[string]any{"hooks": []any{hook}})
 		changed = true
 	}
@@ -186,34 +179,10 @@ func uninstallSettings(path string) (bool, error) {
 
 	changed := false
 
-	// Hooks: drop every rostr hook, then any groups and events that leaves empty
+	// Hooks: drop every rostr hook
 	hooks, _ := settings["hooks"].(map[string]any)
-	for event, value := range hooks {
-		groups, _ := value.([]any)
-		var keptGroups []any
-		for _, group := range groups {
-			groupMap, _ := group.(map[string]any)
-			groupHooks, _ := groupMap["hooks"].([]any)
-			var keptHooks []any
-			for _, hook := range groupHooks {
-				hookMap, _ := hook.(map[string]any)
-				command, _ := hookMap["command"].(string)
-				if strings.Contains(command, "rostr hook claude-code ") {
-					changed = true
-					continue
-				}
-				keptHooks = append(keptHooks, hook)
-			}
-			if len(keptHooks) > 0 {
-				groupMap["hooks"] = keptHooks
-				keptGroups = append(keptGroups, groupMap)
-			}
-		}
-		if len(keptGroups) > 0 {
-			hooks[event] = keptGroups
-		} else {
-			delete(hooks, event)
-		}
+	if removeHooks(hooks, func(_ string, hook map[string]any) bool { return isRostrHook(hook) }) {
+		changed = true
 	}
 
 	// Permissions rostr added
@@ -277,6 +246,57 @@ func toAny(list []string) []any {
 		out[i] = s
 	}
 	return out
+}
+
+// removeHooks drops every hook that remove matches, then any groups and events that leaves empty, reporting whether
+// it removed anything.
+func removeHooks(hooks map[string]any, remove func(event string, hook map[string]any) bool) bool {
+	removed := false
+	for event, value := range hooks {
+		groups, _ := value.([]any)
+		var keptGroups []any
+		for _, group := range groups {
+			groupMap, _ := group.(map[string]any)
+			groupHooks, _ := groupMap["hooks"].([]any)
+			var keptHooks []any
+			for _, hook := range groupHooks {
+				hookMap, _ := hook.(map[string]any)
+				if remove(event, hookMap) {
+					removed = true
+					continue
+				}
+				keptHooks = append(keptHooks, hook)
+			}
+			if len(keptHooks) > 0 {
+				groupMap["hooks"] = keptHooks
+				keptGroups = append(keptGroups, groupMap)
+			}
+		}
+		if len(keptGroups) > 0 {
+			hooks[event] = keptGroups
+		} else {
+			delete(hooks, event)
+		}
+	}
+	return removed
+}
+
+// isRostrHook reports whether a hook runs one of rostr's Claude Code hooks.
+func isRostrHook(hook map[string]any) bool {
+	command, _ := hook["command"].(string)
+	return strings.Contains(command, "rostr hook claude-code ")
+}
+
+// isCurrentRostrHook reports whether a hook is one rostr installs today, on the event and with the options it uses.
+func isCurrentRostrHook(event string, hook map[string]any) bool {
+	command, _ := hook["command"].(string)
+	_, async := hook["asyncRewake"]
+	for _, h := range hookEvents {
+		if h.event == event && command == HookCommand(h.subcommand) && !async {
+			return true
+		}
+	}
+	return false
 }
 
 // rostrHook finds rostr's installed hook for a subcommand, or nil.

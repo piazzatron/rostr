@@ -12,6 +12,9 @@ Get everything working end to end, then a final pass over the landing page.
 3. [ ] **Cloud in a real cloud session**: rostr in Claude Code on the web against production (`ROSTR_KEY`, network
    allowlist, setup-script install, hooks committed to the repo, `origin` behind the proxy). Becomes the cloud access
    instructions.
+   - [ ] Cloud environments cache the setup script's result ("Setup script cached from previous run"), so a new rostr
+         release doesn't reach an environment until the cache is invalidated. Find what invalidates it and how users
+         pick up new releases.
 4. [ ] **Codex** (agent): `rostr hook codex …`, a skill-based `/draft`, thread renaming.
 5. [ ] **tmux and herdr** (agent): pane tag and window name in tmux; `herdr pane report-metadata` in herdr.
 6. [ ] **Cleanup**: review findings N10 and N11 (then delete `cli-review.md`), Uptime Robot with Discord alerts.
@@ -24,6 +27,8 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 - [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
       that file.
 - [ ] Improve the command for moving to the cloud: `rostr config cloud on` is terrible.
+- [ ] An easier way to see, from inside a session, what the whole roster is doing (today it's asking the agent to run
+      `rostr list`).
 
 ## Deferred decisions
 
@@ -70,7 +75,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       task encryption, and repo fingerprints.
 - [ ] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
 - [x] Make drafting and the title summary much faster: drafting happens before the first reply, and the summary
-      wake-up comes about a second in.
+      comes when the first turn finishes.
 - [ ] Understand how Homebrew releases work (the tap, the formula GoReleaser pushes, `brew upgrade`); see
       `RELEASING.md`.
 - [ ] Upgrading rostr should refresh what it installed (the skill and /draft text, the hooks layout); `assemble`
