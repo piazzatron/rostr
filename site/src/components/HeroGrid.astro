@@ -46,8 +46,8 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
     line-height: 1.5;
     white-space: nowrap;
     transform-origin: left center;
-    animation: tag-in 0.9s ease;
-    transition: opacity 1.2s ease, transform 1.2s ease;
+    animation: tag-in 0.35s ease-out;
+    transition: opacity 0.5s ease, transform 0.5s ease;
   }
 
   .hero-grid :global(.hero-grid-tag.is-leaving) {
@@ -66,10 +66,14 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
 <script>
   const PITCH = 22; // distance between squares
   const SIZE = 4; // an idle square's side
-  const DRAFT_MS = 1200; // a drafted square fades in over this long
-  const RELEASE_MS = 2000; // and fades back to the bench over this long
+  const DRAFT_MS = 350; // a drafted square fades in over this long
+  const RELEASE_MS = 500; // and fades back to the bench over this long
   const HOVER_RADIUS = 70;
-  const MAX_TAGS = 2;
+  const MAX_TAGS = 3;
+  const WAVE_SWEEP_MS = 3800; // a soft diagonal band sweeps across the bench this fast
+  const WAVE_GAP_MS = 2200; // then waits this long before the next sweep
+  const WAVE_WIDTH = 140; // half the band's width
+  const WAVE_SLANT = 0.6; // how far the band leans: x moves this much per unit of y
 
   type Rect = { left: number; top: number; right: number; bottom: number };
   type Agent = { x: number; y: number; start: number; end: number; tag?: HTMLElement; name?: string };
@@ -92,6 +96,7 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
     let rows = 0;
     let originX = 0;
     let originY = 0;
+    let behindText = new Uint8Array(0); // per cell: 1 behind the text, where the wave stays faint
     let textRects: Rect[] = []; // the hero's text, which drafted squares and tags stay clear of
     let colors = { accent: "", muted: "" };
     let pointer: { x: number; y: number } | undefined;
@@ -147,12 +152,13 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
       benchCtx.setTransform(bench.width / width, 0, 0, bench.height / height, 0, 0);
       benchCtx.clearRect(0, 0, width, height);
       benchCtx.fillStyle = colors.muted;
-      const alpha = darkMode.matches ? 0.2 : 0.14;
+      const alpha = darkMode.matches ? 0.24 : 0.17;
+      behindText = new Uint8Array(columns * rows);
       for (let index = 0; index < columns * rows; index++) {
         const { x, y } = cellCenter(index);
         // Fainter behind the text, so it reads cleanly
-        const behindText = textRects.some((rect) => x > rect.left && x < rect.right && y > rect.top && y < rect.bottom);
-        benchCtx.globalAlpha = behindText ? alpha * 0.35 : alpha;
+        behindText[index] = textRects.some((rect) => x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) ? 1 : 0;
+        benchCtx.globalAlpha = behindText[index] ? alpha * 0.35 : alpha;
         benchCtx.beginPath();
         benchCtx.roundRect(x - SIZE / 2, y - SIZE / 2, SIZE, SIZE, 1);
         benchCtx.fill();
@@ -170,9 +176,9 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
         const square = { left: x - 6, top: y - 6, right: x + 6, bottom: y + 6 };
         if (textRects.some((rect) => overlaps(rect, square))) continue;
 
-        const agent: Agent = { x, y, start: now, end: now + random(10000, 25000) };
+        const agent: Agent = { x, y, start: now, end: now + random(6000, 15000) };
         agents.set(index, agent);
-        if (Math.random() < 0.3) addTag(agent);
+        if (Math.random() < 0.4) addTag(agent);
         return;
       }
     }
@@ -218,9 +224,35 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
       agents.delete(index);
     }
 
+    // The wave: a soft band of warmth that sweeps diagonally across the bench, then rests before the next sweep
+    function drawWave(now: number) {
+      const phase = (now % (WAVE_SWEEP_MS + WAVE_GAP_MS)) / WAVE_SWEEP_MS;
+      if (phase > 1) return;
+      const span = width + height * WAVE_SLANT + 2 * WAVE_WIDTH;
+      const front = -WAVE_WIDTH + phase * span; // where the band's middle is, measured along x + y * WAVE_SLANT
+      ctx!.fillStyle = colors.accent;
+      const peak = darkMode.matches ? 0.5 : 0.4;
+      for (let row = 0; row < rows; row++) {
+        const y = originY + row * PITCH;
+        const middle = front - y * WAVE_SLANT;
+        const minColumn = Math.max(0, Math.ceil((middle - WAVE_WIDTH - originX) / PITCH));
+        const maxColumn = Math.min(columns - 1, Math.floor((middle + WAVE_WIDTH - originX) / PITCH));
+        for (let column = minColumn; column <= maxColumn; column++) {
+          const x = originX + column * PITCH;
+          const lift = 0.5 + 0.5 * Math.cos((Math.PI * (x - middle)) / WAVE_WIDTH);
+          const size = SIZE + lift * 1.5;
+          ctx!.globalAlpha = lift * peak * (behindText[row * columns + column] ? 0.3 : 1);
+          ctx!.beginPath();
+          ctx!.roundRect(x - size / 2, y - size / 2, size, size, 1.5);
+          ctx!.fill();
+        }
+      }
+    }
+
     function draw(now: number) {
       ctx!.clearRect(0, 0, width, height);
       ctx!.drawImage(bench, 0, 0, width, height);
+      if (!reducedMotion.matches) drawWave(now);
 
       // Squares near the pointer brighten, like the bench noticing you
       if (pointer) {
@@ -260,13 +292,13 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
         // Ease in, hold, then ease back to the bench
         const ease = (t: number) => t * t * (3 - 2 * t);
         const strength = ease(Math.min(age / DRAFT_MS, 1)) * (left > 0 ? 1 : ease(1 + left / RELEASE_MS));
-        const size = SIZE + 2 * strength;
+        const size = SIZE + 3 * strength;
 
-        ctx!.globalAlpha = strength * 0.1;
+        ctx!.globalAlpha = strength * 0.15;
         ctx!.beginPath();
         ctx!.roundRect(agent.x - size, agent.y - size, size * 2, size * 2, size / 2);
         ctx!.fill();
-        ctx!.globalAlpha = strength * 0.85;
+        ctx!.globalAlpha = strength;
         ctx!.beginPath();
         ctx!.roundRect(agent.x - size / 2, agent.y - size / 2, size, size, 1.5);
         ctx!.fill();
@@ -280,7 +312,7 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
       const target = draftTarget();
       if (now >= nextDraft && agents.size < target) {
         draft(now);
-        nextDraft = now + random(1500, 4000);
+        nextDraft = now + random(700, 1800);
       }
       draw(now);
       frame = requestAnimationFrame(tick);
@@ -288,7 +320,7 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
 
     // How many squares are drafted at once: a few, scaled a little with the screen
     function draftTarget() {
-      return Math.min(7, Math.max(3, Math.round(columns * rows * 0.0025)));
+      return Math.min(12, Math.max(5, Math.round(columns * rows * 0.004)));
     }
 
     // Start with the grid already at its usual number of drafted squares, rather than filling it up
@@ -297,7 +329,7 @@ const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam,
       layout();
       const now = performance.now();
       for (let i = 0; i < 40 && agents.size < draftTarget(); i++) draft(now - DRAFT_MS);
-      nextDraft = now + random(1500, 4000);
+      nextDraft = now + random(700, 1800);
       if (reducedMotion.matches) {
         // One still frame, without tags
         for (const agent of agents.values()) {
