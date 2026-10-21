@@ -70,7 +70,7 @@ func TestTwoMachinesShareOneKey(t *testing.T) {
 	local := newMachine(t)
 	local.ok("assemble", "mine", "--preset", "kanto")
 	out, code := local.runTTY([]ttyStep{{"New setup, or do you have a key?", keyDown}, {"I have a key", keyEnter}},
-		"config", "cloud", "on")
+		"cloud", "on")
 	if code != 1 || !strings.Contains(out, "already has local rosters") {
 		t.Fatalf("join with local rosters: exit %d\n%s", code, out)
 	}
@@ -94,7 +94,7 @@ func TestTwoMachinesShareOneKey(t *testing.T) {
 	for i := range results {
 		m := []*machine{a, b}[i%2]
 		wg.Go(func() {
-			r := m.run(m.home, "", "agent", "draft", "--json", "--session", fmt.Sprintf("m%d-s%d", i%2, i),
+			r := m.run(m.home, "", "draft", "--json", "--session", fmt.Sprintf("m%d-s%d", i%2, i),
 				"--task", fmt.Sprintf("Task %d from machine %d", i, i%2))
 			if r.code != 0 || json.Unmarshal([]byte(r.stdout), &results[i]) != nil {
 				t.Errorf("draft %d: exit %d %s %s", i, r.code, r.stdout, r.stderr)
@@ -134,9 +134,9 @@ func TestServerNeverSeesPlaintext(t *testing.T) {
 	// A local setup with a link and a task moves to the cloud; then more of each are written in cloud mode
 	m.ok("assemble", "work", "--preset", "fellowship")
 	m.okIn(repo, "link", "work")
-	m.okIn(repo, "agent", "draft", "--session", unique("blind-s1-"), "--task", task)
-	m.ok("config", "cloud", "on")
-	m.okIn(repo, "agent", "draft", "--session", unique("blind-s2-"), "--task", task+" again")
+	m.okIn(repo, "draft", "--session", unique("blind-s1-"), "--task", task)
+	m.ok("cloud", "on")
+	m.okIn(repo, "draft", "--session", unique("blind-s2-"), "--task", task+" again")
 	m.okIn(repo, "link", "work")
 	key := m.key()
 	token := authToken(t, key)
@@ -206,12 +206,12 @@ func TestMovingALocalSetupToTheCloud(t *testing.T) {
 	m.ok("config", "expiry", "48h")
 	m.ok("config", "auto-draft", "off")
 	m.ok("config", "default", "play")
-	m.okIn(api, "agent", "draft", "--session", "s-api", "--roster", "work", "--task", "Fix auth redirect loop")
-	m.okIn(web, "agent", "draft", "--session", "s-web", "--task", "Redesign the home page")
-	m.okIn(web, "agent", "draft", "--session", "s-web2")
+	m.okIn(api, "draft", "--session", "s-api", "--roster", "work", "--task", "Fix auth redirect loop")
+	m.okIn(web, "draft", "--session", "s-web", "--task", "Redesign the home page")
+	m.okIn(web, "draft", "--session", "s-web2")
 	before := m.list()
 
-	out := m.ok("config", "cloud", "on")
+	out := m.ok("cloud", "on")
 	if !strings.Contains(out, "Moved your setup to the cloud: 2 rosters, 1 linked project, and 3 drafted agents.") ||
 		strings.Contains(out, "rostr_sk_") {
 		t.Fatalf("cloud on: %s", out)
@@ -258,7 +258,7 @@ func TestMovingALocalSetupToTheCloud(t *testing.T) {
 	if d := m.draft(web, "s-new"); d.Display != "Linus" {
 		t.Fatalf("new draft: %+v", d)
 	}
-	m.fails("already in cloud mode", "config", "cloud", "on")
+	m.fails("already in cloud mode", "cloud", "on")
 }
 
 func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
@@ -266,7 +266,7 @@ func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
 	m := newMachine(t)
 	repo := m.gitRepo("git@github.com:acme/dashboard.git")
 	m.ok("assemble", "work", "--names", "🧙 Gandalf, 💍 Frodo", "--cloud")
-	m.okIn(repo, "agent", "draft", "--session", "s1", "--task", "Build the who's-busy widget")
+	m.okIn(repo, "draft", "--session", "s1", "--task", "Build the who's-busy widget")
 
 	// Both key commands refuse without a terminal, and print at one
 	m.fails("only runs in a terminal", "config", "key")
@@ -367,7 +367,7 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
 	if r.code != 0 || !strings.Contains(r.stdout, `You're 🧙 Gandalf for this session`) || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
-		!strings.Contains(r.stdout, "run rostr agent task --session hs1") {
+		!strings.Contains(r.stdout, "run rostr task --session hs1") {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	l := m.list()
@@ -376,7 +376,7 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 	}
 
 	// The agent sets its task through ROSTR_SESSION; compaction re-tells the same name
-	if out := m.with("ROSTR_SESSION=hs1").okIn(repo, "agent", "task", "Deflake login test"); out != "🧙 Gandalf · Deflake login test\n" {
+	if out := m.with("ROSTR_SESSION=hs1").okIn(repo, "task", "Deflake login test"); out != "🧙 Gandalf · Deflake login test\n" {
 		t.Fatalf("task: %q", out)
 	}
 	expectIdentity("compact", hook("session-start", start("compact")))
@@ -475,7 +475,7 @@ func TestConcurrentDraftsNeverCollide(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range processes {
 		wg.Go(func() {
-			r := m.run(m.home, "", "agent", "draft", "--json", "--session", fmt.Sprintf("c%d", i))
+			r := m.run(m.home, "", "draft", "--json", "--session", fmt.Sprintf("c%d", i))
 			var d draftOutput
 			if r.code != 0 || json.Unmarshal([]byte(r.stdout), &d) != nil {
 				t.Errorf("process %d: exit %d, %s %s", i, r.code, r.stdout, r.stderr)
@@ -580,7 +580,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		t.Fatalf("link --repo: %q", out)
 	}
 
-	// agent draft: the linked roster in the repo, the default outside it, --roster over both
+	// draft: the linked roster in the repo, the default outside it, --roster over both
 	if d := m.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Team: "A", Roster: "play", Display: "Ada"}) {
 		t.Fatalf("draft in repo: %+v", d)
 	}
@@ -591,23 +591,23 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		t.Fatalf("draft --roster: %+v", d)
 	}
 
-	// agent task and release, by session and by name across rosters
-	if out := m.with("ROSTR_SESSION=s1").okIn(repo, "agent", "task", "Fix auth redirect loop"); out != "Ada · Fix auth redirect loop\n" {
+	// task and release, by session and by name across rosters
+	if out := m.with("ROSTR_SESSION=s1").okIn(repo, "task", "Fix auth redirect loop"); out != "Ada · Fix auth redirect loop\n" {
 		t.Fatalf("task: %q", out)
 	}
-	m.fails("Gandalf is drafted in more than one roster (work, side); pass --roster", "agent", "task", "gandalf", "x")
-	m.ok("agent", "task", "GANDALF", "Review the PR", "--roster", "work")
-	if out := m.ok("agent", "release", "gandalf", "--roster", "side"); out != "Released 🧙 Gandalf from the side roster.\n" {
+	m.fails("Gandalf is drafted in more than one roster (work, side); pass --roster", "task", "gandalf", "x")
+	m.ok("task", "GANDALF", "Review the PR", "--roster", "work")
+	if out := m.ok("release", "gandalf", "--roster", "side"); out != "Released 🧙 Gandalf from the side roster.\n" {
 		t.Fatalf("release by name: %q", out)
 	}
-	m.fails(`no agent named "ada 2" is drafted`, "agent", "release", "ada 2")
+	m.fails(`no agent named "ada 2" is drafted`, "release", "ada 2")
 	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "Review the PR" {
 		t.Fatalf("drafted: %v", drafted)
 	}
-	if out := m.with("ROSTR_SESSION=s2").ok("agent", "release"); out != "Released 🧙 Gandalf from the work roster.\n" {
+	if out := m.with("ROSTR_SESSION=s2").ok("release"); out != "Released 🧙 Gandalf from the work roster.\n" {
 		t.Fatalf("release by session: %q", out)
 	}
-	if out := m.with("ROSTR_SESSION=s2").ok("agent", "release"); out != "This session has no drafted agent.\n" {
+	if out := m.with("ROSTR_SESSION=s2").ok("release"); out != "This session has no drafted agent.\n" {
 		t.Fatalf("release again: %q", out)
 	}
 
@@ -656,7 +656,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	if out := m.ok("disband", "play", "--yes"); out != "Disbanded the play roster. 🧮 Ada says bye.\nwork is your default roster now.\n" {
 		t.Fatalf("disband: %q", out)
 	}
-	if out := m.with("ROSTR_SESSION=s1").ok("agent", "release"); out != "This session has no drafted agent.\n" {
+	if out := m.with("ROSTR_SESSION=s1").ok("release"); out != "This session has no drafted agent.\n" {
 		t.Fatalf("release after disband: %q", out)
 	}
 	m.ok("disband", "side", "--yes")
@@ -673,5 +673,5 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		t.Fatalf("credentials still there: %v", err)
 	}
 	m.fails("No rosters yet", "list")
-	m.fails("No rosters yet", "agent", "draft", "--session", "s5")
+	m.fails("No rosters yet", "draft", "--session", "s5")
 }

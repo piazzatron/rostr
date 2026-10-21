@@ -32,7 +32,7 @@ git, use your default roster.
 Your whole setup lives in one place, **local** or **cloud**:
 
 - **Local** (the default): everything lives on disk. No account, no network.
-- **Cloud**: `rostr config cloud on` moves everything to the rostr API at `api.getrostr.sh`. From then on, every session, on
+- **Cloud**: `rostr cloud on` moves everything to the rostr API at `api.getrostr.sh`. From then on, every session, on
   your machine or in a cloud environment like Claude Code on the web or Codex cloud, drafts from there. Having a rostr
   key is what puts a machine in cloud mode.
 
@@ -55,9 +55,9 @@ Full docs at [getrostr.sh/cli](https://getrostr.sh/cli).
 
 | Command | What it does |
 |---|---|
-| `rostr agent draft` | Draft the next free agent for a session, A team first |
-| `rostr agent release` | Send an agent back to the bench |
-| `rostr agent task` | Set or change what an agent is working on |
+| `rostr draft` | Draft the next free agent for a session, A team first |
+| `rostr release` | Send an agent back to the bench |
+| `rostr task` | Set or change what an agent is working on |
 
 **Settings**
 
@@ -67,7 +67,7 @@ Full docs at [getrostr.sh/cli](https://getrostr.sh/cli).
 | `rostr config default <roster>` | Choose the roster projects use when they don't have a link |
 | `rostr config emoji on\|off\|only` | Show agents with their emoji, without it, or as just the emoji |
 | `rostr config auto-draft on\|off` | Draft every new session automatically, or by hand with `/draft` |
-| `rostr config cloud on` | Move your whole setup to the cloud |
+| `rostr cloud on` | Move your whole setup to the cloud |
 | `rostr config key` | Print your rostr key |
 
 ## Install

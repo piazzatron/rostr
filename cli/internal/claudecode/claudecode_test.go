@@ -132,7 +132,7 @@ func TestIdentityText(t *testing.T) {
 - When you write somewhere other than this chat, sign it "— 🧙 Gandalf": Slack messages, emails, PR descriptions, PR and issue comments.
 - Don't put the name in code, commit messages, or files.
 - Your user's own instructions about attribution or sign-offs take precedence over these.
-- When your work changes, run: rostr agent task --session s1 "<new task>"`
+- When your work changes, run: rostr task --session s1 "<new task>"`
 	if got := Identity("🧙 Gandalf", "work", "s1"); got != want {
 		t.Fatalf("got:\n%s", got)
 	}
@@ -149,7 +149,7 @@ func TestTitleInstruction(t *testing.T) {
 		t.Errorf("remote: %s", remote)
 	}
 	terminal := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{})
-	if strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, `rostr agent task --session s1 "<3-5 word summary`) {
+	if strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, `rostr task --session s1 "<3-5 word summary`) {
 		t.Errorf("terminal: %s", terminal)
 	}
 	for _, text := range []string{local, remote, terminal} {
