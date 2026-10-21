@@ -1,0 +1,335 @@
+---
+import { PRESET_ROSTERS } from "../data/rosters";
+
+// Everyone on every preset roster, like "🧙 Gandalf", for the name tags on drafted squares
+const MEMBERS = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam, ...roster.bTeam]))];
+---
+
+<!-- The hero's background: a bench of squares, some drafted (lit) at any moment and released a few seconds later -->
+<div class="hero-grid" aria-hidden="true" data-members={JSON.stringify(MEMBERS)}>
+  <canvas></canvas>
+</div>
+
+<style>
+  /* Full-bleed behind the hero and up behind the nav, fading out before the terminal */
+  .hero-grid {
+    position: absolute;
+    z-index: -1;
+    top: -120px;
+    bottom: 0;
+    left: calc(50% - 50vw);
+    right: calc(50% - 50vw);
+    overflow: hidden;
+    pointer-events: none;
+    mask-image:
+      linear-gradient(to bottom, #000 45%, transparent 80%),
+      linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    mask-composite: intersect;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* A drafted agent's name, in the same style as the roster grid's A team chips */
+  .hero-grid :global(.hero-grid-tag) {
+    position: absolute;
+    padding: 2px 8px;
+    border: 1.5px solid var(--accent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    transform-origin: left center;
+    animation: tag-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .hero-grid :global(.hero-grid-tag.is-leaving) {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.9);
+  }
+
+  @keyframes tag-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.8);
+    }
+  }
+</style>
+
+<script>
+  const PITCH = 22; // distance between squares
+  const SIZE = 4; // an idle square's side
+  const DRAFT_MS = 450; // a drafted square pops in over this long
+  const RELEASE_MS = 1100; // and fades back to the bench over this long
+  const HOVER_RADIUS = 90;
+  const MAX_TAGS = 3;
+
+  type Rect = { left: number; top: number; right: number; bottom: number };
+  type Agent = { x: number; y: number; start: number; end: number; tag?: HTMLElement; name?: string };
+
+  const grid = document.querySelector<HTMLElement>(".hero-grid");
+  const hero = grid?.parentElement;
+  const canvas = grid?.querySelector("canvas");
+  const ctx = canvas?.getContext("2d");
+  if (grid && hero && canvas && ctx) {
+    const members: string[] = JSON.parse(grid.dataset.members ?? "[]");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    const darkMode = matchMedia("(prefers-color-scheme: dark)");
+
+    const bench = document.createElement("canvas"); // the idle squares, drawn once per resize or theme change
+    const agents = new Map<number, Agent>(); // drafted squares by cell index
+    let width = 0;
+    let height = 0;
+    let top = 0; // how much of the grid is above the top of the page
+    let columns = 0;
+    let rows = 0;
+    let originX = 0;
+    let originY = 0;
+    let textRects: Rect[] = []; // the hero's text, which drafted squares and tags stay clear of
+    let colors = { accent: "", muted: "" };
+    let pointer: { x: number; y: number } | undefined;
+    let nextDraft = 0;
+    let visible = true;
+    let frame = 0;
+
+    const random = (min: number, max: number) => min + Math.random() * (max - min);
+    const overlaps = (a: Rect, b: Rect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const cellCenter = (index: number) => ({
+      x: originX + (index % columns) * PITCH,
+      y: originY + Math.floor(index / columns) * PITCH,
+    });
+
+    function layout() {
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const box = grid!.getBoundingClientRect();
+      width = box.width;
+      height = box.height;
+      top = Math.max(0, -(box.top + scrollY));
+      for (const target of [canvas!, bench]) {
+        target.width = Math.round(width * dpr);
+        target.height = Math.round(height * dpr);
+      }
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      columns = Math.floor(width / PITCH);
+      rows = Math.floor(height / PITCH);
+      originX = (width - (columns - 1) * PITCH) / 2;
+      originY = (height - (rows - 1) * PITCH) / 2;
+
+      const pad = 10;
+      const nav = document.querySelector(".nav");
+      textRects = [...hero!.children, ...(nav ? [nav] : [])]
+        .filter((child) => child !== grid && !child.classList.contains("expressive-code"))
+        .map((child) => child.getBoundingClientRect())
+        .filter((rect) => rect.width > 0)
+        .map((rect) => ({
+          left: rect.left - box.left - pad,
+          top: rect.top - box.top - pad,
+          right: rect.right - box.left + pad,
+          bottom: rect.bottom - box.top + pad,
+        }));
+
+      // Drafted squares from the old layout don't line up anymore
+      for (const index of [...agents.keys()]) release(index);
+      drawBench();
+    }
+
+    function drawBench() {
+      const style = getComputedStyle(document.documentElement);
+      colors = { accent: style.getPropertyValue("--accent").trim(), muted: style.getPropertyValue("--muted").trim() };
+      const benchCtx = bench.getContext("2d")!;
+      benchCtx.setTransform(bench.width / width, 0, 0, bench.height / height, 0, 0);
+      benchCtx.clearRect(0, 0, width, height);
+      benchCtx.fillStyle = colors.muted;
+      const alpha = darkMode.matches ? 0.28 : 0.2;
+      for (let index = 0; index < columns * rows; index++) {
+        const { x, y } = cellCenter(index);
+        // Fainter behind the text, so it reads cleanly
+        const behindText = textRects.some((rect) => x > rect.left && x < rect.right && y > rect.top && y < rect.bottom);
+        benchCtx.globalAlpha = behindText ? alpha * 0.35 : alpha;
+        benchCtx.beginPath();
+        benchCtx.roundRect(x - SIZE / 2, y - SIZE / 2, SIZE, SIZE, 1);
+        benchCtx.fill();
+      }
+    }
+
+    // Draft a random free square away from the text. Some get a name tag where one fits.
+    function draft(now: number) {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const index = Math.floor(Math.random() * columns * rows);
+        if (agents.has(index)) continue;
+        const { x, y } = cellCenter(index);
+        if (y > height * 0.7) continue; // faded out by the mask
+        if (y < top + 16) continue; // above the top of the page
+        const square = { left: x - 6, top: y - 6, right: x + 6, bottom: y + 6 };
+        if (textRects.some((rect) => overlaps(rect, square))) continue;
+
+        const agent: Agent = { x, y, start: now, end: now + random(4000, 11000) };
+        agents.set(index, agent);
+        if (Math.random() < 0.5) addTag(agent);
+        return;
+      }
+    }
+
+    function addTag(agent: Agent) {
+      const tags = [...agents.values()].filter((other) => other.tag);
+      if (tags.length >= MAX_TAGS) return;
+      const taken = new Set(tags.map((other) => other.name));
+      const free = members.filter((member) => !taken.has(member));
+      const name = free[Math.floor(Math.random() * free.length)];
+      if (!name) return;
+
+      const tag = document.createElement("span");
+      tag.className = "hero-grid-tag";
+      tag.textContent = name;
+      tag.style.left = `${agent.x + 9}px`;
+      tag.style.top = `${agent.y - 12}px`;
+      grid!.append(tag);
+      const box = tag.getBoundingClientRect();
+      const rect = { left: agent.x, top: agent.y - 16, right: agent.x + 13 + box.width, bottom: agent.y + 16 };
+      const clashes =
+        rect.right > width - 24 ||
+        rect.top < top + 8 ||
+        rect.bottom > height * 0.6 ||
+        textRects.some((text) => overlaps(text, rect)) ||
+        tags.some((other) => overlaps(rect, tagRect(other)));
+      if (clashes) {
+        tag.remove();
+        return;
+      }
+      agent.tag = tag;
+      agent.name = name;
+    }
+
+    function tagRect(agent: Agent): Rect {
+      const box = agent.tag!.getBoundingClientRect();
+      return { left: agent.x - 8, top: agent.y - 24, right: agent.x + 21 + box.width, bottom: agent.y + 24 };
+    }
+
+    // Send a square back to the bench straight away (used on resize; normal releases fade out in draw)
+    function release(index: number) {
+      agents.get(index)?.tag?.remove();
+      agents.delete(index);
+    }
+
+    function draw(now: number) {
+      ctx!.clearRect(0, 0, width, height);
+      ctx!.drawImage(bench, 0, 0, width, height);
+
+      // Squares near the pointer brighten, like the bench noticing you
+      if (pointer) {
+        ctx!.fillStyle = colors.muted;
+        const { x: px, y: py } = pointer;
+        const minColumn = Math.max(0, Math.floor((px - originX - HOVER_RADIUS) / PITCH));
+        const maxColumn = Math.min(columns - 1, Math.ceil((px - originX + HOVER_RADIUS) / PITCH));
+        const minRow = Math.max(0, Math.floor((py - originY - HOVER_RADIUS) / PITCH));
+        const maxRow = Math.min(rows - 1, Math.ceil((py - originY + HOVER_RADIUS) / PITCH));
+        for (let row = minRow; row <= maxRow; row++) {
+          for (let column = minColumn; column <= maxColumn; column++) {
+            const x = originX + column * PITCH;
+            const y = originY + row * PITCH;
+            const closeness = 1 - Math.hypot(x - px, y - py) / HOVER_RADIUS;
+            if (closeness <= 0) continue;
+            const size = SIZE + closeness * 2;
+            ctx!.globalAlpha = closeness * 0.55;
+            ctx!.beginPath();
+            ctx!.roundRect(x - size / 2, y - size / 2, size, size, 1.5);
+            ctx!.fill();
+          }
+        }
+      }
+
+      ctx!.fillStyle = colors.accent;
+      for (const [index, agent] of agents) {
+        const age = now - agent.start;
+        const left = agent.end - now;
+        if (left <= -RELEASE_MS) {
+          release(index);
+          continue;
+        }
+        if (left <= 0 && agent.tag && !agent.tag.classList.contains("is-leaving")) {
+          agent.tag.classList.add("is-leaving");
+        }
+
+        // Pop in with an overshoot, pulse gently while working, then fade back to the bench
+        const popIn = Math.min(age / DRAFT_MS, 1);
+        const overshoot = 1 + Math.sin(popIn * Math.PI) * 0.6;
+        const pulse = 1 + Math.sin(age / 420 + index) * 0.08;
+        const fade = left > 0 ? 1 : 1 + left / RELEASE_MS;
+        const strength = popIn * fade;
+        const size = (SIZE + 3) * overshoot * pulse * (0.6 + 0.4 * fade);
+
+        ctx!.globalAlpha = strength * 0.18;
+        ctx!.beginPath();
+        ctx!.roundRect(agent.x - size, agent.y - size, size * 2, size * 2, size / 2);
+        ctx!.fill();
+        ctx!.globalAlpha = strength;
+        ctx!.beginPath();
+        ctx!.roundRect(agent.x - size / 2, agent.y - size / 2, size, size, 1.5);
+        ctx!.fill();
+      }
+      ctx!.globalAlpha = 1;
+    }
+
+    function tick(now: number) {
+      frame = 0;
+      if (!visible) return;
+      const target = Math.min(18, Math.max(6, Math.round(columns * rows * 0.009)));
+      if (now >= nextDraft && agents.size < target) {
+        draft(now);
+        nextDraft = now + random(250, 800);
+      }
+      draw(now);
+      frame = requestAnimationFrame(tick);
+    }
+
+    // With reduced motion, one still frame: a handful of drafted squares, no tags
+    function start() {
+      cancelAnimationFrame(frame);
+      layout();
+      if (reducedMotion.matches) {
+        const now = performance.now();
+        for (let i = 0; i < 40 && agents.size < 10; i++) draft(now - DRAFT_MS);
+        for (const agent of agents.values()) {
+          agent.tag?.remove();
+          agent.tag = undefined;
+          agent.end = Infinity;
+        }
+        draw(now);
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    }
+
+    let resizeTimer = 0;
+    new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(start, 100);
+    }).observe(hero);
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible && !frame && !reducedMotion.matches) frame = requestAnimationFrame(tick);
+    }).observe(grid);
+    darkMode.addEventListener("change", start);
+    reducedMotion.addEventListener("change", start);
+    document.fonts?.ready.then(start);
+
+    if (!reducedMotion.matches) {
+      window.addEventListener("pointermove", (event) => {
+        const box = grid.getBoundingClientRect();
+        const x = event.clientX - box.left;
+        const y = event.clientY - box.top;
+        pointer = x >= 0 && y >= 0 && x <= box.width && y <= box.height ? { x, y } : undefined;
+      });
+      document.documentElement.addEventListener("pointerleave", () => (pointer = undefined));
+    }
+
+    start();
+  }
+</script>

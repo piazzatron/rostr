@@ -74,6 +74,7 @@ const { title, description } = Astro.props;
 
   body {
     margin: 0;
+    overflow-x: clip; /* the hero's full-bleed background is 100vw wide, which counts the scrollbar */
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
@@ -130,7 +131,10 @@ const { title, description } = Astro.props;
     padding: 0 24px;
   }
 
+  /* Above the hero's background, which extends up behind it */
   .nav {
+    position: relative;
+    z-index: 1;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -173,6 +177,8 @@ const { title, description } = Astro.props;
   /* Hero */
   /* Extra bottom padding leaves room for the Slack notification hanging off the bottom of the hero terminal */
   .hero {
+    position: relative;
+    isolation: isolate;
     padding: 72px 0 80px;
   }
 

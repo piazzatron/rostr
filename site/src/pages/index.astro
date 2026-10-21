@@ -1,5 +1,6 @@
 ---
 import { Code } from "astro-expressive-code/components";
+import HeroGrid from "../components/HeroGrid.astro";
 import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
 import ClaudeIcon from "../assets/claude.svg";
@@ -133,6 +134,7 @@ const LIST_JSON_EXAMPLE = `{
 >
     <!-- Hero -->
     <section class="hero">
+      <HeroGrid />
       <h1>Give your agents names.</h1>
       <p class="hero-subtitle">
         Remember who's doing what.{" "}
