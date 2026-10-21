@@ -13,7 +13,7 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
-// draftJSON is what `rostr agent draft --json` prints.
+// draftJSON is what `rostr draft --json` prints.
 type draftJSON struct {
 	Name    string `json:"name"`
 	Emoji   string `json:"emoji"`
@@ -22,16 +22,7 @@ type draftJSON struct {
 	Display string `json:"display"`
 }
 
-func newAgentCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "agent",
-		Short: "Draft, release, and set tasks for agents (run by hooks, the skill, and /draft)",
-	}
-	cmd.AddCommand(newAgentDraftCommand(), newAgentReleaseCommand(), newAgentTaskCommand())
-	return cmd
-}
-
-func newAgentDraftCommand() *cobra.Command {
+func newDraftCommand() *cobra.Command {
 	var task, session, rosterFlag string
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -69,7 +60,7 @@ func newAgentDraftCommand() *cobra.Command {
 	return cmd
 }
 
-func newAgentReleaseCommand() *cobra.Command {
+func newReleaseCommand() *cobra.Command {
 	var session, rosterFlag string
 	cmd := &cobra.Command{
 		Use:   "release [<name>]",
@@ -119,7 +110,7 @@ func newAgentReleaseCommand() *cobra.Command {
 	return cmd
 }
 
-func newAgentTaskCommand() *cobra.Command {
+func newTaskCommand() *cobra.Command {
 	var session, rosterFlag string
 	cmd := &cobra.Command{
 		Use:   "task [<name>] <description>",

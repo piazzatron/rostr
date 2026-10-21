@@ -27,7 +27,6 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 
 - [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
       that file.
-- [ ] Improve the command for moving to the cloud: `rostr config cloud on` is terrible.
 - [ ] Get rostr API call latency down. From Tokyo (Oct 21): one call is ~0.4s from a fresh process (TCP+TLS ~160ms,
       then ~230ms to the origin; even a 404 takes that long), ~0.2–0.45s on a reused connection. The path is
       Cloudflare (NRT) → Railway edge (hnd1) → the origin, likely in a US region. Every hook is a new process, so every
@@ -78,7 +77,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       formula, and the `getrostr.sh/install` script.
 - [ ] Roster commands: `assemble` (with the wizard and the hidden `create` alias), `link` / `unlink`, `list`, `edit`,
       `presets`, `disband`.
-- [ ] Agent commands: `agent draft`, `agent release`, `agent task`.
+- [ ] Agent commands: `draft`, `release`, `task`.
 - [ ] `config`, including the `cloud on` migration.
 - [ ] Local storage ([`docs/local-storage.md`](docs/local-storage.md)).
 - [ ] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
@@ -131,7 +130,7 @@ Write the setup steps for Claude Code on the web and Codex cloud:
       `🧙 Gandalf · …` in the TUI, `codex resume`, and the app (does Codex's own auto-naming overwrite it?).
 - [ ] Codex: a fork gets a new name; `/compact` and `resume` re-tell the same one; quitting releases within 3s; does
       `/clear` fire SessionEnd?
-- [ ] Codex sandbox: can `$rostr-draft` and `rostr agent task` write `~/.config/rostr` and reach the daemon socket under
+- [ ] Codex sandbox: can `$rostr-draft` and `rostr task` write `~/.config/rostr` and reach the daemon socket under
       the default `workspace-write` sandbox?
 - [ ] Codex terminal title: with `tui.terminal_title = ["spinner", "thread-name", "project"]` the name reaches tmux and
       herdr.

@@ -86,7 +86,6 @@ func newConfigCommand() *cobra.Command {
 		newConfigEmojiCommand(),
 		newConfigAutoDraftCommand(),
 		newConfigExpiryCommand(),
-		newConfigCloudCommand(),
 		newConfigKeyCommand(),
 	)
 	return cmd
@@ -196,7 +195,7 @@ func configHelp(cloud bool) string {
 		"  rostr config emoji on|off|only [--roster <roster>]",
 	}
 	if !cloud {
-		lines = append(lines, "  rostr config cloud on")
+		lines = append(lines, "  rostr cloud on")
 	}
 	lines = append(lines, "Or run `rostr config` in a terminal to pick from a list.")
 	return strings.Join(lines, "\n")

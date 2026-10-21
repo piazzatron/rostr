@@ -30,8 +30,6 @@ func newHookCommand() *cobra.Command {
 	claudeCode.AddCommand(
 		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
 		hookSubcommand("prompt", claudecode.ReadHookInput, hookPrompt),
-		// Installs from before the title moved into the first reply run this on Stop; it does nothing now
-		hookSubcommand("title", claudecode.ReadHookInput, func(context.Context, claudecode.HookInput, io.Writer, io.Writer) error { return nil }),
 		hookSubcommand("title-set", claudecode.ReadHookInput, hookTitleSet),
 		hookSubcommand("session-end", claudecode.ReadHookInput, hookSessionEnd),
 		newHookDraftCommand(),

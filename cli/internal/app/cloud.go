@@ -11,15 +11,17 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/piazzatron/rostr/cli/internal/claudecode"
 	"github.com/piazzatron/rostr/cli/internal/crypto"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
-func newConfigCloudCommand() *cobra.Command {
+// newCloudCommand is `rostr cloud`: moving the setup to the rostr API, and setting up Claude Code cloud sessions.
+func newCloudCommand() *cobra.Command {
 	cloud := &cobra.Command{
 		Use:   "cloud",
-		Short: "Move your setup to the cloud",
+		Short: "Move your setup to the rostr API, and set up Claude Code cloud sessions",
 	}
 	cloud.AddCommand(&cobra.Command{
 		Use:   "on",
@@ -28,8 +30,36 @@ func newConfigCloudCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCloudOn(cmd.Context(), cmd.OutOrStdout())
 		},
-	})
+	}, newCloudInstallCommand())
 	return cloud
+}
+
+// newCloudInstallCommand is `rostr cloud install`, which installs the Claude Code hooks in a cloud session's
+// container. Each cloud session starts from a fresh container, so the install script runs it there.
+func newCloudInstallCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "Install the Claude Code hooks in a cloud session's container (the install script runs this)",
+		Long: "Install the Claude Code hooks in a cloud session's container. Each cloud session starts from a fresh " +
+			"container, so the install script runs this there; ROSTR_KEY connects it to your setup. On your own " +
+			"machine, `rostr assemble` installs the hooks.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Elsewhere it would install hooks for a setup that doesn't exist yet
+			if os.Getenv("CLAUDE_CODE_REMOTE") != "true" {
+				return errors.New("rostr cloud install only runs in a Claude Code cloud session. On this machine, " +
+					"`rostr assemble` sets rostr up and installs the hooks")
+			}
+			installed, err := claudecode.Install(paths.ClaudeDir())
+			if err != nil {
+				return err
+			}
+			if len(installed) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Installed for Claude Code: %s.\n", strings.Join(installed, ", "))
+			}
+			return nil
+		},
+	}
 }
 
 func newConfigKeyCommand() *cobra.Command {
@@ -43,7 +73,7 @@ func newConfigKeyCommand() *cobra.Command {
 				return errors.New("rostr config key only runs in a terminal, so the key doesn't end up in an agent's transcript")
 			}
 			if !hasCloudKey() {
-				return errors.New("this machine is in local mode, so there's no rostr key. `rostr config cloud on` moves your setup to the cloud")
+				return errors.New("this machine is in local mode, so there's no rostr key. `rostr cloud on` moves your setup to the cloud")
 			}
 			key, err := loadCloudKey()
 			if err != nil {
@@ -78,7 +108,7 @@ func runCloudOn(ctx context.Context, out io.Writer) error {
 
 	if !isInteractive() {
 		if len(local.Rosters) == 0 {
-			return errors.New("there are no local rosters to move. To use an existing cloud setup, run `rostr config cloud on` " +
+			return errors.New("there are no local rosters to move. To use an existing cloud setup, run `rostr cloud on` " +
 				"in a terminal or set ROSTR_KEY; for a new one, run `rostr assemble --cloud`")
 		}
 		return moveSetupToCloud(ctx, out, local)
@@ -87,7 +117,7 @@ func runCloudOn(ctx context.Context, out io.Writer) error {
 	// Ask for a new setup or an existing key, then for the key, on one screen. A machine with local rosters can't join
 	var join bool
 	var key crypto.Key
-	s := newScreen("config cloud on")
+	s := newScreen("cloud on")
 	err = s.run([]screenStep{
 		{field: huh.NewSelect[bool]().Title("New setup, or do you have a key?").Options(
 			huh.NewOption("New setup (moves this machine's rosters to the cloud)", false),

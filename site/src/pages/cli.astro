@@ -6,7 +6,7 @@ import { PRESET_ROSTERS } from "../data/rosters";
 
 interface CommandDoc {
   id: string;
-  /** Shown after "rostr" in the heading and quick links, e.g. "link / unlink" or "agent draft". Defaults to the id. */
+  /** Shown after "rostr" in the heading and quick links, e.g. "link / unlink" or "draft / release". Defaults to the id. */
   heading?: string;
   usage: string;
   summary: string;
@@ -44,7 +44,7 @@ const COMMAND_GROUPS: CommandGroup[] = [
           { flag: "--preset <id>", description: "Skip the preset question. See them all with rostr presets." },
           { flag: "--names <list>", description: "Use your own comma-separated names, with an emoji in front if you like. The first six are your A team, and names without an emoji get a random one." },
           { flag: "--emoji on|off|only", description: "How agents show up. Defaults to on." },
-          { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr config cloud on." },
+          { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr cloud on." },
           { flag: "--no-auto-draft", description: "Don't draft sessions automatically; use /draft instead." },
           { flag: "--link", description: "Use the new roster for the repo you're in. The wizard asks this when you're in a repo." },
         ],
@@ -137,10 +137,10 @@ Disbanded work. side is now your default roster`,
     lede: "Your hooks, the rostr skill, and the /draft slash command run these.",
     commands: [
       {
-        id: "agent-draft",
-        heading: "agent draft / release",
+        id: "draft",
+        heading: "draft / release",
         badge: "⚙️ On session start and end",
-        usage: "rostr agent draft [--task <description>] [--session <id>] [--json]\nrostr agent release [<name>] [--session <id>]",
+        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr release [<name>] [--session <id>]",
         summary:
           "Draft the next free agent when a session starts, A team first, and send it back to the bench when the session ends. The same session always gets the same name back.",
         options: [
@@ -148,27 +148,27 @@ Disbanded work. side is now your default roster`,
           { flag: "--session <id>", description: "The session to draft or release for. The hooks pass this, and it defaults to ROSTR_SESSION." },
           { flag: "--json", description: "Print the drafted agent as JSON." },
         ],
-        example: `$ rostr agent draft --task "Fix auth redirect loop"
+        example: `$ rostr draft --task "Fix auth redirect loop"
 🧙 Gandalf is on it: Fix auth redirect loop
 
-$ rostr agent draft --json
+$ rostr draft --json
 {"name": "Gandalf", "emoji": "🧙", "team": "A", "roster": "work", "display": "🧙 Gandalf"}
 
-$ rostr agent release gandalf
+$ rostr release gandalf
 🧙 Gandalf is back on the bench`,
       },
       {
-        id: "agent-task",
-        heading: "agent task",
-        usage: "rostr agent task [<name>] <description>",
+        id: "task",
+        heading: "task",
+        usage: "rostr task [<name>] <description>",
         summary: "Set or change what an agent is working on. Your hooks set the first task from your first prompt.",
         options: [
           { flag: "--session <id>", description: "Set the task for whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
         ],
-        example: `$ rostr agent task "Migrate billing to Stripe v3"
+        example: `$ rostr task "Migrate billing to Stripe v3"
 🌱 Samwise is now on: Migrate billing to Stripe v3
 
-$ rostr agent task samwise "Migrate billing to Stripe v3"
+$ rostr task samwise "Migrate billing to Stripe v3"
 🌱 Samwise is now on: Migrate billing to Stripe v3`,
       },
     ],
@@ -182,13 +182,12 @@ $ rostr agent task samwise "Migrate billing to Stripe v3"
       {
         id: "config",
         usage:
-          "rostr config\nrostr config default <roster>\nrostr config emoji on|off|only [--roster <roster>]\nrostr config auto-draft on|off\nrostr config cloud on\nrostr config key [--token]",
+          "rostr config\nrostr config default <roster>\nrostr config emoji on|off|only [--roster <roster>]\nrostr config auto-draft on|off\nrostr config key [--token]",
         summary: "See and change your settings. Run it on its own to see them all.",
         options: [
           { flag: "default", description: "The roster projects use when they don't have a link." },
           { flag: "emoji", description: "How agents show up: on (🧙 Gandalf), off (Gandalf), or only (🧙). only needs every member to have a different emoji." },
           { flag: "auto-draft", description: "Draft new sessions automatically, or by hand with /draft." },
-          { flag: "cloud on", description: "Move your whole setup to the cloud. Turn it on once, when you start using cloud agents. There's no going back to local." },
           { flag: "key", description: "Print your rostr key, which puts a machine in cloud mode. There's no recovery, so keep it safe. --token prints the token for the API instead." },
         ],
         example: `$ rostr config
@@ -198,9 +197,17 @@ auto-draft   on
 cloud        off
 
 $ rostr config emoji only
-🧙 Emoji only for work. Agents now show as: 🧙 · Fix auth redirect loop
-
-$ rostr config cloud on
+🧙 Emoji only for work. Agents now show as: 🧙 · Fix auth redirect loop`,
+      },
+      {
+        id: "cloud",
+        usage: "rostr cloud on\nrostr cloud install",
+        summary: "Keep your setup on the rostr API, so agents on every machine and in cloud sessions share one roster.",
+        options: [
+          { flag: "on", description: "Move your whole setup to the cloud, or join one with your key. Turn it on once, when you start using cloud agents. There's no going back to local." },
+          { flag: "install", description: "Install rostr's hooks in a Claude Code cloud session. The install script runs this for you when ROSTR_KEY is set in your cloud environment." },
+        ],
+        example: `$ rostr cloud on
 ✔ New setup, or do you have a key? · New setup
 ☁️ Moved your setup to the cloud
    2 rosters, 3 project links, 4 active drafts
@@ -244,7 +251,7 @@ $ rostr config cloud on
         Your whole setup lives in one place. Locally, everything is on disk. Once you turn on <a href="#config"
           >cloud mode</a
         >, everything lives on the rostr API at <code>api.getrostr.sh</code>, and every session, on your machine or in
-        a cloud environment, drafts from there. Having a rostr key (saved by <code>rostr config cloud on</code>, or set
+        a cloud environment, drafts from there. Having a rostr key (saved by <code>rostr cloud on</code>, or set
         as <code>ROSTR_KEY</code>) is what puts a machine in cloud mode.
       </dd>
       <dt>Projects</dt>
@@ -306,7 +313,7 @@ $ rostr config cloud on
           <dl class="options">
             <div class="option-row">
               <dt><code>/draft</code></dt>
-              <dd>Draft an agent for this session. Runs <code>rostr agent draft</code>.</dd>
+              <dd>Draft an agent for this session. Runs <code>rostr draft</code>.</dd>
             </div>
           </dl>
         </section>

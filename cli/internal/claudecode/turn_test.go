@@ -47,7 +47,7 @@ func TestEndsPlainAnswer(t *testing.T) {
 		{"answer and the remote title call", []string{"prompt:How deep is Baikal?", "text:About 1,642 m.",
 			"tool:t2:" + RemoteTitleTool + ":" + title}, true},
 		{"answer and the task command", []string{"prompt:How deep is Baikal?", "text:About 1,642 m.",
-			`tool:t2:Bash:{"command":"rostr agent task --session s1 \"Deepest lake\""}`}, true},
+			`tool:t2:Bash:{"command":"rostr task --session s1 \"Deepest lake\""}`}, true},
 		{"title call alongside real work", []string{"prompt:List the newest files", "tool:t1:ToolSearch:" + search, "result",
 			"tool:t2:" + LocalTitleTool + ":" + title, `tool:t3:Bash:{"command":"ls -lt"}`}, false},
 		{"title call before any answer", []string{"prompt:How deep is Baikal?", "tool:t2:" + RemoteTitleTool + ":" + title}, false},

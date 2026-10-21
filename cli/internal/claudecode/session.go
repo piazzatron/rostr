@@ -199,7 +199,7 @@ func TitleInstruction(display, sessionID string, where TitleWhere) string {
 
 // IsTaskCommand reports whether a shell command is the agent recording its task.
 func IsTaskCommand(command string) bool {
-	return strings.HasPrefix(strings.TrimSpace(command), "rostr agent task")
+	return strings.HasPrefix(strings.TrimSpace(command), "rostr task ")
 }
 
 // TaskFromTitle returns the task in a title of the form "<display> · <task>", reporting false for any other title.
@@ -211,7 +211,7 @@ func TaskFromTitle(display, title string) (string, bool) {
 
 // taskCommand is the command the agent runs to set its task, naming its session.
 func taskCommand(sessionID string) string {
-	return "rostr agent task --session " + sessionID
+	return "rostr task --session " + sessionID
 }
 
 // PlaceholderTask is the start of the first prompt, used as the task until the agent sets its own.

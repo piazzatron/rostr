@@ -36,7 +36,7 @@ var hookEvents = []struct {
 var permissions = []string{
 	RemoteTitleTool,
 	LocalTitleTool,
-	"Bash(rostr agent task:*)",
+	"Bash(rostr task:*)",
 }
 
 // Install adds rostr's hooks and permissions to settings.json, and writes the skill and /draft command, skipping
