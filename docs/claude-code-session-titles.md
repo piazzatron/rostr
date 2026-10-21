@@ -108,3 +108,25 @@ The name is derived from a hash of the session ID, so both modes pick the same o
   its reply: the app's own auto title (e.g. "Biggest dinosaur") comes from the desktop app when a person types the first
   message there, so this harness can't reproduce the race with it. The server also keeps a per-turn
   `post_turn_summary` (e.g. "Mount Fuji is Japan's tallest at 3,776m"), readable only through `get_session`.
+
+## Update: October 21 (Claude Code 2.1.306)
+
+- **Cloud sessions behave like desktop ones.** A cloud session's hook `sessionTitle` only sets the local title too:
+  a session created without a title still had no server title after its reply. Cloud sessions have no
+  `~/.claude/sessions/*.json` bridge entry, but the container sets `CLAUDE_CODE_REMOTE_SESSION_ID=cse_<id>`, and
+  `set_session_title` accepts the same ID as `session_<id>`.
+- **The background wake-up could land before Claude answered.** Claude Code delivers an `asyncRewake` hook's message
+  at the next point it can. When the first turn starts with tool calls, that's right after the first one, so "end
+  your turn without writing anything" arrived before any answer (labelled "Stop hook blocking error from command
+  UserPromptSubmit"). The title step moved to a `Stop` hook, which only runs once the turn has finished. `Stop` hooks
+  can't return `sessionTitle`, but the agent sets the title itself anyway.
+- **One tool call instead of two.** Asking the agent to call `set_session_title` and then run `rostr agent task` took
+  two model round trips. A `PostToolUse` hook (matcher `mcp__claude-code-remote__set_session_title`) gets the title the
+  agent passed in `tool_input`, so it records the summary as the task itself. `PostToolUse` only runs when the tool
+  call succeeds, so the task matches a title the app actually has.
+- **No hook sees Claude Code's own generated title.** We wanted to prefix the title Claude Code generates (a
+  Haiku-written summary of the first prompt) with the name, instead of asking the agent for a summary. The hooks docs
+  list no event that fires when a session's title changes, and `session_title` in hook input is only the custom title:
+  a generated title "isn't a custom title and doesn't appear in `session_title`". Terminal sessions still write it to
+  the transcript as `ai-title` only when no custom title is set, and desktop, Remote Control, and cloud sessions
+  generate it server-side, where only Claude can read it (`get_session`). So the agent's own summary stays.

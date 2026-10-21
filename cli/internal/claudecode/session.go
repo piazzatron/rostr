@@ -25,6 +25,10 @@ type HookInput struct {
 	PromptID       string `json:"prompt_id"`
 	SessionTitle   string `json:"session_title"`    // the session's custom title, if it has one
 	StopHookActive bool   `json:"stop_hook_active"` // Stop: Claude is already continuing because of a Stop hook
+	// PostToolUse: the tool's arguments. rostr only reads the title set_session_title was called with
+	ToolInput struct {
+		Title string `json:"title"`
+	} `json:"tool_input"`
 }
 
 // ReadHookInput decodes a hook's stdin.
@@ -141,15 +145,22 @@ func Identity(display, rosterName, sessionID string) string {
 	}, "\n")
 }
 
-// TitleInstruction asks the agent to title the session and record the same summary as its task. Desktop, Remote
-// Control, and cloud sessions (with a server session ID) can set the app's title; terminal sessions only record the task.
+// TitleInstruction asks the agent to summarize the conversation as its task, in one tool call. Desktop, Remote Control,
+// and cloud sessions (with a server session ID) set the app's title, and rostr's PostToolUse hook records the summary
+// from it as the task; terminal sessions record the task directly.
 func TitleInstruction(display, serverSessionID, sessionID string) string {
 	if serverSessionID == "" {
 		return fmt.Sprintf("Now run: %s \"<your 3-5 word summary of this conversation>\".", taskCommand(sessionID))
 	}
 	return fmt.Sprintf("Now call mcp__claude-code-remote__set_session_title with session_id %q and title "+
-		"\"%s · <your 3-5 word summary of this conversation>\", then run: %s \"<the same summary>\".",
-		serverSessionID, display, taskCommand(sessionID))
+		"\"%s · <your 3-5 word summary of this conversation>\".", serverSessionID, display)
+}
+
+// TaskFromTitle returns the task in a title of the form "<display> · <task>", reporting false for any other title.
+func TaskFromTitle(display, title string) (string, bool) {
+	task, ok := strings.CutPrefix(title, display+" · ")
+	task = strings.TrimSpace(task)
+	return task, ok && task != ""
 }
 
 // taskCommand is the command the agent runs to set its task, naming its session.

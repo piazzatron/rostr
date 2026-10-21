@@ -98,6 +98,22 @@ func TestAdditionalContextShape(t *testing.T) {
 	}
 }
 
+func TestTaskFromTitle(t *testing.T) {
+	for title, want := range map[string]string{
+		"🧙 Gandalf · Fix login tests":   "Fix login tests",
+		"🧙 Gandalf ·  Fix login tests ": "Fix login tests",
+		"🧙 Gandalf · ":                  "",
+		"🧙 Gandalf":                     "",
+		"Fix login tests":               "",
+		"💍 Frodo · Fix login tests":     "",
+	} {
+		task, ok := TaskFromTitle("🧙 Gandalf", title)
+		if ok != (want != "") || ok && task != want {
+			t.Errorf("TaskFromTitle(%q) = %q, %v", title, task, ok)
+		}
+	}
+}
+
 func TestIdentityText(t *testing.T) {
 	want := `You're 🧙 Gandalf for this session (drafted by rostr from the "work" roster).
 - When you write somewhere other than this chat, sign it "— 🧙 Gandalf": Slack messages, emails, PR descriptions, PR and issue comments.
@@ -112,7 +128,7 @@ func TestIdentityText(t *testing.T) {
 func TestTitleInstruction(t *testing.T) {
 	desktop := TitleInstruction("🧙 Gandalf", "session_abc", "s1")
 	if !strings.Contains(desktop, `set_session_title with session_id "session_abc"`) || !strings.Contains(desktop, `"🧙 Gandalf · <your 3-5 word summary`) ||
-		!strings.Contains(desktop, "rostr agent task --session s1") {
+		strings.Contains(desktop, "rostr agent task") {
 		t.Errorf("desktop: %s", desktop)
 	}
 	if terminal := TitleInstruction("🧙 Gandalf", "", "s1"); strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, "rostr agent task --session s1") {
@@ -169,7 +185,8 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		Model       string
 		Permissions struct{ Allow []string }
 		Hooks       map[string][]struct {
-			Hooks []struct {
+			Matcher string
+			Hooks   []struct {
 				Command     string
 				AsyncRewake bool
 			}
@@ -193,6 +210,10 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	}
 	if stop := settings.Hooks["Stop"]; len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("title") || stop[0].Hooks[0].AsyncRewake {
 		t.Errorf("Stop: %+v", stop)
+	}
+	if post := settings.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != "mcp__claude-code-remote__set_session_title" ||
+		post[0].Hooks[0].Command != HookCommand("title-set") {
+		t.Errorf("PostToolUse: %+v", post)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {
 		t.Errorf("duplicated an existing rostr hook: %+v", settings.Hooks["SessionEnd"])

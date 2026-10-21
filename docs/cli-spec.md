@@ -304,6 +304,7 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
 | `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on) |
 | `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)) |
 | `Stop`, first turn finished | The title step of the draft step, below |
+| `PostToolUse`, `set_session_title` | Records the summary in a `<name> · <summary>` title as the agent's task |
 | `SessionEnd` | Releases the session's member |
 
 - Release uses `SessionEnd`, not `Stop` (`Stop` fires after every reply).
@@ -389,8 +390,10 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
    prompt as a placeholder task, tells the agent who it is (see [Identity](#identity)) through `additionalContext`, and
    sets the title to `🧙 Gandalf · <start of the prompt>`. The agent knows its name from its first reply.
 2. **`rostr hook claude-code title`** (`Stop`) runs when Claude finishes its first turn. It exits 2, which keeps
-   Claude going to summarize the conversation in 3–5 words as its task (`rostr agent task`) and, in desktop, Remote
-   Control, and cloud sessions, to set the app's title to `🧙 Gandalf · <summary>` with `set_session_title`. The
+   Claude going to summarize the conversation in 3–5 words, in one tool call. In desktop, Remote Control, and cloud
+   sessions the agent sets the app's title to `🧙 Gandalf · <summary>` with `set_session_title`, and
+   **`rostr hook claude-code title-set`** (`PostToolUse` on that tool) records the summary as its task. In terminal
+   sessions it runs `rostr agent task` instead. The
    prompt hook leaves a marker in `~/.cache/rostr/title-pending/` when it drafts, and the title step removes it, so it
    runs once per session. It skips a `Stop` with `stop_hook_active` set (Claude is already continuing for a `Stop`
    hook), and an interrupted turn doesn't end in `Stop`, so the step waits for the next turn that finishes. An earlier

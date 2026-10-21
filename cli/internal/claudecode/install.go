@@ -19,15 +19,18 @@ var (
 	draftCommandContent string
 )
 
-// hookEvents maps each Claude Code event rostr hooks into to its `rostr hook claude-code` subcommand.
+// hookEvents maps each Claude Code event rostr hooks into, and the tool it matches if any, to its
+// `rostr hook claude-code` subcommand.
 var hookEvents = []struct {
 	event      string
+	matcher    string
 	subcommand string
 }{
-	{"SessionStart", "session-start"},
-	{"UserPromptSubmit", "prompt"},
-	{"Stop", "title"},
-	{"SessionEnd", "session-end"},
+	{"SessionStart", "", "session-start"},
+	{"UserPromptSubmit", "", "prompt"},
+	{"Stop", "", "title"},
+	{"PostToolUse", "mcp__claude-code-remote__set_session_title", "title-set"},
+	{"SessionEnd", "", "session-end"},
 }
 
 // permissions are pre-approved so the draft step's instructions don't stop on a permission prompt.
@@ -129,8 +132,8 @@ func installSettings(path string) (bool, error) {
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	if removeHooks(hooks, func(event string, hook map[string]any) bool {
-		return isRostrHook(hook) && !isCurrentRostrHook(event, hook)
+	if removeHooks(hooks, func(event, matcher string, hook map[string]any) bool {
+		return isRostrHook(hook) && !isCurrentRostrHook(event, matcher, hook)
 	}) {
 		changed = true
 	}
@@ -139,8 +142,11 @@ func installSettings(path string) (bool, error) {
 		if rostrHook(groups, h.subcommand) != nil {
 			continue
 		}
-		hook := map[string]any{"type": "command", "command": HookCommand(h.subcommand)}
-		hooks[h.event] = append(groups, map[string]any{"hooks": []any{hook}})
+		group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": HookCommand(h.subcommand)}}}
+		if h.matcher != "" {
+			group["matcher"] = h.matcher
+		}
+		hooks[h.event] = append(groups, group)
 		changed = true
 	}
 	settings["hooks"] = hooks
@@ -181,7 +187,7 @@ func uninstallSettings(path string) (bool, error) {
 
 	// Hooks: drop every rostr hook
 	hooks, _ := settings["hooks"].(map[string]any)
-	if removeHooks(hooks, func(_ string, hook map[string]any) bool { return isRostrHook(hook) }) {
+	if removeHooks(hooks, func(_, _ string, hook map[string]any) bool { return isRostrHook(hook) }) {
 		changed = true
 	}
 
@@ -250,7 +256,7 @@ func toAny(list []string) []any {
 
 // removeHooks drops every hook that remove matches, then any groups and events that leaves empty, reporting whether
 // it removed anything.
-func removeHooks(hooks map[string]any, remove func(event string, hook map[string]any) bool) bool {
+func removeHooks(hooks map[string]any, remove func(event, matcher string, hook map[string]any) bool) bool {
 	removed := false
 	for event, value := range hooks {
 		groups, _ := value.([]any)
@@ -258,10 +264,11 @@ func removeHooks(hooks map[string]any, remove func(event string, hook map[string
 		for _, group := range groups {
 			groupMap, _ := group.(map[string]any)
 			groupHooks, _ := groupMap["hooks"].([]any)
+			matcher, _ := groupMap["matcher"].(string)
 			var keptHooks []any
 			for _, hook := range groupHooks {
 				hookMap, _ := hook.(map[string]any)
-				if remove(event, hookMap) {
+				if remove(event, matcher, hookMap) {
 					removed = true
 					continue
 				}
@@ -287,12 +294,13 @@ func isRostrHook(hook map[string]any) bool {
 	return strings.Contains(command, "rostr hook claude-code ")
 }
 
-// isCurrentRostrHook reports whether a hook is one rostr installs today, on the event and with the options it uses.
-func isCurrentRostrHook(event string, hook map[string]any) bool {
+// isCurrentRostrHook reports whether a hook is one rostr installs today, on the event, matcher, and with the options it
+// uses.
+func isCurrentRostrHook(event, matcher string, hook map[string]any) bool {
 	command, _ := hook["command"].(string)
 	_, async := hook["asyncRewake"]
 	for _, h := range hookEvents {
-		if h.event == event && command == HookCommand(h.subcommand) && !async {
+		if h.event == event && h.matcher == matcher && command == HookCommand(h.subcommand) && !async {
 			return true
 		}
 	}

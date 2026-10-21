@@ -36,6 +36,7 @@ func newHookCommand() *cobra.Command {
 		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
 		hookSubcommand("prompt", claudecode.ReadHookInput, hookPrompt),
 		hookSubcommand("title", claudecode.ReadHookInput, hookTitle),
+		hookSubcommand("title-set", claudecode.ReadHookInput, hookTitleSet),
 		hookSubcommand("session-end", claudecode.ReadHookInput, hookSessionEnd),
 		newHookDraftCommand(),
 	)
@@ -189,6 +190,26 @@ func hookTitle(ctx context.Context, input claudecode.HookInput, stdout, stderr i
 	fmt.Fprintf(stderr, "%s Then end your turn without writing anything: don't repeat your answer or mention the title or the task.\n",
 		claudecode.TitleInstruction(d.Display(), serverSessionID, input.SessionID))
 	return exitError{code: keepGoingExitCode}
+}
+
+// hookTitleSet is the PostToolUse hook on set_session_title. When the agent titles the session "<name> · <summary>",
+// it records the summary as the agent's task, so the title step takes one tool call. Other titles are left alone.
+func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	d, err := st.SessionDraft(ctx, input.SessionID)
+	if err != nil || d == nil {
+		return err
+	}
+	task, ok := claudecode.TaskFromTitle(d.Display(), input.ToolInput.Title)
+	if !ok || task == d.Task {
+		return nil
+	}
+	_, err = st.SetTask(ctx, d.Key(), task)
+	return err
 }
 
 // hookSessionEnd releases the session's member and clears its pane's label.
