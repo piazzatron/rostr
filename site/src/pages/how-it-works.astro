@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import Rostr from "../components/Rostr.astro";
 ---
 
 <Layout
@@ -7,7 +8,7 @@ import Layout from "../layouts/Layout.astro";
   description="How rostr uses Claude Code hooks to name each session, and why the agent writes its own title."
 >
   <section class="page-hero">
-    <h1>How rostr names your sessions</h1>
+    <h1>How <Rostr /> names your sessions</h1>
     <p class="lede">
       Every Claude Code session gets a name from your roster and a short summary of what it's doing, like <span
         class="session-title">🧹 Ginny · Fix flaky login test</span>. Here's how that works under the hood, and why it
@@ -18,11 +19,11 @@ import Layout from "../layouts/Layout.astro";
   <section class="section">
     <h2>The short version</h2>
     <p>
-      When a session starts, rostr drafts a name from your roster, like 🧹 Ginny. During its first reply, the agent
+      When a session starts, <Rostr /> drafts a name from your roster, like 🧹 Ginny. During its first reply, the agent
       writes a 3-5 word summary of the task and sets the session's title to <span class="session-title"
         >🧹 Ginny · &lt;summary&gt;</span>. When the session ends, Ginny goes back to the bench for the next one.
     </p>
-    <p>All of it runs on Claude Code hooks that call the <code>rostr</code> CLI.</p>
+    <p>All of it runs on Claude Code hooks that call the <Rostr /> CLI.</p>
   </section>
 
   <section class="section">
@@ -32,7 +33,7 @@ import Layout from "../layouts/Layout.astro";
       <div class="row">
         <dt><code>SessionStart</code></dt>
         <dd>
-          Records the session and sets <code>ROSTR_SESSION</code>, so any rostr command run later knows which session
+          Records the session and sets <code>ROSTR_SESSION</code>, so any <Rostr /> command run later knows which session
           it's in.
         </dd>
       </div>
@@ -60,7 +61,7 @@ import Layout from "../layouts/Layout.astro";
 
   <section class="section">
     <h2>Why the agent sets the title</h2>
-    <p>The obvious design is for rostr's hook to set the whole title itself. Claude Code doesn't allow that today:</p>
+    <p>The obvious design is for <Rostr />'s hook to set the whole title itself. Claude Code doesn't allow that today:</p>
     <ul class="terse-list">
       <li>
         <strong>Hooks can set a title at only two moments.</strong> Claude Code lets a hook set the session's title
@@ -73,12 +74,12 @@ import Layout from "../layouts/Layout.astro";
       </li>
       <li>
         <strong>The app's own summary lands too late.</strong> The desktop app writes its own short title about a
-        second after your first message, but only saves it where other programs can read it a few seconds later, after
-        rostr's first-prompt hook has already run. Nothing outside the app can make it save sooner.
+        second after your first message, but only saves it where other programs can read it a few seconds later, after{" "}
+        <Rostr />'s first-prompt hook has already run. Nothing outside the app can make it save sooner.
       </li>
     </ul>
     <p>
-      So rostr hands that part to the agent. It already knows what the task is, so it writes a 3-5 word summary and
+      So <Rostr /> hands that part to the agent. It already knows what the task is, so it writes a 3-5 word summary and
       sets <span class="session-title">&lt;emoji name&gt; · &lt;summary&gt;</span> with the session's title tool,
       during its first reply.
     </p>
@@ -106,7 +107,7 @@ import Layout from "../layouts/Layout.astro";
         <tr>
           <th scope="row">Terminal</th>
           <td>
-            The agent runs <code>rostr agent task "&lt;summary&gt;"</code>, and rostr's hook puts <span
+            The agent runs <code>rostr agent task "&lt;summary&gt;"</code>, and <Rostr />'s hook puts <span
               class="session-title">&lt;name&gt; · &lt;summary&gt;</span> in the terminal title on the next prompt
           </td>
         </tr>
@@ -118,12 +119,12 @@ import Layout from "../layouts/Layout.astro";
     <h2>Why there's no extra message</h2>
     <p>
       Any tool call normally makes Claude reply again, and Claude Code doesn't let a turn end with no visible text.
-      Left alone, a title call would make Claude add one more message after your answer. rostr avoids that:
+      Left alone, a title call would make Claude add one more message after your answer. <Rostr /> avoids that:
     </p>
     <ul class="terse-list">
       <li>
-        <strong>Quick questions.</strong> The agent writes its answer and makes the title call in the same reply.
-        rostr's PostToolUse hook sees that the turn was a plain answer and ends it right there, so the answer stays
+        <strong>Quick questions.</strong> The agent writes its answer and makes the title call in the same reply.{" "}
+        <Rostr />'s PostToolUse hook sees that the turn was a plain answer and ends it right there, so the answer stays
         the last thing on screen.
       </li>
       <li>
@@ -167,7 +168,7 @@ import Layout from "../layouts/Layout.astro";
   <section class="section">
     <h2>What's next</h2>
     <p>
-      If Claude Code lets a hook's title reach Remote Control and cloud sessions, rostr can drop the agent's part and
+      If Claude Code lets a hook's title reach Remote Control and cloud sessions, <Rostr /> can drop the agent's part and
       title those sessions straight from the hook.
     </p>
     <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>

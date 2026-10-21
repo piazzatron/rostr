@@ -1,6 +1,7 @@
 ---
 import { Code } from "astro-expressive-code/components";
 import Layout from "../layouts/Layout.astro";
+import Rostr from "../components/Rostr.astro";
 import { toTerminalText } from "../terminal";
 import { PRESET_ROSTERS } from "../data/rosters";
 
@@ -219,8 +220,8 @@ $ rostr config cloud on
   <section class="docs-hero">
     <h1>CLI docs</h1>
     <p class="lede">
-      rostr is a single program for macOS and Linux. Your hooks call it at the start and end of every session,
-      and the rostr skill teaches your agent to use it too.
+      <Rostr /> is a single program for macOS and Linux. Your hooks call it at the start and end of every session,
+      and the <Rostr /> skill teaches your agent to use it too.
     </p>
     {COMMAND_GROUPS.map((group) => (
       <nav class="toc" aria-label={group.title}>
@@ -243,26 +244,26 @@ $ rostr config cloud on
       <dd>
         Your whole setup lives in one place. Locally, everything is on disk. Once you turn on <a href="#config"
           >cloud mode</a
-        >, everything lives on the rostr API at <code>api.getrostr.sh</code>, and every session, on your machine or in
-        a cloud environment, drafts from there. Having a rostr key (saved by <code>rostr config cloud on</code>, or set
+        >, everything lives on the <Rostr /> API at <code>api.getrostr.sh</code>, and every session, on your machine or in
+        a cloud environment, drafts from there. Having a <Rostr /> key (saved by <code>rostr config cloud on</code>, or set
         as <code>ROSTR_KEY</code>) is what puts a machine in cloud mode.
       </dd>
       <dt>Projects</dt>
       <dd>
-        Each git repo can use its own roster. rostr identifies a project by its <code>origin</code> remote
+        Each git repo can use its own roster. <Rostr /> identifies a project by its <code>origin</code> remote
         (<code>owner/repo</code>), so it's the same project on every machine and in every worktree.
       </dd>
       <dt>Sessions</dt>
       <dd>
-        Your hooks get each session's ID from Claude Code or Codex and pass it to rostr, so drafting, setting the first
+        Your hooks get each session's ID from Claude Code or Codex and pass it to <Rostr />, so drafting, setting the first
         task, and releasing all happen without your agent doing anything. The start hook also
-        sets <code>ROSTR_SESSION</code> in the session's shell, so any rostr command your agent runs knows which session
+        sets <code>ROSTR_SESSION</code> in the session's shell, so any <Rostr /> command your agent runs knows which session
         it's in.
       </dd>
       <dt>Which roster gets drafted</dt>
       <dd>
         The <code>--roster</code> flag on agent commands if you pass one, then the project's linked roster,
-        then your default. Outside a git repo, rostr uses your default.
+        then your default. Outside a git repo, <Rostr /> uses your default.
       </dd>
     </dl>
   </section>

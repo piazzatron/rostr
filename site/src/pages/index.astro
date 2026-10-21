@@ -1,6 +1,7 @@
 ---
 import { Code } from "astro-expressive-code/components";
 import HeroGrid from "../components/HeroGrid.astro";
+import Rostr from "../components/Rostr.astro";
 import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
 import ClaudeIcon from "../assets/claude.svg";
@@ -181,8 +182,8 @@ const LIST_JSON_EXAMPLE = `{
         </span>
       </p>
       <p class="lede">
-        rostr automatically drafts a name for each agent from a stable roster you set. It works across your favorite
-        harnesses, in local and cloud sessions.
+        <Rostr /> automatically drafts each agent from a roster you set. It works across your favorite harnesses and
+        multiplexers, locally and in the cloud.
       </p>
       <p class="cta-title">Get started: paste this into your agent</p>
       <div class="cta">
@@ -215,7 +216,7 @@ const LIST_JSON_EXAMPLE = `{
     <!-- How it works -->
     <section class="section" id="how-it-works">
       <h2>How it works</h2>
-      <p class="section-lede">rostr is a small <a class="accent-link" href="/cli">CLI</a> plus a skill that teaches your agent how to use it.</p>
+      <p class="section-lede"><Rostr /> is a small <a class="accent-link" href="/cli">CLI</a> plus a skill that teaches your agent how to use it.</p>
       <ol class="steps">
         <li>
           <h3>Assemble your roster</h3>
@@ -305,7 +306,7 @@ const LIST_JSON_EXAMPLE = `{
         <div class="card">
           <h3>🅰️ A team, B team</h3>
           <p>
-            Twenty names are too many to get to know. rostr always drafts from your small{" "}
+            Twenty names are too many to get to know. <Rostr /> always drafts from your small{" "}
             <span class="team-label team-a">A team</span> first, and only calls up the{" "}
             <span class="team-label team-b">B team</span> when your starters are busy.
           </p>
@@ -455,7 +456,7 @@ const LIST_JSON_EXAMPLE = `{
         in <a href="https://github.com/gastownhall/gastown">Gas Town</a>, but didn't want to bring the whole kitchen sink.
       </p>
       <p>
-        Finally, rostr is an experiment in exercising some restraint with using agents. It's tempting to spin up countless
+        Finally, <Rostr /> is an experiment in exercising some restraint with using agents. It's tempting to spin up countless
         sessions over the course of the day, frying your poor, limited human noggin, and wake up the next morning to a
         demoralizing mess. Or maybe it's just me? Perhaps having a fixed team size could be a hedge against these
         tendencies and a nudge towards a bit more prioritization.
@@ -469,7 +470,7 @@ const LIST_JSON_EXAMPLE = `{
         <div class="card">
           <h3>Ask your agent</h3>
           <p>
-            Point Claude Code or Codex at this page and it will install rostr, set up the hooks and skill, and help you
+            Point Claude Code or Codex at this page and it will install <Rostr />, set up the hooks and skill, and help you
             pick a roster. Agents: your setup steps are at <a href="/setup.md">getrostr.sh/setup.md</a>.
           </p>
           <button class="copy copy-block" data-copy={SETUP_PROMPT}>
@@ -480,7 +481,7 @@ const LIST_JSON_EXAMPLE = `{
         <div class="card">
           <h3>Run the install script</h3>
           <p>
-            Install rostr, then assemble your roster. It walks you through the choices and sets up the
+            Install <Rostr />, then assemble your roster. It walks you through the choices and sets up the
             hooks. <a href={INSTALL_SCRIPT_SOURCE}>See the script</a>.
           </p>
           <Code code={INSTALL_EXAMPLE} lang="sh" />

@@ -1,6 +1,7 @@
 ---
 import { Code } from "astro-expressive-code/components";
 import Layout from "../layouts/Layout.astro";
+import Rostr from "../components/Rostr.astro";
 
 const STORAGE_ROWS = [
   { data: "Rosters", local: "Disk", cloud: "Plaintext" },
@@ -20,7 +21,7 @@ const KEY_DERIVATION = `rostr key
   <section class="privacy-hero">
     <h1>Privacy</h1>
     <p class="lede">
-      Local mode makes no network calls. Cloud mode stores rosters and draft state on the rostr API; tasks and repo
+      Local mode makes no network calls. Cloud mode stores rosters and draft state on the <Rostr /> API; tasks and repo
       names are encrypted on your machine before they're sent.
     </p>
   </section>
@@ -49,7 +50,7 @@ const KEY_DERIVATION = `rostr key
 
   <section class="section">
     <h2>Keys</h2>
-    <p>The CLI derives three independent keys from your rostr key. Only the auth token leaves your machine.</p>
+    <p>The CLI derives three independent keys from your <Rostr /> key. Only the auth token leaves your machine.</p>
     <Code code={KEY_DERIVATION} lang="text" frame="none" />
     <ul class="terse-list">
       <li><strong>Auth token:</strong> bearer credential for the API. The server stores only its SHA-256 hash.</li>
@@ -59,7 +60,7 @@ const KEY_DERIVATION = `rostr key
         links without learning repo names.
       </li>
     </ul>
-    <p>Distinct HKDF labels make the keys independent: none reveals the rostr key or any other derived key.</p>
+    <p>Distinct HKDF labels make the keys independent: none reveals the <Rostr /> key or any other derived key.</p>
   </section>
 
   <section class="section">
@@ -69,7 +70,7 @@ const KEY_DERIVATION = `rostr key
         <strong>Visible:</strong> roster contents, which members are drafted and when, session IDs, repo fingerprints,
         and the size and timing of task ciphertext.
       </li>
-      <li><strong>Not visible:</strong> your rostr key, task plaintext, repo names, prompts, or code.</li>
+      <li><strong>Not visible:</strong> your <Rostr /> key, task plaintext, repo names, prompts, or code.</li>
     </ul>
   </section>
 
