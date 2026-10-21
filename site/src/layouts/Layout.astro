@@ -36,7 +36,7 @@ const { title, description } = Astro.props;
     <footer class="footer">
       <span>Made with ❤️ in Tokyo by <a href={X_URL}>Michael Piazza</a> · © {new Date().getFullYear()} Rosebud Labs</span>
       <span class="footer-links">
-        <a href="/privacy-policy">Privacy policy</a>
+        <a href="/privacy-policy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href={GITHUB_URL}>GitHub</a>
         <a href={X_URL}>X</a>
@@ -499,6 +499,24 @@ const { title, description } = Astro.props;
   .section {
     padding: 56px 0;
     border-top: 1px solid var(--border);
+  }
+
+  /* Every section ends at its padding, whatever its last block's own margin */
+  .section > :last-child,
+  .section > :last-child > li:last-child {
+    margin-bottom: 0;
+  }
+
+  /* A sub-section's label, written as the command that shows what follows, like "$ rostr --help" over the command
+     groups */
+  .subhead-command {
+    margin: 48px 0 16px;
+    font: 600 15px var(--mono);
+  }
+
+  .subhead-command span {
+    margin-right: 10px;
+    color: var(--accent);
   }
 
   .section h2 {
@@ -1066,6 +1084,10 @@ const { title, description } = Astro.props;
     padding-left: 4px;
   }
 
+  .install-cloud {
+    margin: 20px 0 0;
+  }
+
   .docs-link {
     margin: 20px 0 0;
     font-weight: 600;
@@ -1246,11 +1268,13 @@ const { title, description } = Astro.props;
     margin-top: 32px;
   }
 
+  /* Inset by the page's side padding, so its top border lines up with the section dividers */
   .footer {
     display: flex;
     justify-content: space-between;
-    padding-top: 32px;
-    padding-bottom: 48px;
+    width: calc(100% - 48px);
+    max-width: 912px;
+    padding: 32px 0 48px;
     border-top: 1px solid var(--border);
     color: var(--muted);
     font-size: 15px;
