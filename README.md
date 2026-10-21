@@ -1,91 +1,103 @@
-# rostr
+<p align="center">
+  <a href="https://getrostr.sh">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.png" />
+      <img alt="rostr: Give your agents names. Remember who's doing what." src=".github/assets/banner-light.png" />
+    </picture>
+  </a>
+</p>
 
-[![CI](https://github.com/piazzatron/rostr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/piazzatron/rostr/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://getrostr.sh">Website</a> ·
+  <a href="https://getrostr.sh/cli">CLI docs</a> ·
+  <a href="https://getrostr.sh/rosters">Rosters</a> ·
+  <a href="https://getrostr.sh/how-it-works">How it works</a>
+  <br /><br />
+  <a href="https://github.com/piazzatron/rostr/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/piazzatron/rostr?color=d9480f&label=release" /></a>
+  <a href="https://github.com/piazzatron/rostr/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/piazzatron/rostr/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/piazzatron/rostr?color=6b675f" /></a>
+</p>
 
-Give your agents names and remember who's doing what.
+rostr drafts a name for each of your coding agents from a roster you set and puts it at the front of the session
+title: `🧙 Gandalf · Fix auth redirect loop`. It also teaches your agent to reach out as that identity, so when Gandalf
+pings you on Slack, GitHub, or email, you know exactly which session needs you.
 
-rostr drafts a name for every coding agent session you start, from a roster you pick: The Fellowship, Hogwarts,
-Smash Bros, or your own list. The name goes at the front of the session title (`🧙 Gandalf · Fix auth redirect loop`),
-so when you have five agents running you can tell at a glance who's on what.
+<p align="center">
+  <img alt="rostr assemble sets up the Fellowship and its A team; each new session drafts the next A-teamer off the bench; Samwise asks for input, Gandalf posts in Slack, and Frodo comments on a PR, each signed with their name; Gandalf finishes and goes back to the bench." src=".github/assets/demo.gif" width="720" />
+</p>
 
-It's a small CLI plus a skill that teaches your agent how to use it, and it works with Claude Code and Codex.
+## Install
 
-> **Status:** early. The CLI works with Claude Code, locally and in the cloud; Codex support is on the way. The
-> [spec](docs/cli-spec.md) is the source of truth for how it behaves.
+Paste this into your agent:
 
-## How it works
+```text
+Set up rostr for me by following the instructions at https://getrostr.sh
+```
 
-1. **Pick a roster.** `rostr assemble` sets one up from a preset or your own names.
-2. **Every session gets drafted.** At the start of a session, a hook drafts the next available name, tells the agent
-   who it is, and puts the name in the session title.
-3. **Agents go back to the bench.** When a session ends, a hook releases its name, so the same names keep coming
-   back.
+Or do it yourself:
 
-Every roster has an **A team**, six members by default (change who's on it with `rostr edit`). Drafting always
-picks from the A team first and only calls up the **B team** when every starter is busy, so you get to know a small
-group instead of twenty names.
+```sh
+brew install piazzatron/tap/rostr   # or: curl -fsSL https://getrostr.sh/install | sh
+rostr assemble
+```
 
-You can have **multiple rosters** and give each project its own with `rostr link`, so a name tells you the project as
-well as the task. A project is identified by its git `origin` remote; projects without a roster, and folders outside
-git, use your default roster.
+## Works with
 
-Your whole setup lives in one place, **local** or **cloud**:
+| | Support |
+|---|---|
+| **Claude Code** | Terminal and cloud |
+| **Codex** | Terminal and cloud |
+| **tmux** | Names the window and tags the pane (`#{@rostr}`) |
+| **herdr** | Shows the name in the sidebar |
 
-- **Local** (the default): everything lives on disk. No account, no network.
-- **Cloud**: `rostr cloud on` moves everything to the rostr API at `api.getrostr.sh`. From then on, every session, on
-  your machine or in a cloud environment like Claude Code on the web or Codex cloud, drafts from there. Having a rostr
-  key is what puts a machine in cloud mode.
+Using something else? [Request support](https://github.com/piazzatron/rostr/issues/new?title=Support+for%3A+).
 
 ## Commands
 
-Full docs at [getrostr.sh/cli](https://getrostr.sh/cli).
+Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `rostr <command> --help` for every flag.
 
-**Roster commands** (you run these)
-
-| Command | What it does |
-|---|---|
-| `rostr assemble` | Interactive setup: pick a roster, emoji, local or cloud, and auto-draft. The only one you need |
-| `rostr link <roster>` | Link a roster to the current project (`rostr unlink` to undo) |
-| `rostr list` | See who's working on what across your rosters, and who's idle |
-| `rostr edit [<roster>]` | Change a roster's members, emoji, or A team |
-| `rostr presets` | See all the pre-built rosters |
-| `rostr disband <roster>` | Delete a roster |
-
-**Agent commands** (your hooks, the skill, and the `/draft` slash command run these)
+**Rosters** (you run these)
 
 | Command | What it does |
 |---|---|
-| `rostr draft` | Draft the next free agent for a session, A team first |
-| `rostr release` | Send an agent back to the bench |
-| `rostr task` | Set or change what an agent is working on |
+| `rostr assemble [<roster>]` | Set up a roster: interactive, or with `--preset`, `--names`, `--emoji`, `--cloud`, `--link` |
+| `rostr link [<roster>]` | Use a roster for the current project; bare, shows which one it uses |
+| `rostr unlink` | Go back to the default roster for the current project |
+| `rostr list [<roster>...]` | Who's drafted and what they're working on, and who's idle (`--json` for scripts) |
+| `rostr edit [<roster>]` | Edit a roster's members, emoji, and A team in `$EDITOR` |
+| `rostr presets` | List the pre-built rosters |
+| `rostr disband [<roster>]` | Delete a roster |
+
+**Agents** (your hooks, the skill, and `/draft` run these)
+
+| Command | What it does |
+|---|---|
+| `rostr draft` | Draft the next free member for this session, A team first |
+| `rostr release [<name>]` | Send this session's agent, or a named one, back to the bench |
+| `rostr task [<name>] <description>` | Set what an agent is working on |
 
 **Settings**
 
 | Command | What it does |
 |---|---|
-| `rostr config` | See all your settings |
+| `rostr config` | Show your settings (`--json` for scripts) |
 | `rostr config default <roster>` | Choose the roster projects use when they don't have a link |
-| `rostr config emoji on\|off\|only` | Show agents with their emoji, without it, or as just the emoji |
-| `rostr config auto-draft on\|off` | Draft every new session automatically, or by hand with `/draft` |
-| `rostr cloud on` | Move your whole setup to the cloud |
+| `rostr config emoji on\|off\|only` | Show agents with emoji, without, or as just the emoji |
+| `rostr config auto-draft on\|off` | Draft every new session automatically, or only with `/draft` |
+| `rostr config expiry <duration>` | How long a draft can go unseen before it's released (`48h`, `7d`, `2w`) |
 | `rostr config key` | Print your rostr key |
+| `rostr cloud on` | Move your whole setup to the rostr API, or join one with your key |
+| `rostr cloud install` | Install the Claude Code hooks in a cloud session's container |
+| `rostr uninstall` | Remove rostr from Claude Code and Codex and delete all your rosters |
+| `rostr version` | Print rostr's version |
 
-## Install
+How rostr behaves is specified in [`docs/cli-spec.md`](docs/cli-spec.md).
 
-Point your agent at [getrostr.sh](https://getrostr.sh) and ask it to set up rostr. To do it yourself:
+## Contributing
 
-```sh
-brew install piazzatron/tap/rostr
-rostr assemble   # interactive: pick a roster, emoji, local or cloud, and auto-draft
-```
+Bug reports, fixes, and new rosters are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test, and
+submit changes.
 
-No Homebrew (or on Linux)? `curl -fsSL https://getrostr.sh/install | sh` installs it instead.
+## License
 
-Prefer to draft by hand? Turn off auto-draft (`rostr config auto-draft off`) and use `/draft` in Claude Code.
-
-## Repo layout
-
-- `cli/` — the `rostr` CLI and agent hooks
-- `site/` — getrostr.sh (Astro), auto-deployed to Vercel
-- `server/` — api.getrostr.sh, auto-deployed to Railway
-- `docs/` — design docs; [`docs/cli-spec.md`](docs/cli-spec.md) is the source of truth for the CLI
+[MIT](LICENSE)

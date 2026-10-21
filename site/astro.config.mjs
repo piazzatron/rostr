@@ -5,6 +5,7 @@ import expressiveCode from 'astro-expressive-code';
 
 // https://astro.build/config
 export default defineConfig({
+  site: 'https://getrostr.sh',
   integrations: [
     expressiveCode({
       // Terminals stay dark in both light and dark mode, like a real terminal
