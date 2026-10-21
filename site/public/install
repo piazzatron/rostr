@@ -63,6 +63,11 @@ main() {
 	mv -f "${dir}/.rostr.new" "${dir}/rostr"
 	echo "Installed $("${dir}/rostr" version) to ${dir}/rostr"
 
+	# Claude Code cloud sessions start from a fresh container each time, so install the hooks there too
+	if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+		"${dir}/rostr" install
+	fi
+
 	case ":${PATH}:" in
 	*":${dir}:"*) ;;
 	*)

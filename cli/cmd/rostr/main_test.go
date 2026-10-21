@@ -522,6 +522,28 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	}
 }
 
+func TestInstallAddsClaudeCodeHooksWithoutARosterAndStaysHidden(t *testing.T) {
+	s := newSandbox(t)
+	settingsPath := filepath.Join(s.home, ".claude", "settings.json")
+	os.MkdirAll(filepath.Dir(settingsPath), 0o755)
+	os.WriteFile(settingsPath, []byte(`{"theme":"dark"}`), 0o644)
+
+	if out := s.ok(s.home, nil, "install"); !strings.Contains(out, "Installed for Claude Code: hooks in") {
+		t.Fatalf("install: %s", out)
+	}
+	settings, _ := os.ReadFile(settingsPath)
+	if !strings.Contains(string(settings), `"theme": "dark"`) || !strings.Contains(string(settings), "rostr hook claude-code") {
+		t.Fatalf("settings: %s", settings)
+	}
+	if out := s.ok(s.home, nil, "install"); strings.Contains(out, "Installed") {
+		t.Fatalf("second install reinstalled: %s", out)
+	}
+	s.fails(s.home, nil, "No rosters yet", "list")
+	if out := s.ok(s.home, nil, "--help"); strings.Contains(out, "\n  install ") {
+		t.Fatalf("install shows in help: %s", out)
+	}
+}
+
 func TestAssembleLinksTheRepoYoureIn(t *testing.T) {
 	s := newSandbox(t)
 	repo := s.gitRepo("api", "git@github.com:Acme/API.git")
