@@ -20,16 +20,12 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
-// defaultRewakeDelay is how long the title step waits before waking Claude, so its first reply is already under way.
-// ROSTR_REWAKE_DELAY overrides it (tests set it to 0).
-const defaultRewakeDelay = 1 * time.Second
-
-// rewakeExitCode is the exit code with which an asyncRewake hook wakes Claude with its stderr.
-const rewakeExitCode = 2
+// keepGoingExitCode is the exit code with which a Stop hook keeps Claude going, with its stderr as the instruction.
+const keepGoingExitCode = 2
 
 // newHookCommand is the hidden `rostr hook` command the installed hooks call. Hooks never block a session: failures
-// are written to stderr and the hook still exits 0. The one exception is the Claude Code prompt hook's exit 2, which
-// wakes Claude.
+// are written to stderr and the hook still exits 0. The one exception is the Claude Code title step's exit 2, which
+// keeps Claude going.
 func newHookCommand() *cobra.Command {
 	hook := &cobra.Command{Use: "hook", Hidden: true}
 	claudeCode := &cobra.Command{Use: "claude-code", Short: "Claude Code hooks"}
@@ -114,8 +110,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	}
 	defer st.Close()
 
-	// The title step's wake-up arrives as another prompt in the same turn, which the transcript can't tell from the
-	// first one. A session that already has a name isn't on its first prompt
+	// A session that already has a name isn't on its first prompt
 	if d, err := st.SessionDraft(ctx, input.SessionID); err != nil || d != nil {
 		st.Close()
 		if err != nil {
@@ -136,6 +131,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
+	markTitlePending(input.SessionID)
 	pane.Label(ctx, d.Display())
 	fmt.Fprintln(stdout, claudecode.PromptOutput(claudecode.Identity(d.Display(), d.Roster, input.SessionID),
 		claudecode.Title(d.Display(), placeholder)))
@@ -167,18 +163,14 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 	return nil
 }
 
-// hookTitle runs in the background on the first prompt. Once the session is drafted and Claude's first reply is under
-// way, it wakes Claude to summarize the conversation as its task and, in the desktop app, its title.
+// hookTitle is the Stop hook, run whenever Claude finishes a turn. In a session drafted on its first prompt, once the
+// first turn finishes, it keeps Claude going to summarize the conversation as its task and, in the desktop app and
+// cloud sessions, its title. An interrupted turn doesn't end in Stop, so the step waits for the next turn that finishes.
 func hookTitle(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
-	if !claudecode.IsFirstPrompt(input) {
+	// Claude is already continuing because of a Stop hook, or the title step isn't due
+	if input.StopHookActive || !isTitlePending(input.SessionID) {
 		return nil
 	}
-
-	// Once per session: the wake-up comes back as another prompt, which runs this hook again
-	if !markTitleWake(input.SessionID) {
-		return nil
-	}
-	time.Sleep(rewakeDelay())
 
 	st, err := openStore()
 	if err != nil {
@@ -190,16 +182,19 @@ func hookTitle(ctx context.Context, input claudecode.HookInput, stdout, stderr i
 		return err
 	}
 
-	bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), input.SessionID)
+	if err := os.Remove(titlePendingFile(input.SessionID)); err != nil {
+		return err
+	}
+	serverSessionID := claudecode.ServerSessionID(paths.ClaudeDir(), input.SessionID)
 	fmt.Fprintf(stderr, "%s Then end your turn without writing anything: don't repeat your answer or mention the title or the task.\n",
-		claudecode.TitleInstruction(d.Display(), bridgeSessionID, input.SessionID))
-	return exitError{code: rewakeExitCode}
+		claudecode.TitleInstruction(d.Display(), serverSessionID, input.SessionID))
+	return exitError{code: keepGoingExitCode}
 }
 
 // hookSessionEnd releases the session's member and clears its pane's label.
 func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
-	_ = os.Remove(filepath.Join(paths.TitleWakeDir(), input.SessionID))
+	_ = os.Remove(titlePendingFile(input.SessionID))
 	pane.Clear(ctx)
 	st, err := openStore()
 	if err != nil {
@@ -237,9 +232,9 @@ func newHookDraftCommand() *cobra.Command {
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			pane.Label(cmd.Context(), d.Display())
-			bridgeSessionID := claudecode.BridgeSessionID(paths.ClaudeDir(), session)
+			serverSessionID := claudecode.ServerSessionID(paths.ClaudeDir(), session)
 			fmt.Fprintf(out, "%s\n\n%s\n", claudecode.Identity(d.Display(), d.Roster, session),
-				claudecode.TitleInstruction(d.Display(), bridgeSessionID, session))
+				claudecode.TitleInstruction(d.Display(), serverSessionID, session))
 			return nil
 		},
 	}
@@ -307,20 +302,25 @@ func writeSessionEnv(sessionID string) error {
 	return err
 }
 
-// markTitleWake records that the session's title step has run, reporting false if it already had. Creating the file
-// is atomic, so two runs at once can't both go ahead.
-func markTitleWake(sessionID string) bool {
+// markTitlePending records that the session's title step is due once its first turn finishes.
+func markTitlePending(sessionID string) {
+	if !shellSafe.MatchString(sessionID) || os.MkdirAll(paths.TitlePendingDir(), 0o755) != nil {
+		return
+	}
+	_ = os.WriteFile(titlePendingFile(sessionID), nil, 0o644)
+}
+
+// isTitlePending reports whether the session's title step is still due.
+func isTitlePending(sessionID string) bool {
 	if !shellSafe.MatchString(sessionID) {
 		return false
 	}
-	if err := os.MkdirAll(paths.TitleWakeDir(), 0o755); err != nil {
-		return false
-	}
-	f, err := os.OpenFile(filepath.Join(paths.TitleWakeDir(), sessionID), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if err != nil {
-		return false
-	}
-	return f.Close() == nil
+	_, err := os.Stat(titlePendingFile(sessionID))
+	return err == nil
+}
+
+func titlePendingFile(sessionID string) string {
+	return filepath.Join(paths.TitlePendingDir(), sessionID)
 }
 
 // hookDir is the session's directory, from the hook input's cwd.
@@ -329,11 +329,4 @@ func hookDir(cwd string) string {
 		return cwd
 	}
 	return workingDir()
-}
-
-func rewakeDelay() time.Duration {
-	if d, err := time.ParseDuration(os.Getenv("ROSTR_REWAKE_DELAY")); err == nil {
-		return d
-	}
-	return defaultRewakeDelay
 }

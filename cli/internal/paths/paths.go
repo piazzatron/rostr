@@ -27,9 +27,9 @@ func KeepAliveDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "keepalive")
 }
 
-// TitleWakeDir holds one empty file per session whose title step has run, so it wakes Claude only once.
-func TitleWakeDir() string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "title-wake")
+// TitlePendingDir holds one empty file per session drafted on its first prompt whose title step hasn't run yet.
+func TitlePendingDir() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "title-pending")
 }
 
 // ClaudeDir is Claude Code's config directory: ~/.claude, or $CLAUDE_CONFIG_DIR.

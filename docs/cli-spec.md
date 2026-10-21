@@ -301,8 +301,9 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
 | `SessionStart`, source `startup` or `clear` | Writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE` |
 | `SessionStart`, source `resume` | Writes `ROSTR_SESSION`, drafts (asking for the session's old name back, see [Drafting](#drafting)), and tells the agent who it is |
 | `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member (see below) |
-| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on): the prompt hook, then the title wake-up |
+| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on) |
 | `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)) |
+| `Stop`, first turn finished | The title step of the draft step, below |
 | `SessionEnd` | Releases the session's member |
 
 - Release uses `SessionEnd`, not `Stop` (`Stop` fires after every reply).
@@ -312,14 +313,14 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
   is `cli/hooks/claude-code/`.
 - **Verify:** that compaction keeps the session ID, and that `/clear` starts a new one (firing `SessionEnd` for the
   old session).
-- **Failures never block a session.** `rostr hook` always exits 0, except the prompt hook's deliberate exit 2, which
-  is how an `asyncRewake` hook wakes Claude for the draft step. If it can't draft (no roster yet, the API is
+- **Failures never block a session.** `rostr hook` always exits 0, except the title step's deliberate exit 2, which
+  is how a `Stop` hook keeps Claude going. If it can't draft (no roster yet, the API is
   unreachable or slow, a bad key), the session starts unnamed and the agent is told nothing. Network calls time out
   after 3 seconds.
 - **Without rostr installed, hooks do nothing.** Hooks committed to a repo's `.claude/settings.json` also run for
   teammates who don't have rostr, so each installed command checks first:
   `if command -v rostr >/dev/null; then rostr hook claude-code session-start; fi` (not `… || true`, which would
-  swallow the prompt hook's exit 2).
+  swallow the title step's exit 2).
 - With auto-draft off, only the draft step is skipped: `ROSTR_SESSION` is still written and `SessionEnd` still
   releases, so `/draft` works.
 - **Headless runs aren't drafted.** Scripts and tools that run `claude -p` fire the same hooks, but don't get a name.
@@ -382,16 +383,19 @@ cleared at `SessionEnd`.
 
 ### The draft step
 
-Two `UserPromptSubmit` hooks, on the session's first prompt (when auto-draft is on):
+Two hooks, for a session drafted on its first prompt (when auto-draft is on):
 
-1. **`rostr hook claude-code prompt`** runs before Claude sees the prompt. It drafts the session with the start of the
+1. **`rostr hook claude-code prompt`** (`UserPromptSubmit`) runs before Claude sees the prompt. It drafts the session with the start of the
    prompt as a placeholder task, tells the agent who it is (see [Identity](#identity)) through `additionalContext`, and
    sets the title to `🧙 Gandalf · <start of the prompt>`. The agent knows its name from its first reply.
-2. **`rostr hook claude-code title`** is an `asyncRewake` hook. About a second in, it wakes Claude to summarize the
-   conversation in 3–5 words as its task (`rostr agent task`) and, in desktop and Remote Control sessions, to set the
-   app's title to `🧙 Gandalf · <summary>` with `set_session_title`. It runs once per session (a marker in
-   `~/.cache/rostr/title-wake/`, removed at session end): the wake-up comes back as another prompt in the same turn,
-   which the transcript can't tell from the first, so without the marker it would loop.
+2. **`rostr hook claude-code title`** (`Stop`) runs when Claude finishes its first turn. It exits 2, which keeps
+   Claude going to summarize the conversation in 3–5 words as its task (`rostr agent task`) and, in desktop, Remote
+   Control, and cloud sessions, to set the app's title to `🧙 Gandalf · <summary>` with `set_session_title`. The
+   prompt hook leaves a marker in `~/.cache/rostr/title-pending/` when it drafts, and the title step removes it, so it
+   runs once per session. It skips a `Stop` with `stop_hook_active` set (Claude is already continuing for a `Stop`
+   hook), and an interrupted turn doesn't end in `Stop`, so the step waits for the next turn that finishes. An earlier
+   design woke Claude about a second into the first turn instead; when the turn started with tool calls, the wake-up
+   arrived before Claude had answered.
 
 On later prompts the prompt hook keeps the draft alive and retitles the session `🧙 Gandalf · <task>` whenever the task
 has changed. A session that already has a name is never treated as being on its first prompt.
@@ -399,7 +403,7 @@ has changed. A session that already has a name is never treated as being on its 
 A hook's title only sets the local title (the terminal's) in Claude Code 2.1.292; the desktop app ignores it until
 Anthropic ships the fix for
 [anthropics/claude-code#103336](https://github.com/anthropics/claude-code/issues/103336). Once it does, the app gets
-the name from step 1 and the wake-up can go. See [claude-code-session-titles.md](claude-code-session-titles.md).
+the name from step 1 and the title step only needs to record the task. See [claude-code-session-titles.md](claude-code-session-titles.md).
 
 ### Compaction never changes the name
 

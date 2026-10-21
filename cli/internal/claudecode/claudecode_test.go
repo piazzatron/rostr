@@ -47,7 +47,8 @@ func TestIsFirstPrompt(t *testing.T) {
 	}
 }
 
-func TestBridgeSessionID(t *testing.T) {
+func TestServerSessionID(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "")
 	claudeDir := t.TempDir()
 	sessions := filepath.Join(claudeDir, "sessions")
 	if err := os.MkdirAll(sessions, 0o755); err != nil {
@@ -57,13 +58,19 @@ func TestBridgeSessionID(t *testing.T) {
 	write(t, filepath.Join(sessions, "222.json"), `{"pid":222,"sessionId":"desktop-session","bridgeSessionId":"session_abc"}`)
 	write(t, filepath.Join(sessions, "333.json"), `garbage`)
 
-	if got := BridgeSessionID(claudeDir, "desktop-session"); got != "session_abc" {
+	if got := ServerSessionID(claudeDir, "desktop-session"); got != "session_abc" {
 		t.Errorf("got %q", got)
 	}
 	for _, id := range []string{"terminal-session", "unknown"} {
-		if got := BridgeSessionID(claudeDir, id); got != "" {
+		if got := ServerSessionID(claudeDir, id); got != "" {
 			t.Errorf("%s: got %q", id, got)
 		}
+	}
+
+	// A cloud session's container names its server session
+	t.Setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "cse_xyz")
+	if got := ServerSessionID(t.TempDir(), "cloud-session"); got != "session_xyz" {
+		t.Errorf("cloud: got %q", got)
 	}
 }
 
@@ -178,12 +185,14 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		t.Error("the hook command was HTML-escaped")
 	}
 
-	// The prompt hook runs before Claude; the title hook runs in the background
+	// The prompt hook runs before Claude; the title step runs when Claude finishes a turn
 	prompt := settings.Hooks["UserPromptSubmit"]
-	if len(prompt) != 3 || prompt[0].Hooks[0].Command != "echo mine" ||
-		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake ||
-		prompt[2].Hooks[0].Command != HookCommand("title") || !prompt[2].Hooks[0].AsyncRewake {
+	if len(prompt) != 2 || prompt[0].Hooks[0].Command != "echo mine" ||
+		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake {
 		t.Errorf("UserPromptSubmit: %+v", prompt)
+	}
+	if stop := settings.Hooks["Stop"]; len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("title") || stop[0].Hooks[0].AsyncRewake {
+		t.Errorf("Stop: %+v", stop)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {
 		t.Errorf("duplicated an existing rostr hook: %+v", settings.Hooks["SessionEnd"])
@@ -255,11 +264,13 @@ func TestUninstallRemovesOnlyWhatRostrAdded(t *testing.T) {
 	}
 }
 
-func TestInstallUpgradesTheOldBackgroundPromptHook(t *testing.T) {
+func TestInstallReplacesTheOldBackgroundHooks(t *testing.T) {
 	claudeDir := t.TempDir()
 	settingsPath := filepath.Join(claudeDir, "settings.json")
-	write(t, settingsPath, `{"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "asyncRewake": true, "command": "`+
-		strings.ReplaceAll(HookCommand("prompt"), `"`, `\"`)+`"}]}]}}`)
+	asyncHook := func(subcommand string) string {
+		return `{"hooks": [{"type": "command", "asyncRewake": true, "command": "` + strings.ReplaceAll(HookCommand(subcommand), `"`, `\"`) + `"}]}`
+	}
+	write(t, settingsPath, `{"hooks": {"UserPromptSubmit": [`+asyncHook("prompt")+`, `+asyncHook("title")+`]}}`)
 	if _, err := Install(claudeDir); err != nil {
 		t.Fatal(err)
 	}
@@ -273,9 +284,10 @@ func TestInstallUpgradesTheOldBackgroundPromptHook(t *testing.T) {
 	}
 	data, _ := os.ReadFile(settingsPath)
 	json.Unmarshal(data, &settings)
-	prompt := settings.Hooks["UserPromptSubmit"]
-	if len(prompt) != 2 || prompt[0].Hooks[0].AsyncRewake || prompt[1].Hooks[0].Command != HookCommand("title") || !prompt[1].Hooks[0].AsyncRewake {
-		t.Fatalf("UserPromptSubmit: %s", data)
+	prompt, stop := settings.Hooks["UserPromptSubmit"], settings.Hooks["Stop"]
+	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake ||
+		len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("title") || stop[0].Hooks[0].AsyncRewake {
+		t.Fatalf("hooks: %s", data)
 	}
 }
 
