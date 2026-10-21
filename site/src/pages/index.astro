@@ -69,11 +69,12 @@ const COMMAND_GROUP_CARDS = [
 
 // The "Build on it" dashboard example uses the Smash Bros roster
 const DASHBOARD_ROSTER = PRESET_ROSTERS.find((roster) => roster.id === "smash-bros")!;
+// Each agent shows a live status: working (a spinner), testing (dot dot dot), or waiting on you (a blinking light)
 const DASHBOARD_MEMBERS = [
-  { emoji: "🍄", name: "Mario", task: "Ship the onboarding redesign", where: "acme/web", since: "25m" },
-  { emoji: "🗡️", name: "Link", task: "Fix flaky checkout test", where: "acme/api", since: "8m" },
-  { emoji: "⭐", name: "Kirby", task: "Upgrade the image pipeline", where: "acme/api", since: "2h" },
-  { emoji: "🚀", name: "Samus", task: "Add rate limiting to the API", where: "cloud", since: "50m" },
+  { emoji: "🍄", name: "Mario", task: "Ship the onboarding redesign", where: "acme/web", since: "25m", status: "working" },
+  { emoji: "🗡️", name: "Link", task: "Fix flaky checkout test", where: "acme/api", since: "8m", status: "testing" },
+  { emoji: "⭐", name: "Kirby", task: "Upgrade the image pipeline", where: "acme/api", since: "2h", status: "working" },
+  { emoji: "🚀", name: "Samus", task: "Add rate limiting to the API", where: "cloud", since: "50m", status: "waiting" },
 ];
 const DASHBOARD_IDLE_CHIPS = [...DASHBOARD_ROSTER.aTeam, ...DASHBOARD_ROSTER.bTeam].filter(
   (member) => !DASHBOARD_MEMBERS.some((working) => member.endsWith(` ${working.name}`)),
@@ -361,7 +362,10 @@ const LIST_JSON_EXAMPLE = `{
           <div class="dashboard-body">
             <div class="dashboard-header">
               <strong>{DASHBOARD_ROSTER.emoji} app</strong>
-              <span>{DASHBOARD_MEMBERS.length} working · {DASHBOARD_IDLE_CHIPS.length} on the bench</span>
+              <span>
+                <span class="dashboard-live">Live</span>
+                {DASHBOARD_MEMBERS.length} working · {DASHBOARD_IDLE_CHIPS.length} on the bench
+              </span>
             </div>
             <div class="dashboard-grid">
               {DASHBOARD_MEMBERS.map((member) => (
@@ -369,13 +373,28 @@ const LIST_JSON_EXAMPLE = `{
                   <div class="agent-top">
                     <span class="agent-emoji">{member.emoji}</span>
                     <strong>{member.name}</strong>
-                    <span class="agent-status">Working</span>
+                    {member.status === "working" && (
+                      <span class="agent-status">
+                        <span class="status-spinner" aria-hidden="true"></span>Working
+                      </span>
+                    )}
+                    {member.status === "testing" && (
+                      <span class="agent-status agent-status-testing">
+                        Testing<span class="status-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span>
+                      </span>
+                    )}
+                    {member.status === "waiting" && (
+                      <span class="agent-status agent-status-waiting">
+                        <span class="status-light" aria-hidden="true"></span>Waiting
+                      </span>
+                    )}
                   </div>
                   <p class="agent-task">{member.task}</p>
                   <div class="agent-meta">
                     <span>{member.where}</span>
                     <span>{member.since}</span>
                   </div>
+                  <div class={`agent-progress agent-progress-${member.status}`} aria-hidden="true"></div>
                 </div>
               ))}
             </div>

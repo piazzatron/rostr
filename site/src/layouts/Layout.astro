@@ -711,12 +711,11 @@ const { title, description } = Astro.props;
      lavender with purple accents) in fixed colors, like a screenshot, the same in both themes */
   .dashboard {
     --dash-bg: #f2efff;
-    --dash-card: #ffffff;
-    --dash-deep: #e7e1ff;
+    --dash-card: #e7e1ff;
+    --dash-deep: #e2dbff;
     --dash-ink: #1f1842;
     --dash-soft: #6e64a3;
     --dash-accent: #5b34e6;
-    --dash-accent-soft: #e5ddff;
     margin: 0 0 32px;
   }
 
@@ -739,14 +738,14 @@ const { title, description } = Astro.props;
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #cfc5f7;
+    background: #c9bef5;
   }
 
   .dashboard-url {
     margin-left: 12px;
     padding: 2px 12px;
     border-radius: 999px;
-    background: var(--dash-card);
+    background: var(--dash-bg);
     color: var(--dash-soft);
     font: 12px var(--mono);
   }
@@ -799,16 +798,169 @@ const { title, description } = Astro.props;
     font-size: 22px;
   }
 
+  /* Status pills: working (purple, a spinner), testing (blue, dot dot dot), and waiting on you (amber, blinking) */
   .agent-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     margin-left: auto;
     padding: 2px 8px;
     border-radius: 999px;
-    background: var(--dash-accent-soft);
-    color: var(--dash-accent);
+    background: #d7cbff;
+    color: #4a26cc;
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .agent-status-testing {
+    background: #d3e2ff;
+    color: #1d4fb8;
+  }
+
+  .agent-status-waiting {
+    background: #ffe5b8;
+    color: #8a4d00;
+  }
+
+  .status-spinner {
+    width: 9px;
+    height: 9px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  /* Each dot appears after the one before; they keep their space while hidden, so the pill doesn't change size */
+  .status-dots i {
+    font-style: normal;
+    animation: dot 1.2s steps(1) infinite;
+  }
+
+  .status-dots i:nth-child(2) {
+    animation-delay: 0.3s;
+  }
+
+  .status-dots i:nth-child(3) {
+    animation-delay: 0.6s;
+  }
+
+  .status-light {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #f08c00;
+    animation: blink 1s ease-in-out infinite;
+  }
+
+  /* A thin bar with a segment sliding across it while an agent is busy; an agent waiting on you has a still track */
+  .agent-progress {
+    position: relative;
+    height: 3px;
+    margin-top: 12px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: #d7cbff;
+  }
+
+  .agent-progress::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 35%;
+    border-radius: 2px;
+    background: var(--dash-accent);
+    animation: progress-slide 1.8s ease-in-out infinite;
+  }
+
+  .agent-progress-testing {
+    background: #d3e2ff;
+  }
+
+  .agent-progress-testing::after {
+    background: #2f6fe0;
+  }
+
+  .agent-progress-waiting {
+    background: #ffe5b8;
+  }
+
+  .agent-progress-waiting::after {
+    display: none;
+  }
+
+  /* "Live", with a green light that sends out a ring */
+  .dashboard-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 10px;
+    color: #2b8a3e;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-live::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #2f9e44;
+    animation: live-ping 1.6s ease-out infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes dot {
+    0% {
+      opacity: 0;
+    }
+    25% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0.25;
+    }
+  }
+
+  @keyframes progress-slide {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(290%);
+    }
+  }
+
+  @keyframes live-ping {
+    from {
+      box-shadow: 0 0 0 0 rgb(47 158 68 / 0.5);
+    }
+    to {
+      box-shadow: 0 0 0 7px rgb(47 158 68 / 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .status-spinner,
+    .status-dots i,
+    .status-light,
+    .agent-progress::after,
+    .dashboard-live::before {
+      animation: none;
+    }
   }
 
   .agent-task {
