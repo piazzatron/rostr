@@ -7,7 +7,7 @@ Get everything working end to end, then a final pass over the landing page.
 1. [ ] **Solid Claude Code experience** (Michael, hands-on): faster drafting and titles, the terminal title decision,
    and the spec's "Verify" items (compaction keeps the name, resume and `/clear`, session end fires, no permission
    prompts).
-2. [ ] **Real install paths** (agent): GoReleaser releases for macOS and Linux, the `piazzatron/homebrew-tap` formula,
+2. [x] **Real install paths** (agent): GoReleaser releases for macOS and Linux, the `piazzatron/homebrew-tap` formula,
    and the `getrostr.sh/install` script. The repo goes public.
 3. [ ] **Cloud in a real cloud session**: rostr in Claude Code on the web against production (`ROSTR_KEY`, network
    allowlist, setup-script install, hooks committed to the repo, `origin` behind the proxy). Becomes the cloud access
@@ -23,6 +23,7 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 
 - [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
       that file.
+- [ ] Improve the command for moving to the cloud: `rostr config cloud on` is terrible.
 
 ## Deferred decisions
 
@@ -58,7 +59,7 @@ Decide once there's a working build to play with.
 Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 
 - [ ] Go CLI for macOS and Linux.
-- [ ] Install paths that `setup.md` and the site promise: GitHub releases of the binary, the `piazzatron/homebrew-tap`
+- [x] Install paths that `setup.md` and the site promise: GitHub releases of the binary, the `piazzatron/homebrew-tap`
       formula, and the `getrostr.sh/install` script.
 - [ ] Roster commands: `assemble` (with the wizard and the hidden `create` alias), `link` / `unlink`, `list`, `edit`,
       `presets`, `disband`.
@@ -91,6 +92,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 
 Write the setup steps for Claude Code on the web and Codex cloud:
 
+- [ ] Give explicit, clear instructions for setting rostr up in cloud environments, on the site and in `setup.md`.
 - [ ] Put `ROSTR_KEY` in the cloud environment's variables (never in a committed file).
 - [ ] Allow `api.getrostr.sh` in the environment's network settings.
 - [ ] Install rostr in the environment's setup script: `curl -fsSL https://getrostr.sh/install | sh`.

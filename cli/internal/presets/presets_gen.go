@@ -27,6 +27,12 @@ var all = []Preset{
 			{Name: "Elrond", Emoji: "🧝"},
 			{Name: "Éowyn", Emoji: "⚔️"},
 			{Name: "Faramir", Emoji: "🏰"},
+			{Name: "Sauron", Emoji: "👁️"},
+			{Name: "Saruman", Emoji: "✋"},
+			{Name: "Gollum", Emoji: "🐟"},
+			{Name: "Witch-king", Emoji: "👻"},
+			{Name: "Shelob", Emoji: "🕷️"},
+			{Name: "Wormtongue", Emoji: "🐍"},
 		},
 	},
 	{

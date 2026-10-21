@@ -177,7 +177,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	s.fails(s.home, nil, "rostr config cloud on", "assemble", "x", "--preset", "kanto", "--cloud")
 
 	listing := s.list()
-	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Idle) != 14 {
+	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Idle) != 20 {
 		t.Fatalf("list: %+v", listing)
 	}
 	if text := s.ok(s.home, nil, "list", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {

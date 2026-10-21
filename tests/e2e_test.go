@@ -39,7 +39,7 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	}
 
 	l := m.list()
-	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Idle) != 14 {
+	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Idle) != 20 {
 		t.Fatalf("list: %+v", l)
 	}
 	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" || d.Team != "A" {

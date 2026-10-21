@@ -3,7 +3,6 @@ import { Code } from "astro-expressive-code/components";
 import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
 import ClaudeIcon from "../assets/claude.svg";
-import { GITHUB_URL } from "../consts";
 import { PRESET_ROSTERS } from "../data/rosters";
 
 // The home page grid shows 10 regular presets, the featured mix, and a "Your own" tile; /rosters shows them all
@@ -11,6 +10,15 @@ const HOME_GRID_ROSTERS = [
   ...PRESET_ROSTERS.filter((roster) => !("featuredTag" in roster)).slice(0, 10),
   ...PRESET_ROSTERS.filter((roster) => "featuredTag" in roster),
 ];
+
+// On phones the grid is trimmed to these presets plus the "Your own" tile
+const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires"];
+
+// Every member of every preset roster, for the hero's flipping name
+const HERO_FLIPPER_NAMES = [...new Set(PRESET_ROSTERS.flatMap((roster) => [...roster.aTeam, ...roster.bTeam]))];
+// What the hero's flipping agent is on: "🧙 Gandalf is on CI."
+// Kept short so the status fits on the same line as "Remember who's doing what." on desktop
+const HERO_STATUS_TASKS = ["CI", "billing", "auth", "the docs", "the API", "dark mode", "tests", "search", "perf", "deploys", "logging", "caching"];
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
@@ -57,6 +65,7 @@ const COMMAND_GROUP_CARDS = [
   },
 ];
 
+
 // The "Build on it" dashboard example uses the Smash Bros roster
 const DASHBOARD_ROSTER = PRESET_ROSTERS.find((roster) => roster.id === "smash-bros")!;
 const DASHBOARD_MEMBERS = [
@@ -68,17 +77,6 @@ const DASHBOARD_MEMBERS = [
 const DASHBOARD_IDLE_CHIPS = [...DASHBOARD_ROSTER.aTeam, ...DASHBOARD_ROSTER.bTeam].filter(
   (member) => !DASHBOARD_MEMBERS.some((working) => member.endsWith(` ${working.name}`)),
 );
-
-// Notification titles for the before/after comparison in the "poor human brain" section
-// The session sidebar in the notification mockup; the notification is about the waiting session
-const NOTIFICATION_SESSIONS = [
-  "⚡ Harry · Fix login redirect",
-  "♟️ Ron · Upgrade to Node 24",
-  "🧪 Snape · Refactor billing",
-  "📚 Hermione · Speed up the search API",
-  "🐉 Hagrid · Clean up feature flags",
-];
-const WAITING_SESSION_INDEX = 3;
 
 // Terminal examples, rendered with Expressive Code
 const HERO_LIST_EXAMPLE = toTerminalText(
@@ -95,8 +93,9 @@ const HERO_LIST_EXAMPLE = toTerminalText(
   ].join("\n"),
 );
 // Command-only blocks use plain shell (no "$"), so their copy buttons copy runnable commands
-const INSTALL_EXAMPLE = `brew install piazzatron/tap/rostr
+const INSTALL_EXAMPLE = `curl -fsSL https://getrostr.sh/install | sh
 rostr assemble`;
+const INSTALL_SCRIPT_SOURCE = "https://github.com/piazzatron/rostr/blob/main/site/public/install";
 const API_EXAMPLE = `curl https://api.getrostr.sh/v1/rosters \\
   -H "Authorization: Bearer $ROSTR_TOKEN"`;
 // Pasted to an agent so it can write the ~15 lines that derive the auth token and decrypt tasks and repos
@@ -126,7 +125,6 @@ const LIST_JSON_EXAMPLE = `{
     }
   ]
 }`;
-
 ---
 
 <Layout
@@ -135,11 +133,21 @@ const LIST_JSON_EXAMPLE = `{
 >
     <!-- Hero -->
     <section class="hero">
-      <h1>Give your agents names. Remember who's doing what.</h1>
-      <p class="lede lede-example">🧙 Gandalf's on the auth bug. 🌱 Samwise is on billing.</p>
+      <h1>Give your agents names.</h1>
+      <p class="hero-subtitle">
+        Remember who's doing what.{" "}
+        <span class="hero-status" aria-hidden="true">
+          <span class="name-flipper" data-names={JSON.stringify(HERO_FLIPPER_NAMES)}>
+            <span><span class="status-emoji">🧙</span>Gandalf</span>
+          </span>{" "}
+          <span class="hero-status-task">
+            is on <span class="task-text" data-tasks={JSON.stringify(HERO_STATUS_TASKS)}>auth</span>.
+          </span>
+        </span>
+      </p>
       <p class="lede">
-        rostr drafts a name for every coding agent session you start, from a roster you pick, so you never have to dig
-        through five tabs called "New session" again.
+        rostr automatically drafts a name for each agent from a stable roster you set. It works across all your favorite
+        harnesses in local and cloud sessions.
       </p>
       <p class="cta-title">Get started: paste this into your agent</p>
       <div class="cta">
@@ -147,32 +155,41 @@ const LIST_JSON_EXAMPLE = `{
           <span class="copy-text">“{SETUP_PROMPT}”</span>
           <span class="copy-label">Copy</span>
         </button>
-        <a class="button-secondary" href={GITHUB_URL}>View on GitHub</a>
       </div>
-      <a class="cta-alt" href="#install">or install with Homebrew ↓</a>
-      <p class="works-with">
-        Works out of the box with <strong>Claude Code</strong> and <strong>Codex</strong>, in local and cloud sessions.
-        <br />
-        Runs on <strong>macOS</strong> and <strong>Linux</strong>.
-      </p>
+      <a class="cta-alt" href="#install">or run the install script ↓</a>
 
-      <Code code={HERO_LIST_EXAMPLE} lang="ansi" frame="terminal" />
+      <div class="hero-terminal">
+        <Code code={HERO_LIST_EXAMPLE} lang="ansi" frame="terminal" />
+        <div class="notification scene-notification is-waiting hero-notification hero-notification-claude">
+          <span class="notification-icon"><ClaudeIcon aria-hidden="true" /></span>
+          <div class="notification-text">
+            <div class="notification-top"><strong>🌱 Samwise · Migrate billing</strong><span>now</span></div>
+            <p>Claude is waiting for your input</p>
+          </div>
+        </div>
+        <div class="notification hero-notification hero-notification-slack">
+          <span class="notification-icon notification-icon-slack" aria-hidden="true">#</span>
+          <div class="notification-text">
+            <div class="notification-top"><strong>🧙 Gandalf</strong><span>now</span></div>
+            <p>Needs your input on the auth redirect loop</p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- How it works -->
     <section class="section" id="how-it-works">
       <h2>How it works</h2>
-      <p class="section-lede">rostr is a small CLI plus a skill that teaches your agent how to use it.</p>
+      <p class="section-lede">rostr is a small <a class="accent-link" href="/cli">CLI</a> plus a skill that teaches your agent how to use it.</p>
       <ol class="steps">
         <li>
           <h3>Assemble your roster</h3>
-          <p>Run <code>rostr assemble</code> and choose one of the pre-built rosters, or bring your own list of names.</p>
+          <p>Run <code>rostr assemble</code>, or just ask your agent to do it for you.</p>
         </li>
         <li>
           <h3>Sessions draft agents</h3>
           <p>
-            When a session starts, a hook drafts the next available name and tells the agent who it is. The name goes
-            at the front of the session title: <span class="session-title">🧙 Gandalf · Fix auth redirect loop</span>.
+            When a session starts, a hook drafts the next available name and tells the agent its identity.
           </p>
         </li>
         <li>
@@ -182,33 +199,6 @@ const LIST_JSON_EXAMPLE = `{
           </p>
         </li>
       </ol>
-
-      <div class="notification-compare">
-        <div class="app-window">
-          <div class="app-bar"><span></span><span></span><span></span></div>
-          <div class="app-body">
-            <ul class="app-sidebar">
-              {NOTIFICATION_SESSIONS.map((session, index) => (
-                <li class:list={{ "is-waiting": index === WAITING_SESSION_INDEX }}>
-                  <span class="session-name">{session}</span>
-                  {index === WAITING_SESSION_INDEX && <span class="waiting-dot" aria-label="waiting for input"></span>}
-                </li>
-              ))}
-            </ul>
-            <div class="app-main" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-          </div>
-          <div class="notification scene-notification is-waiting">
-            <span class="notification-icon"><ClaudeIcon aria-hidden="true" /></span>
-            <div class="notification-text">
-              <div class="notification-top">
-                <strong>{NOTIFICATION_SESSIONS[WAITING_SESSION_INDEX]}</strong>
-                <span>now</span>
-              </div>
-              <p>Claude is waiting for your input</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <p class="section-lede">The commands, at a glance:</p>
       <div class="group-cards">
@@ -225,44 +215,36 @@ const LIST_JSON_EXAMPLE = `{
 
     <!-- Why -->
     <section class="section">
-      <h2>Give your poor human brain a rest</h2>
-      <p class="section-lede">
-        Agentic dev turned all of us into managers. Five agents means five workstreams, and you're the one who has to
-        keep track of them.
-      </p>
-
-      <div class="value-grid">
-        <div class="card">
-          <h3>🔔 Know who needs you</h3>
+      <h2>Why anthropomorphize your agents?</h2>
+      <p class="section-lede">A bunch of reasons, it turns out.</p>
+      <ol class="value-list">
+        <li>
+          <h3>Triage notifications</h3>
+          <p>Know who's asking before you click, just by referencing an emoji.</p>
+        </li>
+        <li>
+          <h3>Exploit your human psychology</h3>
           <p>
-            When an agent is waiting on you, the notification says who. Find the same name in your sidebar and you're in
-            the right chat.
+            Your brain doesn't want to remember 25 abstract "work streams". It may remember that Aragorn and Sauron are
+            tag-teaming the CI fix.
           </p>
-        </div>
-        <div class="card">
-          <h3>🧠 Remember who's on what</h3>
+        </li>
+        <li>
+          <h3>Better async</h3>
           <p>
-            Every agent gets a stable name from a cast you already know. Samwise on billing sticks in your head, and
-            five sessions start to feel like a team you manage.
+            When an agent reaches out on Slack, a PR, or email, it signs with its name, so you know exactly which session
+            to open.
           </p>
-        </div>
-        <div class="card">
-          <h3>💬 Same name everywhere</h3>
-          <p>
-            When an agent messages you on Slack, comments on a PR, or sends an email, it signs with its name, so you know
-            which session it came from.
-          </p>
-          <div class="chat-message" aria-label="Example chat message signed by an agent">
-            <span class="chat-avatar">📚</span>
-            <div>
-              <div class="chat-meta"><strong>Hermione</strong><span>2:14 PM</span></div>
-              <p>Search API is 3x faster. Ready for review.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <p class="value-closer">Plus, it's fun.</p>
+        </li>
+        <li>
+          <h3>Help agents find each other</h3>
+          <p>Names give agents a way to address each other. Point one at another by name and it knows who you mean.</p>
+        </li>
+        <li>
+          <h3>It's funny</h3>
+          <p>Gandalf fixing your CSS is objectively funnier than session 4f2a fixing your CSS.</p>
+        </li>
+      </ol>
     </section>
 
     <!-- Rosters -->
@@ -274,7 +256,13 @@ const LIST_JSON_EXAMPLE = `{
       </p>
       <ul class="rosters">
         {HOME_GRID_ROSTERS.map((roster) => (
-          <li tabindex="0" class:list={{ "roster-featured": "featuredTag" in roster }}>
+          <li
+            tabindex="0"
+            class:list={{
+              "roster-featured": "featuredTag" in roster,
+              "roster-desktop-only": !MOBILE_GRID_ROSTER_IDS.includes(roster.id),
+            }}
+          >
             {"featuredTag" in roster && <span class="roster-tag">{roster.featuredTag}</span>}
             <span class="roster-emoji">{roster.emoji}</span>
             <span>
@@ -358,8 +346,8 @@ const LIST_JSON_EXAMPLE = `{
     <section class="section">
       <h2>Build on it</h2>
       <p class="section-lede">
-        Everything <code>rostr list</code> shows is available as JSON: from the CLI on your machine, or from the rostr
-        API for web dashboards and integrations. Use it to build your own monitoring, dashboards, and integrations.
+        Use the output of <code>rostr list --json</code> or the list API endpoint to build your own dashboards,
+        monitoring, and integrations.
       </p>
 
       <figure class="dashboard" aria-label="Example team dashboard built on rostr list --json">
@@ -459,11 +447,22 @@ const LIST_JSON_EXAMPLE = `{
           </button>
         </div>
         <div class="card">
-          <h3>Do it yourself</h3>
-          <p>Install with Homebrew, then assemble your roster. It walks you through the choices and installs everything.</p>
+          <h3>Run the install script</h3>
+          <p>
+            Install rostr, then assemble your roster. It walks you through the choices and sets up the
+            hooks. <a href={INSTALL_SCRIPT_SOURCE}>See the script</a>.
+          </p>
           <Code code={INSTALL_EXAMPLE} lang="sh" />
+          <p class="build-note">
+            On a Mac with Homebrew, <code>brew install piazzatron/tap/rostr</code> works too.
+          </p>
         </div>
       </div>
+      <p class="install-cloud">
+        <strong>Cloud sessions</strong> (Claude Code on the web, Codex cloud): add the install line to your environment's
+        setup script, set <code>ROSTR_KEY</code> to the key from <code>rostr config key</code>, and
+        allow <code>github.com</code> and <code>api.getrostr.sh</code> in its network settings.
+      </p>
     </section>
 
   <script>
@@ -477,6 +476,90 @@ const LIST_JSON_EXAMPLE = `{
         setTimeout(() => (label.textContent = original), 1500);
       });
     });
+
+    // Every 1.3s the hero's status line ("🧙 Gandalf is on CI.") deals a new agent and task. The name springs in from
+    // below while the old one slides out; the task just flicks over. With reduced motion both simply swap.
+    const flipper = document.querySelector<HTMLElement>(".name-flipper");
+    const taskText = document.querySelector<HTMLElement>(".task-text");
+    if (flipper && taskText) {
+      const allNames: string[] = JSON.parse(flipper.dataset.names ?? "[]");
+      const tasks: string[] = JSON.parse(taskText.dataset.tasks ?? "[]");
+      const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // A name like "🧙 Gandalf" renders as the emoji in its own span, which sets a tighter gap than a monospace space
+      const fillName = (element: HTMLElement, name: string) => {
+        const [emoji, ...rest] = name.split(" ");
+        const emojiSpan = document.createElement("span");
+        emojiSpan.className = "status-emoji";
+        emojiSpan.textContent = emoji;
+        element.replaceChildren(emojiSpan, rest.join(" "));
+      };
+
+      // Keep only the names that fit between where the name starts and the end of the line, leaving room for the
+      // longest " is on <task>." (on phones the task wraps onto its own line, so it needs no room). Measured once at load.
+      const line = document.querySelector(".hero-subtitle") as HTMLElement;
+      const taskPart = taskText.parentElement as HTMLElement;
+      const probe = document.createElement("span");
+      probe.style.cssText = "position: absolute; visibility: hidden; white-space: nowrap";
+      flipper.parentElement?.append(probe);
+      const widthOf = (text: string) => {
+        probe.textContent = text;
+        return probe.offsetWidth;
+      };
+      const nameWidth = (name: string) => {
+        fillName(probe, name);
+        return probe.offsetWidth;
+      };
+      const nameStart = flipper.getBoundingClientRect().left - line.getBoundingClientRect().left;
+      const taskPartWidth =
+        getComputedStyle(taskPart).display === "block" ? 0 : Math.max(...tasks.map((task) => widthOf(` is on ${task}.`)));
+      const names = allNames.filter((name) => nameStart + nameWidth(name) + taskPartWidth <= line.clientWidth);
+      probe.remove();
+
+      // Deal names and tasks from shuffled decks so neither repeats until all have been shown
+      const makeDealer = (items: string[]) => {
+        let deck: string[] = [];
+        return () => {
+          if (deck.length === 0) deck = [...items].sort(() => Math.random() - 0.5);
+          return deck.pop() ?? "";
+        };
+      };
+      const dealName = makeDealer(names);
+      const dealTask = makeDealer(tasks);
+
+      // The name slot is as wide as its current name, so " is on" sits right after it
+      flipper.style.width = `${(flipper.firstElementChild as HTMLElement).offsetWidth}px`;
+
+      setInterval(() => {
+        const outgoing = flipper.lastElementChild as HTMLElement;
+        const incoming = document.createElement("span");
+        fillName(incoming, dealName());
+        flipper.append(incoming);
+        flipper.style.width = `${incoming.offsetWidth}px`;
+        taskText.textContent = dealTask();
+
+        if (reduceMotion) {
+          outgoing.remove();
+          return;
+        }
+        outgoing.classList.add("is-leaving");
+        outgoing.addEventListener("animationend", () => outgoing.remove(), { once: true });
+        incoming.classList.add("is-entering");
+        taskText.classList.remove("is-swapping");
+        void taskText.offsetWidth; // restart the task's animation
+        taskText.classList.add("is-swapping");
+      }, 1300);
+    }
+
+    // The hero's Slack notification waits until the visitor scrolls a little
+    const slackNotification = document.querySelector(".hero-notification-slack");
+    const showSlackNotificationAfterScroll = () => {
+      if (window.scrollY < 40) return;
+      slackNotification?.classList.add("is-shown");
+      window.removeEventListener("scroll", showSlackNotificationAfterScroll);
+    };
+    window.addEventListener("scroll", showSlackNotificationAfterScroll, { passive: true });
+    showSlackNotificationAfterScroll();
 
     // Keep each roster's A team / B team popover on screen by nudging it left when it would overflow
     document.querySelectorAll<HTMLElement>(".rosters li").forEach((tile) => {
@@ -493,6 +576,15 @@ const LIST_JSON_EXAMPLE = `{
         });
       tile.addEventListener("pointerenter", keepPopoverOnScreen);
       tile.addEventListener("focusin", keepPopoverOnScreen);
+    });
+
+    // A tap opens a roster's popover by focusing its tile, and phones don't blur it on a tap elsewhere. Close the open
+    // popover on any tap; on a tap on the open tile itself, preventDefault stops the tap from focusing it again.
+    document.addEventListener("pointerdown", (event) => {
+      const openTile = document.activeElement;
+      if (!(openTile instanceof HTMLElement) || !openTile.matches(".rosters li")) return;
+      if (openTile.contains(event.target as Node)) event.preventDefault();
+      openTile.blur();
     });
   </script>
 </Layout>
