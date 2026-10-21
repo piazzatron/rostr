@@ -19,7 +19,7 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 
 ## Your task
 
-- `rostr agent task "<task>"`: set what you're working on, in 3-5 words. Run it whenever your work changes.
+- `rostr task "<task>"`: set what you're working on, in 3-5 words. Run it whenever your work changes.
 - Your session comes from `ROSTR_SESSION`, so don't pass `--session`.
 
 ## Setting rostr up
@@ -39,7 +39,7 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
   `rostr config auto-draft on|off`, `rostr config expiry 7d`.
 - `rostr edit <roster>` opens the user's editor: ask them to run it.
 - `rostr disband <roster> --yes` deletes a roster. Only run it when the user explicitly asks.
-- `rostr agent release <name>` frees a name held by a session that died.
+- `rostr release <name>` frees a name held by a session that died.
 
 ## Rules
 

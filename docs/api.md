@@ -141,8 +141,8 @@ sends CORS headers, so browsers can't call them.
 | Method and path | Auth | CLI use |
 |---|---|---|
 | `GET /health` | none | Deploy and compose healthchecks |
-| `POST /v1/register` | none | `config cloud on` (new setup), `assemble --cloud` |
-| `GET /v1/rosters` | bearer, **public** | `list`, finding an agent by name (`agent release`, `agent task`), dashboards |
+| `POST /v1/register` | none | `cloud on` (new setup), `assemble --cloud` |
+| `GET /v1/rosters` | bearer, **public** | `list`, finding an agent by name (`release`, `task`), dashboards |
 | `POST /v1/rosters` | bearer | `assemble` (new roster) |
 | `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `list`, `edit`, `disband` confirmation, `config emoji` |
 | `PUT /v1/rosters/{name}` | bearer | `edit`, `config emoji` |
@@ -154,11 +154,11 @@ sends CORS headers, so browsers can't call them.
 | `GET /v1/links/{repoHash}` | bearer | Bare `link`; the project's roster for `edit` and `config emoji` |
 | `PUT /v1/links/{repoHash}` | bearer | `link` |
 | `DELETE /v1/links/{repoHash}` | bearer | `unlink` |
-| `POST /v1/agents/draft` | bearer | `agent draft`, the draft step, resume, `/draft` |
+| `POST /v1/agents/draft` | bearer | `draft`, the draft step, resume, `/draft` |
 | `POST /v1/agents/keepalive` | bearer | Prompt-hook keep-alive, compaction, resume with auto-draft off |
-| `POST /v1/agents/release` | bearer | `agent release`, `SessionEnd` |
-| `POST /v1/agents/task` | bearer | `agent task` |
-| `GET /v1/sessions/{session}` | bearer | Looking up a session's draft without bumping it (`agent task` without a name) |
+| `POST /v1/agents/release` | bearer | `release`, `SessionEnd` |
+| `POST /v1/agents/task` | bearer | `task` |
+| `GET /v1/sessions/{session}` | bearer | Looking up a session's draft without bumping it (`task` without a name) |
 
 ### `GET /health`
 
@@ -168,7 +168,7 @@ sends CORS headers, so browsers can't call them.
 
 Creates an owner for an auth token. With `import`, it also uploads a whole local setup **in the same transaction**:
 if anything in it fails, nothing is created (not even the owner), and the same request can be retried. This is the
-single request `rostr config cloud on` makes for a new setup; `assemble --cloud` sends its one roster the same way.
+single request `rostr cloud on` makes for a new setup; `assemble --cloud` sends its one roster the same way.
 A second machine with an existing key doesn't register: it calls `GET /v1/settings`, and `401` means the key is
 unknown.
 
@@ -367,13 +367,13 @@ compaction re-tell use it. **`200`** with the Draft, or **`404 not_drafted`**, m
 
 ### `POST /v1/agents/release`
 
-By session (the `SessionEnd` hook, `agent release` without a name):
+By session (the `SessionEnd` hook, `release` without a name):
 
 ```json
 { "session": "5f0c…" }
 ```
 
-Or by name, across all the owner's rosters, optionally narrowed with `roster` (`agent release <name> [--roster]`):
+Or by name, across all the owner's rosters, optionally narrowed with `roster` (`release <name> [--roster]`):
 
 ```json
 { "name": "gandalf 2", "roster": "work" }

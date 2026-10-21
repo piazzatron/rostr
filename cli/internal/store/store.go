@@ -144,7 +144,7 @@ type ProjectLink struct {
 	Roster string
 }
 
-// Setup is a whole setup, as `rostr config cloud on` uploads it: rosters (oldest first), settings, project links, and
+// Setup is a whole setup, as `rostr cloud on` uploads it: rosters (oldest first), settings, project links, and
 // active drafts.
 type Setup struct {
 	Rosters  []Roster

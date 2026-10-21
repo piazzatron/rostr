@@ -205,7 +205,7 @@ func (s *SQLite) EditRoster(ctx context.Context, rosterName string, mode roster.
 		for _, d := range active {
 			if edited.Team(d.Member) == "" {
 				return fmt.Errorf("%s is drafted, so you can't rename or remove them. Wait for their session to end, "+
-					"or release them first: rostr agent release %q", d.Name(), d.Name())
+					"or release them first: rostr release %q", d.Name(), d.Name())
 			}
 		}
 

@@ -5,7 +5,7 @@ Storage for the behavior in [cli-spec.md](cli-spec.md).
 In local mode (the default, when there's no rostr key), everything lives in one SQLite database at
 `~/.config/rostr/rostr.db`. SQLite is compiled into the CLI (the pure-Go `modernc.org/sqlite`), so there's nothing to
 install. The schema mirrors the [server schema](server-schema.md) minus owners and encryption: tasks and repo names
-are plaintext here, and `rostr config cloud on` encrypts and fingerprints them as it uploads. In cloud mode everything
+are plaintext here, and `rostr cloud on` encrypts and fingerprints them as it uploads. In cloud mode everything
 lives on the API instead, and only `credentials` is kept on disk.
 
 ```
@@ -93,6 +93,6 @@ editor closes:
 
 ## Moving to the cloud
 
-`rostr config cloud on` uploads every roster, the default roster, project links, and active drafts in one request,
+`rostr cloud on` uploads every roster, the default roster, project links, and active drafts in one request,
 creates your key, and only then deletes `rostr.db`. There's no way back to local in v1. A machine is in cloud mode
 whenever it has a key, from `credentials` or the `ROSTR_KEY` environment variable.

@@ -262,14 +262,14 @@ func (m *machine) key() string {
 	return key
 }
 
-// joinWithKey runs `rostr config cloud on` at a terminal and pastes key as an existing key.
+// joinWithKey runs `rostr cloud on` at a terminal and pastes key as an existing key.
 func (m *machine) joinWithKey(key string) (string, int) {
 	m.t.Helper()
 	return m.runTTY([]ttyStep{
 		{"New setup, or do you have a key?", keyDown},
 		{"I have a key", keyEnter},
 		{"Paste your rostr key", key + keyEnter},
-	}, "config", "cloud", "on")
+	}, "cloud", "on")
 }
 
 func (m *machine) credentialsPath() string {
@@ -333,7 +333,7 @@ type draftOutput struct{ Name, Emoji, Team, Roster, Display string }
 func (m *machine) draft(dir, session string, args ...string) draftOutput {
 	m.t.Helper()
 	var out draftOutput
-	stdout := m.okIn(dir, append([]string{"agent", "draft", "--json", "--session", session}, args...)...)
+	stdout := m.okIn(dir, append([]string{"draft", "--json", "--session", session}, args...)...)
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		m.t.Fatalf("%v: %s", err, stdout)
 	}

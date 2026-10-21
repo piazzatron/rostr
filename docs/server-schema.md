@@ -67,7 +67,7 @@ create table drafts (
   repo         bytea,         -- same ciphertext as project_links
   task         bytea,         -- AES-256-GCM ciphertext, encrypted on the user's machine; the server can't read it
   drafted_at   timestamptz not null default now(),
-  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts, `rostr agent task`, and the hourly keep-alive
+  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts, `rostr task`, and the hourly keep-alive
   released_at  timestamptz    -- null while the agent is active
 );
 
@@ -85,7 +85,7 @@ create index drafts_roster on drafts (roster_id, released_at);
 
 ## Drafting
 
-`rostr agent draft` runs in one transaction:
+`rostr draft` runs in one transaction:
 
 1. **Lock the owner row** (`select ... from owners where id = $1 for update`). This serializes an owner's drafts, so
    two sessions starting at once can't both pick Gandalf. It's the owner rather than the roster because a draft can
@@ -106,7 +106,7 @@ The unique indexes back this up: if the logic ever gets it wrong, the insert fai
 
 ## Releasing
 
-`rostr agent release` (and the session-end hook) sets `released_at = now()` on the active draft.
+`rostr release` (and the session-end hook) sets `released_at = now()` on the active draft.
 
 ## Not in the schema
 

@@ -26,7 +26,7 @@ A roster is a named list of members, each a name and an emoji. A person can have
   Drafting picks from the A team first, in order, and only calls up the B team when every A-teamer is busy.
 - **Presets.** Pre-built rosters ship with the CLI. The list lives in `site/src/data/rosters.ts` (id, name, source,
   emoji, A team, B team). Free Agents mixes characters from the other presets.
-- **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr agent release eowyn`
+- **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr release eowyn`
   finds Éowyn. A roster can't have two members whose names match this way, and you can't have two rosters whose
   names do.
 
@@ -65,9 +65,9 @@ Outside a git repo, rostr uses the default.
 
 - **Arguments vs. `--roster`.** Commands that act on a roster take it as an argument: `assemble`, `link`, `list`,
   `edit`, `disband`, `config default`. Commands that pick whose agents to act on take `--roster`, which overrides
-  the lookup above: `agent draft`, `agent release`, `agent task`, `config emoji`.
+  the lookup above: `draft`, `release`, `task`, `config emoji`.
 - **A session's roster is fixed at its first draft,** from the directory the session started in. After that,
-  everything for the session (resume, compaction, keep-alive, `agent task`, `agent release`, session end) finds its
+  everything for the session (resume, compaction, keep-alive, `task`, `release`, session end) finds its
   draft by session ID, so an agent that `cd`s into another project keeps its name.
 
 ### Sessions
@@ -79,8 +79,8 @@ Every draft belongs to a session ID from Claude Code or Codex.
   runs know their session without flags. Codex hooks can't set env vars, but Codex gives every command its agent runs
   `CODEX_THREAD_ID`, its hooks' session ID. `--session` defaults to `ROSTR_SESSION`, then `CODEX_THREAD_ID`.
 - Drafting always happens inside a session (a hook, `/draft`, or `$rostr-draft`); nobody drafts from a bare terminal.
-  With no `--session`, `ROSTR_SESSION`, or `CODEX_THREAD_ID`, `agent draft` errors, and so do `agent release` and
-  `agent task` without a name.
+  With no `--session`, `ROSTR_SESSION`, or `CODEX_THREAD_ID`, `draft` errors, and so do `release` and
+  `task` without a name.
 
 ### Display
 
@@ -119,7 +119,7 @@ and esc cancels. Each question can be skipped with a flag, so an agent can run i
 - `--names <list>`: comma-separated names, each optionally with an emoji (`"🧮 Ada, Grace"`). The first six are
   the A team. Names without an emoji get a random one.
 - `--emoji on|off|only`: the roster's emoji mode. Defaults to `on`.
-- `--cloud`: put the setup in the cloud. Only for the first roster; after that, use `rostr config cloud on`.
+- `--cloud`: put the setup in the cloud. Only for the first roster; after that, use `rostr cloud on`.
 - `--no-auto-draft`: turn auto-draft off.
 - `--link`: use the new roster for the repo you're in. Run in a git repo with a roster already set up, the wizard
   asks this itself ("Use the side roster for acme/api?"); the first roster is the default, so it's never linked.
@@ -136,7 +136,7 @@ and esc cancels. Each question can be skipped with a flag, so an agent can run i
 - Later runs skip the setup-wide questions (where rostr lives, auto-draft); change those with `rostr config`. They
   reinstall the hooks, skill, and `/draft` only if they're missing, without duplicating them.
 - A name that's already taken asks for another one (or errors, when run with flags). `--cloud` on a later run errors
-  and points to `rostr config cloud on`.
+  and points to `rostr cloud on`.
 
 #### `rostr link` / `rostr unlink`
 
@@ -211,11 +211,11 @@ Code (only rostr's own entries, and a `/draft` the user wrote themselves is left
 
 These are run by the hooks, the skill, and `/draft`, not usually by people.
 
-#### `rostr agent draft` / `rostr agent release`
+#### `rostr draft` / `rostr release`
 
 ```
-rostr agent draft [--task <description>] [--session <id>] [--roster <roster>] [--json]
-rostr agent release [<name>] [--session <id>] [--roster <roster>]
+rostr draft [--task <description>] [--session <id>] [--roster <roster>] [--json]
+rostr release [<name>] [--session <id>] [--roster <roster>]
 ```
 
 - **Draft** gives the session the next free member, A team first (see [Drafting](#drafting)). Drafting is
@@ -226,10 +226,10 @@ rostr agent release [<name>] [--session <id>] [--roster <roster>]
   stuck by a session that died, so it searches all your rosters, not just the current one. If more than one roster
   has that member drafted, it asks which (or takes `--roster`).
 
-#### `rostr agent task`
+#### `rostr task`
 
 ```
-rostr agent task [<name>] <description> [--session <id>] [--roster <roster>]
+rostr task [<name>] <description> [--session <id>] [--roster <roster>]
 ```
 
 Sets what an agent is working on. Without a name, it sets the task for the session's agent. Bumps the draft's
@@ -245,7 +245,6 @@ rostr config default <roster>
 rostr config emoji on|off|only [--roster <roster>]
 rostr config auto-draft on|off
 rostr config expiry <duration>
-rostr config cloud on
 rostr config key [--token]
 ```
 
@@ -256,7 +255,23 @@ On its own, prints every setting.
 - `auto-draft`: draft every new session automatically, or only with `/draft`. Off means sessions start unnamed.
 - `expiry`: how long a draft can go unseen before it's released (see [Drafting](#drafting)). Takes hours, days, or
   weeks (`48h`, `7d`, `2w`). Defaults to `7d`. Applies to all your rosters.
-- `cloud on`: asks "New setup, or do you have a key?"
+- `key`: prints the rostr key, so you can paste it on another machine or into a cloud environment's variables as
+  `ROSTR_KEY`. Refuses when it isn't running in a terminal (which is how agents run commands), so the key doesn't
+  land in an agent's transcript by accident.
+  `--token` prints the derived auth token instead, for calling the [public API](#public-read-api) with `curl`.
+- `auto-draft` and `expiry` are stored with your setup (the local settings table, or your account in cloud mode), so
+  they apply on every machine.
+- **Open (N10):** emoji is per roster, but `rostr config` shows one value.
+
+
+#### `rostr cloud`
+
+```
+rostr cloud on
+rostr cloud install
+```
+
+- `on`: asks "New setup, or do you have a key?"
   - **New setup:** generates a key, uploads every roster, the default, project links, and active drafts to the API,
     saves the key to `credentials`, and deletes the local database. It doesn't print the key; it says where it was
     saved and points to `rostr config key`.
@@ -266,14 +281,10 @@ On its own, prints every setting.
 - **Cloud is one-way.** There's no `cloud off` in v1: once a setup moves to the cloud, it stays there.
 - The upload is a single request, and the local database is deleted only after it succeeds, so a failed upload leaves the
   local setup untouched.
-- `key`: prints the rostr key, so you can paste it on another machine or into a cloud environment's variables as
-  `ROSTR_KEY`. Refuses when it isn't running in a terminal (which is how agents run commands), so the key doesn't
-  land in an agent's transcript by accident.
-  `--token` prints the derived auth token instead, for calling the [public API](#public-read-api) with `curl`.
-- `auto-draft` and `expiry` are stored with your setup (the local settings table, or your account in cloud mode), so
-  they apply on every machine.
-- **Open (N10):** emoji is per roster, but `rostr config` shows one value.
-
+- `install`: installs the Claude Code hooks in a Claude Code cloud session's container (`CLAUDE_CODE_REMOTE=true`),
+  where each session starts from a fresh container. The install script runs it there, and `ROSTR_KEY` connects the
+  container to the setup. Anywhere else it refuses and points to `rostr assemble`, which installs the hooks on a
+  person's own machine.
 ## Hooks, skill, and slash command
 
 ### The hidden `rostr hook` command
@@ -342,13 +353,13 @@ Findings behind this are in [integrations-research.md](integrations-research.md#
 
 - **Synchronous draft step.** Codex has no `asyncRewake`, so the first prompt waits for the draft, and the agent
   knows its name from its first reply. It isn't asked to set a title or task; the identity text tells it to run
-  `rostr agent task` when its work changes.
+  `rostr task` when its work changes.
 - **First prompt** means the thread's rollout (`transcript_path`) has no earlier `user_message`, so threads from
   before rostr was installed, and forks, aren't drafted mid-conversation.
 - **Thread names.** rostr names the thread `🧙 Gandalf · <task>` itself, through the Codex app-server: it runs
   `codex app-server proxy` (stdio to the daemon's control socket, which speaks JSON-RPC over WebSocket) and sends
   `initialize`, `initialized`, then `thread/name/set`. It gives up after 2 seconds and ignores failures; without a
-  daemon (`codex --no-daemon`) threads stay unnamed. The agent's later `rostr agent task` updates the task, not the
+  daemon (`codex --no-daemon`) threads stay unnamed. The agent's later `rostr task` updates the task, not the
   thread name.
 - **Terminal title.** For tmux and herdr to show the name, set
   `tui.terminal_title = ["spinner", "thread-name", "project"]` in `~/.codex/config.toml`.
@@ -391,10 +402,10 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
 2. The agent titles the session `🧙 Gandalf · <3-5 word summary>` with the session's title tool: the app's
    `mcp__ccd_session_mgmt__set_session_title` (session `"self"`, loaded with ToolSearch) in desktop Local sessions
    (`entrypoint: claude-desktop` in `~/.claude/sessions/<pid>.json`), and `mcp__claude-code-remote__set_session_title`
-   (the server session ID) in Remote Control and cloud sessions. In terminal sessions it runs `rostr agent task`. It
+   (the server session ID) in Remote Control and cloud sessions. In terminal sessions it runs `rostr task`. It
    makes the call alongside its first tool calls, or, for a plain answer, at the end of the message with the answer.
    **`rostr hook claude-code title-set`** (`PostToolUse` on both title tools and `Bash`) records the summary as the
-   task. When every tool call in the turn so far was titling (the ToolSearch, a title tool, `rostr agent task`) and
+   task. When every tool call in the turn so far was titling (the ToolSearch, a title tool, `rostr task`) and
    Claude has written text, the turn was a plain answer, so the hook returns `continue: false` and the turn ends
    there: otherwise Claude would have to reply to the tool's result, and Claude Code doesn't let a turn end without
    visible text, so it would repeat its answer.
@@ -428,7 +439,7 @@ You're 🧙 Gandalf for this session (drafted by rostr from the "work" roster).
   PR and issue comments.
 - Don't put the name in code, commit messages, or files.
 - Your user's own instructions about attribution or sign-offs take precedence over these.
-- When your work changes, run: rostr agent task "<new task>"
+- When your work changes, run: rostr task "<new task>"
 ```
 
 - This goes in the hook output, not the skill: skills load only when a conversation looks relevant, and nothing about
@@ -453,7 +464,7 @@ The same steps run locally and on the server (storage specifics in the storage d
 
 1. **Expire stale drafts:** release any draft not seen within the expiry (`rostr config expiry`, 7 days by default).
    This is the backstop for sessions that die without the release hook, and it runs lazily here, so there's no
-   cleanup job. A dead session holding a name you want can be freed sooner with `rostr agent release <name>`.
+   cleanup job. A dead session holding a name you want can be freed sooner with `rostr release <name>`.
    Released drafts are kept for 7 days, so a resumed session can ask for its old name back, then deleted.
 2. **Same session, same name:** if the session already has an active draft, in any roster, bump its last-seen time
    and return it.
@@ -470,7 +481,7 @@ once can't get the same member.
 ### Keep-alive
 
 A draft's last-seen time is bumped by drafting the same session again (resume, compaction, `/draft`), by
-`rostr agent task`, and by the prompt hook, so a session you're using never expires.
+`rostr task`, and by the prompt hook, so a session you're using never expires.
 
 - The prompt hook bumps at most once an hour per session, so cloud mode costs at most one API call an hour per
   session rather than one per prompt. It tracks the last bump in `~/.cache/rostr/keepalive/<session-id>` (the file's
@@ -528,6 +539,6 @@ Authorization: Bearer <auth token>
 - Team rosters (would need a team key on top of per-person keys).
 - Key rotation and recovery.
 - `/release`.
-- Moving from cloud back to local (`rostr config cloud off`).
+- Moving from cloud back to local (`rostr cloud off`).
 - A configurable sign-off format.
 - A client package for the API (`@rostr/client`), read-only viewer keys, and write endpoints.

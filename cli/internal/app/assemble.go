@@ -78,7 +78,7 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	// --cloud puts a first setup in the cloud; a machine that's already in cloud mode needs nothing more
 	alreadyCloud := hasCloudKey()
 	if opts.cloud && !firstRun && !alreadyCloud {
-		return errors.New("--cloud only works for your first roster. To move your setup to the cloud, run `rostr config cloud on`")
+		return errors.New("--cloud only works for your first roster. To move your setup to the cloud, run `rostr cloud on`")
 	}
 	cloud := opts.cloud && !alreadyCloud
 

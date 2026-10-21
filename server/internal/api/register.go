@@ -15,7 +15,7 @@ type registerRequest struct {
 	Import    *importRequest `json:"import"`
 }
 
-// importRequest is a whole local setup, uploaded by `rostr config cloud on`.
+// importRequest is a whole local setup, uploaded by `rostr cloud on`.
 type importRequest struct {
 	Rosters  []importRoster `json:"rosters"`
 	Settings settingsPatch  `json:"settings"`
