@@ -353,34 +353,36 @@ const LIST_JSON_EXAMPLE = `{
       </p>
 
       <figure class="dashboard" aria-label="Example team dashboard built on rostr list --json">
-        <div class="dashboard-bar">
-          <span></span><span></span><span></span>
-          <span class="dashboard-url">localhost:3000</span>
-        </div>
-        <div class="dashboard-body">
-          <div class="dashboard-header">
-            <strong>{DASHBOARD_ROSTER.emoji} app</strong>
-            <span>{DASHBOARD_MEMBERS.length} working · {DASHBOARD_IDLE_CHIPS.length} on the bench</span>
+        <div class="dashboard-app">
+          <div class="dashboard-bar">
+            <span></span><span></span><span></span>
+            <span class="dashboard-url">localhost:3000</span>
           </div>
-          <div class="dashboard-grid">
-            {DASHBOARD_MEMBERS.map((member) => (
-              <div class="agent-card">
-                <div class="agent-top">
-                  <span class="agent-emoji">{member.emoji}</span>
-                  <strong>{member.name}</strong>
-                  <span class="status-dot" aria-label="working"></span>
+          <div class="dashboard-body">
+            <div class="dashboard-header">
+              <strong>{DASHBOARD_ROSTER.emoji} app</strong>
+              <span>{DASHBOARD_MEMBERS.length} working · {DASHBOARD_IDLE_CHIPS.length} on the bench</span>
+            </div>
+            <div class="dashboard-grid">
+              {DASHBOARD_MEMBERS.map((member) => (
+                <div class="agent-card">
+                  <div class="agent-top">
+                    <span class="agent-emoji">{member.emoji}</span>
+                    <strong>{member.name}</strong>
+                    <span class="agent-status">Working</span>
+                  </div>
+                  <p class="agent-task">{member.task}</p>
+                  <div class="agent-meta">
+                    <span>{member.where}</span>
+                    <span>{member.since}</span>
+                  </div>
                 </div>
-                <p class="agent-task">{member.task}</p>
-                <div class="agent-meta">
-                  <span>{member.where}</span>
-                  <span>{member.since}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div class="dashboard-bench">
-            <span class="bench-label">On the bench</span>
-            {DASHBOARD_IDLE_CHIPS.map((member) => <span class="chip">{member}</span>)}
+              ))}
+            </div>
+            <div class="dashboard-bench">
+              <span class="bench-label">On the bench</span>
+              {DASHBOARD_IDLE_CHIPS.map((member) => <span class="chip">{member}</span>)}
+            </div>
           </div>
         </div>
         <figcaption>A team dashboard built on <code>rostr list --json</code>.</figcaption>

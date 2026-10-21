@@ -707,14 +707,23 @@ const { title, description } = Astro.props;
     line-height: 1.4;
   }
 
-  /* Fake dashboard in the "Build on it" section */
+  /* Example dashboard in the "Build on it" section: something a user built, so it has its own look (flat, strong
+     purple, lime for working) in fixed colors, like a screenshot, the same in both themes */
   .dashboard {
+    --dash-bg: #5b34e6;
+    --dash-card: #6d4af2;
+    --dash-deep: #4a26cc;
+    --dash-ink: #ffffff;
+    --dash-soft: #d4caff;
+    --dash-lime: #c6f24e;
     margin: 0 0 32px;
-    background: var(--surface);
-    border: 2px solid var(--text);
-    border-radius: 14px;
-    box-shadow: 5px 5px 0 var(--text);
+  }
+
+  .dashboard-app {
     overflow: hidden;
+    border-radius: 16px;
+    background: var(--dash-bg);
+    color: var(--dash-ink);
   }
 
   .dashboard-bar {
@@ -722,23 +731,22 @@ const { title, description } = Astro.props;
     align-items: center;
     gap: 6px;
     padding: 10px 14px;
-    border-bottom: 2px solid var(--text);
-    background: var(--bg);
+    background: var(--dash-deep);
   }
 
   .dashboard-bar > span:not(.dashboard-url) {
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    background: var(--border);
+    background: rgb(255 255 255 / 0.25);
   }
 
   .dashboard-url {
     margin-left: 12px;
     padding: 2px 12px;
     border-radius: 999px;
-    background: var(--surface);
-    color: var(--muted);
+    background: rgb(255 255 255 / 0.12);
+    color: var(--dash-soft);
     font: 12px var(--mono);
   }
 
@@ -756,25 +764,28 @@ const { title, description } = Astro.props;
   }
 
   .dashboard-header strong {
-    font-size: 20px;
+    font-size: 22px;
+    letter-spacing: -0.02em;
   }
 
   .dashboard-header span {
-    color: var(--muted);
+    color: var(--dash-soft);
     font-size: 14px;
+    font-weight: 600;
   }
 
   .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    gap: 12px;
+    gap: 10px;
   }
 
   .agent-card {
-    padding: 14px;
-    border: 1.5px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
     border-radius: 12px;
-    background: var(--bg);
+    background: var(--dash-card);
   }
 
   .agent-top {
@@ -787,25 +798,30 @@ const { title, description } = Astro.props;
     font-size: 22px;
   }
 
-  .status-dot {
-    width: 9px;
-    height: 9px;
+  .agent-status {
     margin-left: auto;
-    border-radius: 50%;
-    background: #2f9e44;
-    box-shadow: 0 0 0 3px color-mix(in srgb, #2f9e44 25%, transparent);
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--dash-lime);
+    color: #24104f;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .agent-task {
-    margin: 10px 0 12px;
-    font-size: 15px;
-    line-height: 1.4;
+    flex: 1;
+    margin: 12px 0 14px;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.35;
   }
 
   .agent-meta {
     display: flex;
     justify-content: space-between;
-    color: var(--muted);
+    color: var(--dash-soft);
     font: 12px var(--mono);
   }
 
@@ -815,22 +831,25 @@ const { title, description } = Astro.props;
     align-items: center;
     gap: 6px;
     margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px dashed var(--border);
+  }
+
+  .dashboard-bench .chip {
+    border: 0;
+    background: rgb(255 255 255 / 0.14);
+    color: var(--dash-ink);
   }
 
   .bench-label {
     margin-right: 6px;
-    color: var(--muted);
+    color: var(--dash-soft);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .dashboard figcaption {
-    padding: 10px 20px;
-    border-top: 1px solid var(--border);
+    margin-top: 10px;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 14px;
   }
 
   /* Headings sit a little further from the code blocks, whose shadows make 8px look cramped */
