@@ -404,6 +404,18 @@ const { title, description } = Astro.props;
     margin-top: 64px;
   }
 
+  /* The terminal fades up into place on load, landing before Claude's notification slides in */
+  .hero-terminal > .expressive-code {
+    animation: terminal-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.25s both;
+  }
+
+  @keyframes terminal-in {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+  }
+
   .hero-notification {
     z-index: 1;
   }
@@ -443,7 +455,8 @@ const { title, description } = Astro.props;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .hero-notification {
+    .hero-notification,
+    .hero-terminal > .expressive-code {
       animation: none !important;
     }
   }
