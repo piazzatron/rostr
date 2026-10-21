@@ -392,10 +392,12 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
 2. **`rostr hook claude-code title`** (`Stop`) runs when Claude finishes its first turn. It exits 2, which keeps
    Claude going to summarize the conversation in 3–5 words, in one tool call. In desktop, Remote Control, and cloud
    sessions the agent sets the app's title to `🧙 Gandalf · <summary>` with `set_session_title`, and
-   **`rostr hook claude-code title-set`** (`PostToolUse` on that tool) records the summary as its task. In terminal
-   sessions it runs `rostr agent task` instead. The
-   prompt hook leaves a marker in `~/.cache/rostr/title-pending/` when it drafts, and the title step removes it, so it
-   runs once per session. It skips a `Stop` with `stop_hook_active` set (Claude is already continuing for a `Stop`
+   **`rostr hook claude-code title-set`** (`PostToolUse` on that tool, `async` so Claude doesn't wait on the API)
+   records the summary as its task. In terminal sessions it runs `rostr agent task` instead. The agent then ends its
+   turn on the new title: Claude Code doesn't let a turn end with no visible text, and when one does, it asks Claude to
+   continue and Claude repeats its answer. The
+   prompt hook leaves a marker holding the agent's name in `~/.cache/rostr/title-pending/` when it drafts, and the
+   title step reads the name from it (no API call) and removes it, so it runs once per session. It skips a `Stop` with `stop_hook_active` set (Claude is already continuing for a `Stop`
    hook), and an interrupted turn doesn't end in `Stop`, so the step waits for the next turn that finishes. An earlier
    design woke Claude about a second into the first turn instead; when the turn started with tool calls, the wake-up
    arrived before Claude had answered.

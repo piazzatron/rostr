@@ -400,7 +400,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	expectQuiet("title step, stop hook active", hook("title", stop("s1", true)), 0)
 	r := hook("title", stop("s1", false))
 	if r.code != 2 || !strings.Contains(r.stderr, `run: rostr agent task --session s1 "<your 3-5 word summary`) ||
-		strings.Contains(r.stderr, "set_session_title") || !strings.Contains(r.stderr, "end your turn without writing anything") {
+		strings.Contains(r.stderr, "set_session_title") || !strings.Contains(r.stderr, "end your turn by writing only the new title") {
 		t.Fatalf("title step: exit %d, stderr %q", r.code, r.stderr)
 	}
 	expectQuiet("title step again", hook("title", stop("s1", false)), 0)
@@ -451,10 +451,11 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("task after another title: %q", task)
 	}
 
-	// Cloud session: the same, through the server session its container names
+	// Cloud session: the same, through the server session its container names. The title step reads the name the
+	// prompt hook left, so it works even when the API can't be reached
 	readPromptOutput(hook("prompt", firstPrompt("s3")))
-	r = hook("title", stop("s3", false), "CLAUDE_CODE_REMOTE_SESSION_ID=cse_abc")
-	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_abc"`) {
+	r = hook("title", stop("s3", false), "CLAUDE_CODE_REMOTE_SESSION_ID=cse_abc", "ROSTR_KEY="+unregisteredKey)
+	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_abc" and title "🌱 Samwise · <your`) {
 		t.Fatalf("cloud title step: exit %d, stderr %q", r.code, r.stderr)
 	}
 	expectQuiet("cloud end", hook("session-end", `{"session_id":"s3","hook_event_name":"SessionEnd"}`), 0)

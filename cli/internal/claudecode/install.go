@@ -25,12 +25,13 @@ var hookEvents = []struct {
 	event      string
 	matcher    string
 	subcommand string
+	async      bool // runs in the background, so Claude doesn't wait on it
 }{
-	{"SessionStart", "", "session-start"},
-	{"UserPromptSubmit", "", "prompt"},
-	{"Stop", "", "title"},
-	{"PostToolUse", "mcp__claude-code-remote__set_session_title", "title-set"},
-	{"SessionEnd", "", "session-end"},
+	{"SessionStart", "", "session-start", false},
+	{"UserPromptSubmit", "", "prompt", false},
+	{"Stop", "", "title", false},
+	{"PostToolUse", "mcp__claude-code-remote__set_session_title", "title-set", true},
+	{"SessionEnd", "", "session-end", false},
 }
 
 // permissions are pre-approved so the draft step's instructions don't stop on a permission prompt.
@@ -142,7 +143,11 @@ func installSettings(path string) (bool, error) {
 		if rostrHook(groups, h.subcommand) != nil {
 			continue
 		}
-		group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": HookCommand(h.subcommand)}}}
+		hook := map[string]any{"type": "command", "command": HookCommand(h.subcommand)}
+		if h.async {
+			hook["async"] = true
+		}
+		group := map[string]any{"hooks": []any{hook}}
 		if h.matcher != "" {
 			group["matcher"] = h.matcher
 		}
@@ -298,9 +303,10 @@ func isRostrHook(hook map[string]any) bool {
 // uses.
 func isCurrentRostrHook(event, matcher string, hook map[string]any) bool {
 	command, _ := hook["command"].(string)
-	_, async := hook["asyncRewake"]
+	_, asyncRewake := hook["asyncRewake"]
+	async, _ := hook["async"].(bool)
 	for _, h := range hookEvents {
-		if h.event == event && h.matcher == matcher && command == HookCommand(h.subcommand) && !async {
+		if h.event == event && h.matcher == matcher && command == HookCommand(h.subcommand) && async == h.async && !asyncRewake {
 			return true
 		}
 	}

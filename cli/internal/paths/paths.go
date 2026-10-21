@@ -27,7 +27,8 @@ func KeepAliveDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "keepalive")
 }
 
-// TitlePendingDir holds one empty file per session drafted on its first prompt whose title step hasn't run yet.
+// TitlePendingDir holds one file per session drafted on its first prompt whose title step hasn't run yet, holding the
+// agent's display name.
 func TitlePendingDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "title-pending")
 }

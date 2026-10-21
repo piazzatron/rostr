@@ -28,6 +28,13 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 - [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
       that file.
 - [ ] Improve the command for moving to the cloud: `rostr config cloud on` is terrible.
+- [ ] Get rostr API call latency down. From Tokyo (Oct 21): one call is ~0.4s from a fresh process (TCP+TLS ~160ms,
+      then ~230ms to the origin; even a 404 takes that long), ~0.2–0.45s on a reused connection. The path is
+      Cloudflare (NRT) → Railway edge (hnd1) → the origin, likely in a US region. Every hook is a new process, so every
+      hook pays the handshake, and commands make several calls in a row (`rostr list` makes 3, ~1.4s). Levers: fewer
+      calls per command (e.g. set a task by session in one call), cache what hooks need locally, a closer or
+      multi-region origin, and not proxying through both Cloudflare and Railway's edge. Check the origin's region and
+      DB time (a `Server-Timing` header) first.
 - [ ] An easier way to see, from inside a session, what the whole roster is doing (today it's asking the agent to run
       `rostr list`).
 

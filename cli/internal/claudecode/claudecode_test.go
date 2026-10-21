@@ -188,6 +188,7 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 			Matcher string
 			Hooks   []struct {
 				Command     string
+				Async       bool
 				AsyncRewake bool
 			}
 		}
@@ -212,7 +213,7 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		t.Errorf("Stop: %+v", stop)
 	}
 	if post := settings.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != "mcp__claude-code-remote__set_session_title" ||
-		post[0].Hooks[0].Command != HookCommand("title-set") {
+		post[0].Hooks[0].Command != HookCommand("title-set") || !post[0].Hooks[0].Async {
 		t.Errorf("PostToolUse: %+v", post)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {

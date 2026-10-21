@@ -132,7 +132,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	markTitlePending(input.SessionID)
+	markTitlePending(input.SessionID, d.Display())
 	pane.Label(ctx, d.Display())
 	fmt.Fprintln(stdout, claudecode.PromptOutput(claudecode.Identity(d.Display(), d.Roster, input.SessionID),
 		claudecode.Title(d.Display(), placeholder)))
@@ -167,28 +167,25 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 // hookTitle is the Stop hook, run whenever Claude finishes a turn. In a session drafted on its first prompt, once the
 // first turn finishes, it keeps Claude going to summarize the conversation as its task and, in the desktop app and
 // cloud sessions, its title. An interrupted turn doesn't end in Stop, so the step waits for the next turn that finishes.
+// It reads the agent's name from the pending marker, so it never calls the API.
 func hookTitle(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	// Claude is already continuing because of a Stop hook, or the title step isn't due
-	if input.StopHookActive || !isTitlePending(input.SessionID) {
+	if input.StopHookActive {
+		return nil
+	}
+	display := pendingTitleDisplay(input.SessionID)
+	if display == "" {
 		return nil
 	}
 
-	st, err := openStore()
-	if err != nil {
-		return err
-	}
-	defer st.Close()
-	d, err := st.SessionDraft(ctx, input.SessionID)
-	if err != nil || d == nil {
-		return err
-	}
-
+	// Claude Code doesn't let a turn end with no visible text (it asks Claude to continue, and Claude repeats its
+	// answer), so the agent ends on the new title
 	if err := os.Remove(titlePendingFile(input.SessionID)); err != nil {
 		return err
 	}
 	serverSessionID := claudecode.ServerSessionID(paths.ClaudeDir(), input.SessionID)
-	fmt.Fprintf(stderr, "%s Then end your turn without writing anything: don't repeat your answer or mention the title or the task.\n",
-		claudecode.TitleInstruction(d.Display(), serverSessionID, input.SessionID))
+	fmt.Fprintf(stderr, "%s Then end your turn by writing only the new title, on one line: don't repeat your answer.\n",
+		claudecode.TitleInstruction(display, serverSessionID, input.SessionID))
 	return exitError{code: keepGoingExitCode}
 }
 
@@ -323,21 +320,22 @@ func writeSessionEnv(sessionID string) error {
 	return err
 }
 
-// markTitlePending records that the session's title step is due once its first turn finishes.
-func markTitlePending(sessionID string) {
+// markTitlePending records that the session's title step is due once its first turn finishes, keeping the agent's
+// display name for it.
+func markTitlePending(sessionID, display string) {
 	if !shellSafe.MatchString(sessionID) || os.MkdirAll(paths.TitlePendingDir(), 0o755) != nil {
 		return
 	}
-	_ = os.WriteFile(titlePendingFile(sessionID), nil, 0o644)
+	_ = os.WriteFile(titlePendingFile(sessionID), []byte(display), 0o644)
 }
 
-// isTitlePending reports whether the session's title step is still due.
-func isTitlePending(sessionID string) bool {
+// pendingTitleDisplay returns the agent's display name while the session's title step is due, or "".
+func pendingTitleDisplay(sessionID string) string {
 	if !shellSafe.MatchString(sessionID) {
-		return false
+		return ""
 	}
-	_, err := os.Stat(titlePendingFile(sessionID))
-	return err == nil
+	data, _ := os.ReadFile(titlePendingFile(sessionID))
+	return strings.TrimSpace(string(data))
 }
 
 func titlePendingFile(sessionID string) string {

@@ -124,6 +124,12 @@ The name is derived from a hash of the session ID, so both modes pick the same o
   two model round trips. A `PostToolUse` hook (matcher `mcp__claude-code-remote__set_session_title`) gets the title the
   agent passed in `tool_input`, so it records the summary as the task itself. `PostToolUse` only runs when the tool
   call succeeds, so the task matches a title the app actually has.
+- **A turn can't end with no visible text.** Telling the agent to "end your turn without writing anything" made
+  Claude Code add "[Your previous response had no visible output. Please continue and produce a user-visible
+  response.]", and the agent wrote its answer again (~7s and a duplicate answer). The agent now ends on the new title.
+- **Timing.** In a desktop session in Tokyo (cloud mode), the title step took ~14.5s after the answer: the Stop hook's
+  API call (~1.9s), two tool calls with a rostr API call each, and the forced continuation. The Stop hook now reads the
+  name from its marker file, the task hook runs `async`, and the step is one tool call plus a one-line reply.
 - **No hook sees Claude Code's own generated title.** We wanted to prefix the title Claude Code generates (a
   Haiku-written summary of the first prompt) with the name, instead of asking the agent for a summary. The hooks docs
   list no event that fires when a session's title changes, and `session_title` in hook input is only the custom title:
