@@ -1,5 +1,5 @@
 ---
-import { GITHUB_URL, X_URL } from "../consts";
+import { GITHUB_URL, UMAMI_WEBSITE_ID, X_HANDLE, X_URL } from "../consts";
 import GitHubIcon from "../assets/github.svg";
 
 interface Props {
@@ -8,6 +8,9 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+// The link preview image, shared by every page; see public/og.png
+const previewImageUrl = new URL("/og.png", Astro.site);
 ---
 
 <html lang="en">
@@ -17,6 +20,31 @@ const { title, description } = Astro.props;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <!-- Link previews (Open Graph, then X) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="rostr" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={previewImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="rostr: Give your agents names. Remember who's doing what." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:creator" content={X_HANDLE} />
+
+    <!-- Umami analytics: cookieless, and counted only on getrostr.sh, not on local or preview builds -->
+    {UMAMI_WEBSITE_ID && (
+      <script
+        is:inline
+        defer
+        src="https://cloud.umami.is/script.js"
+        data-website-id={UMAMI_WEBSITE_ID}
+        data-domains="getrostr.sh"
+      ></script>
+    )}
   </head>
   <body>
     <header class="nav">

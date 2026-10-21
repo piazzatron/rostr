@@ -1,6 +1,6 @@
 # Privacy Policy
 
-*Last updated: October 20, 2026*
+*Last updated: October 21, 2026*
 
 rostr is run by Rosebud Labs LLC ("we"). This policy covers the getrostr.sh website and the rostr cloud API at api.getrostr.sh (together, "the Service"). The rostr CLI in local mode runs entirely on your machine and sends us nothing.
 
@@ -20,7 +20,7 @@ We never receive your prompts, code, or files. [How the encryption works](/priva
 
 Like most web services, our hosting providers may log technical data such as IP addresses and request times. We use your IP address in memory to rate-limit key creation and don't store it.
 
-The website sets no cookies and runs no analytics.
+The website sets no cookies. It uses Umami, a cookieless analytics service, to count page views; Umami records anonymous, aggregate data like the pages visited, the referring site, and the browser and country, and doesn't identify you.
 
 ## How we use it
 
@@ -32,6 +32,7 @@ We use these providers to host the Service:
 
 - **Railway**: API and database
 - **Vercel**: website
+- **Umami**: website analytics
 - **Cloudflare**: DNS
 
 We may also disclose data if the law requires it. Because tasks and repo names are encrypted with a key we never have, we can't disclose their contents.
