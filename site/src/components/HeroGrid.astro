@@ -236,17 +236,18 @@
         }
         if (age < 0) continue; // waiting for the first sweep to reach it
 
-        // Each pulse snaps on and decays to a faint glow until the next; a released square fades out quickly
+        // Each pulse eases on and decays to a faint glow until the next; a released square fades out quickly
         const beat = (age % agent.period) / agent.period;
-        const flash = beat < 0.06 ? beat / 0.06 : Math.exp(-(beat - 0.06) * 6);
-        const strength = (0.2 + 0.8 * flash) * (left > 0 ? 1 : 1 + left / RELEASE_MS);
-        const size = SIZE + 3 * strength;
+        const rise = Math.min(beat / 0.15, 1);
+        const flash = beat < 0.15 ? rise * rise * (3 - 2 * rise) : Math.exp(-(beat - 0.15) * 4);
+        const strength = (0.25 + 0.75 * flash) * (left > 0 ? 1 : 1 + left / RELEASE_MS);
+        const size = SIZE + 1.5 * strength;
 
-        ctx!.globalAlpha = strength * 0.2;
+        ctx!.globalAlpha = strength * 0.08;
         ctx!.beginPath();
         ctx!.roundRect(agent.x - size, agent.y - size, size * 2, size * 2, size / 2);
         ctx!.fill();
-        ctx!.globalAlpha = strength;
+        ctx!.globalAlpha = strength * 0.6;
         ctx!.beginPath();
         ctx!.roundRect(agent.x - size / 2, agent.y - size / 2, size, size, 1.5);
         ctx!.fill();
