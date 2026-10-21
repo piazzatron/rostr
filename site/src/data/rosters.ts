@@ -176,6 +176,14 @@ export const PRESET_ROSTERS = [
     bTeam: ["🚀 Bure", "🏎️ McDavid", "🫎 Messier", "🧤 Roy", "🧱 Hašek", "💇 Jágr", "⚡ Selänne", "🧠 Lidström"],
   },
   {
+    emoji: "🤔",
+    id: "seminar",
+    name: "The Seminar",
+    source: "Philosophy & critical theory",
+    aTeam: ["🔨 Nietzsche", "🚩 Marx", "🦉 Hegel", "👁️ Foucault", "👻 Derrida", "🎻 Adorno"],
+    bTeam: ["⏰ Kant", "☕ Sartre", "🖋️ Beauvoir", "🪨 Camus", "👼 Benjamin", "🎭 Butler", "🍿 Žižek", "🌿 Deleuze"],
+  },
+  {
     emoji: "🎲",
     id: "free-agents",
     name: "Free Agents",
