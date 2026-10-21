@@ -20,8 +20,6 @@ rostr drafts a name for each of your coding agents from a roster you set, and pu
 title: `🧙 Gandalf · Fix auth redirect loop`. It works across Claude Code, Codex, and terminal multiplexers, locally
 and in the cloud.
 
-> **Status:** early. Claude Code works locally and in the cloud; Codex support is on the way.
-
 ## Install
 
 Paste this into your agent:
