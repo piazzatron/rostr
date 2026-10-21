@@ -80,6 +80,14 @@ export const PRESET_ROSTERS = [
     bTeam: ["💾 Ritchie", "🗺️ Dijkstra", "⏰ Lamport", "🧩 Liskov", "📡 Shannon", "🖥️ von Neumann", "🌐 Berners-Lee", "🧵 Thompson"],
   },
   {
+    emoji: "🤔",
+    id: "seminar",
+    name: "The Seminar",
+    source: "Philosophy & critical theory",
+    aTeam: ["🔨 Nietzsche", "🚩 Marx", "⏰ Kant", "🦉 Hegel", "👁️ Foucault", "🍿 Žižek"],
+    bTeam: ["👻 Derrida", "⚖️ Arendt", "☕ Sartre", "🖋️ Beauvoir", "🪨 Camus", "👼 Benjamin", "🎭 Butler", "🌿 Deleuze"],
+  },
+  {
     emoji: "🛡️",
     id: "avengers",
     name: "Avengers",
