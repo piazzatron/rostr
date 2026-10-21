@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -20,12 +19,8 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
-// keepGoingExitCode is the exit code with which a Stop hook keeps Claude going, with its stderr as the instruction.
-const keepGoingExitCode = 2
-
 // newHookCommand is the hidden `rostr hook` command the installed hooks call. Hooks never block a session: failures
-// are written to stderr and the hook still exits 0. The one exception is the Claude Code title step's exit 2, which
-// keeps Claude going.
+// are written to stderr and the hook still exits 0.
 func newHookCommand() *cobra.Command {
 	hook := &cobra.Command{Use: "hook", Hidden: true}
 	claudeCode := &cobra.Command{Use: "claude-code", Short: "Claude Code hooks"}
@@ -35,7 +30,8 @@ func newHookCommand() *cobra.Command {
 	claudeCode.AddCommand(
 		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
 		hookSubcommand("prompt", claudecode.ReadHookInput, hookPrompt),
-		hookSubcommand("title", claudecode.ReadHookInput, hookTitle),
+		// Installs from before the title moved into the first reply run this on Stop; it does nothing now
+		hookSubcommand("title", claudecode.ReadHookInput, func(context.Context, claudecode.HookInput, io.Writer, io.Writer) error { return nil }),
 		hookSubcommand("title-set", claudecode.ReadHookInput, hookTitleSet),
 		hookSubcommand("session-end", claudecode.ReadHookInput, hookSessionEnd),
 		newHookDraftCommand(),
@@ -58,9 +54,6 @@ func hookSubcommand[Input any](use string, read func(io.Reader) (Input, error), 
 			input, err := read(cmd.InOrStdin())
 			if err == nil {
 				err = run(cmd.Context(), input, cmd.OutOrStdout(), cmd.ErrOrStderr())
-			}
-			if _, isExit := err.(exitError); isExit {
-				return err
 			}
 			if err != nil {
 				fmt.Fprintln(cmd.ErrOrStderr(), "rostr:", err)
@@ -97,9 +90,9 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 	return nil
 }
 
-// hookPrompt runs before Claude sees each prompt. On the first, it drafts the session, tells the agent its name, and
-// titles the session with the start of the prompt; later prompts keep the draft alive and the title in step with the
-// agent's task.
+// hookPrompt runs before Claude sees each prompt. On the first, it drafts the session, tells the agent its name and to
+// title the session in its reply, and titles the session with the start of the prompt for now; later prompts keep the
+// draft alive and the title in step with the agent's task.
 func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	if !claudecode.IsFirstPrompt(input) {
 		return laterPrompt(ctx, input, stdout)
@@ -132,10 +125,18 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	markTitlePending(input.SessionID, d.Display())
 	pane.Label(ctx, d.Display())
-	fmt.Fprintln(stdout, claudecode.PromptOutput(claudecode.Identity(d.Display(), d.Roster, input.SessionID),
-		claudecode.Title(d.Display(), placeholder)))
+
+	// The desktop app gives Local sessions a title of its own straight away, so a start-of-prompt title there would
+	// only add a step before the agent's
+	where := titleWhere(input.SessionID)
+	title := claudecode.Title(d.Display(), placeholder)
+	if where.DesktopLocal {
+		title = ""
+	}
+	context := claudecode.Identity(d.Display(), d.Roster, input.SessionID) + "\n" +
+		claudecode.TitleInstruction(d.Display(), input.SessionID, where)
+	fmt.Fprintln(stdout, claudecode.PromptOutput(context, title))
 	return nil
 }
 
@@ -164,34 +165,22 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 	return nil
 }
 
-// hookTitle is the Stop hook, run whenever Claude finishes a turn. In a session drafted on its first prompt, once the
-// first turn finishes, it keeps Claude going to summarize the conversation as its task and, in the desktop app and
-// cloud sessions, its title. An interrupted turn doesn't end in Stop, so the step waits for the next turn that finishes.
-// It reads the agent's name from the pending marker, so it never calls the API.
-func hookTitle(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
-	// Claude is already continuing because of a Stop hook, or the title step isn't due
-	if input.StopHookActive {
-		return nil
-	}
-	display := pendingTitleDisplay(input.SessionID)
-	if display == "" {
-		return nil
-	}
-
-	// Claude Code doesn't let a turn end with no visible text (it asks Claude to continue, and Claude repeats its
-	// answer), so the agent ends on the new title
-	if err := os.Remove(titlePendingFile(input.SessionID)); err != nil {
-		return err
-	}
-	serverSessionID := claudecode.ServerSessionID(paths.ClaudeDir(), input.SessionID)
-	fmt.Fprintf(stderr, "%s Then end your turn by writing only the new title, on one line: don't repeat your answer.\n",
-		claudecode.TitleInstruction(display, serverSessionID, input.SessionID))
-	return exitError{code: keepGoingExitCode}
-}
-
-// hookTitleSet is the PostToolUse hook on set_session_title. When the agent titles the session "<name> · <summary>",
-// it records the summary as the agent's task, so the title step takes one tool call. Other titles are left alone.
+// hookTitleSet is the PostToolUse hook on the title tools and Bash. When the agent titles the session
+// "<name> · <summary>", it records the summary as the agent's task. And when the title call (or the agent recording
+// its task) finished a plain answer, it ends the turn, so Claude doesn't have to reply to the tool's result: Claude
+// Code doesn't let a turn end without visible text, so that reply would repeat the answer.
 func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
+	isTaskCommand := claudecode.IsTaskCommand(input.ToolInput.Command)
+	if input.ToolName == "Bash" && !isTaskCommand {
+		return nil
+	}
+	if claudecode.EndsPlainAnswer(input.TranscriptPath, input.ToolUseID) {
+		fmt.Fprintln(stdout, `{"continue": false, "suppressOutput": true}`)
+	}
+	if isTaskCommand {
+		return nil
+	}
+
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -212,7 +201,6 @@ func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stder
 // hookSessionEnd releases the session's member and clears its pane's label.
 func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
-	_ = os.Remove(titlePendingFile(input.SessionID))
 	pane.Clear(ctx)
 	st, err := openStore()
 	if err != nil {
@@ -250,9 +238,8 @@ func newHookDraftCommand() *cobra.Command {
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			pane.Label(cmd.Context(), d.Display())
-			serverSessionID := claudecode.ServerSessionID(paths.ClaudeDir(), session)
 			fmt.Fprintf(out, "%s\n\n%s\n", claudecode.Identity(d.Display(), d.Roster, session),
-				claudecode.TitleInstruction(d.Display(), serverSessionID, session))
+				claudecode.TitleInstruction(d.Display(), session, titleWhere(session)))
 			return nil
 		},
 	}
@@ -320,32 +307,18 @@ func writeSessionEnv(sessionID string) error {
 	return err
 }
 
-// markTitlePending records that the session's title step is due once its first turn finishes, keeping the agent's
-// display name for it.
-func markTitlePending(sessionID, display string) {
-	if !shellSafe.MatchString(sessionID) || os.MkdirAll(paths.TitlePendingDir(), 0o755) != nil {
-		return
-	}
-	_ = os.WriteFile(titlePendingFile(sessionID), []byte(display), 0o644)
-}
-
-// pendingTitleDisplay returns the agent's display name while the session's title step is due, or "".
-func pendingTitleDisplay(sessionID string) string {
-	if !shellSafe.MatchString(sessionID) {
-		return ""
-	}
-	data, _ := os.ReadFile(titlePendingFile(sessionID))
-	return strings.TrimSpace(string(data))
-}
-
-func titlePendingFile(sessionID string) string {
-	return filepath.Join(paths.TitlePendingDir(), sessionID)
-}
-
 // hookDir is the session's directory, from the hook input's cwd.
 func hookDir(cwd string) string {
 	if cwd != "" {
 		return cwd
 	}
 	return workingDir()
+}
+
+// titleWhere tells TitleInstruction how the session's agent titles it.
+func titleWhere(sessionID string) claudecode.TitleWhere {
+	return claudecode.TitleWhere{
+		DesktopLocal:    claudecode.IsDesktopLocal(paths.ClaudeDir(), sessionID),
+		ServerSessionID: claudecode.ServerSessionID(paths.ClaudeDir(), sessionID),
+	}
 }

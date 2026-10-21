@@ -28,13 +28,10 @@ func Execute() int {
 	root := newRootCommand()
 	cmd, err := root.ExecuteC()
 
-	var exit exitError
 	var missing errMissingInput
 	switch {
 	case err == nil:
 		return 0
-	case errors.As(err, &exit):
-		return exit.code
 	case errors.As(err, &missing):
 		fmt.Fprintf(os.Stderr, "%s %s\n\n%s", styleErrorPrefix.Render("rostr:"), err, cmd.UsageString())
 		return 1
@@ -98,11 +95,6 @@ func wrapArgsWithUsage(cmd *cobra.Command) {
 		wrapArgsWithUsage(child)
 	}
 }
-
-// exitError ends rostr with a specific exit code and no message, for hooks whose exit code means something.
-type exitError struct{ code int }
-
-func (e exitError) Error() string { return fmt.Sprintf("exit %d", e.code) }
 
 // openStore opens the storage for this machine's setup: the local database, unless a rostr key puts it in cloud mode.
 func openStore() (store.Store, error) {

@@ -348,9 +348,6 @@ func TestClaudeCodeHooks(t *testing.T) {
 	start := func(id, source string) string {
 		return fmt.Sprintf(`{"session_id":%q,"cwd":%q,"hook_event_name":"SessionStart","source":%q}`, id, repo, source)
 	}
-	stop := func(id string, active bool) string {
-		return fmt.Sprintf(`{"session_id":%q,"cwd":%q,"hook_event_name":"Stop","stop_hook_active":%t}`, id, repo, active)
-	}
 	expectQuiet := func(name string, r result, code int) {
 		t.Helper()
 		if r.code != code || r.stdout != "" {
@@ -378,7 +375,8 @@ func TestClaudeCodeHooks(t *testing.T) {
 
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 
-	// First prompt: drafts before Claude sees it, telling the agent its name and titling the session with the prompt
+	// First prompt: drafts before Claude sees it, telling the agent its name and to record its task, and titling the
+	// session with the prompt
 	type promptOutput struct {
 		HookSpecificOutput struct{ HookEventName, AdditionalContext, SessionTitle string }
 	}
@@ -391,25 +389,19 @@ func TestClaudeCodeHooks(t *testing.T) {
 	}
 	out := readPromptOutput(hook("prompt", firstPrompt("s1")))
 	if !strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're 🧙 Gandalf for this session (drafted by rostr from the \"work\" roster).") ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `run rostr agent task --session s1 "<3-5 word summary`) ||
+		strings.Contains(out.HookSpecificOutput.AdditionalContext, "set_session_title") ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
 		t.Fatalf("first prompt: %+v", out)
 	}
 
-	// When the first turn finishes, the title step keeps Claude going (exit 2) to summarize the conversation as its
-	// task, once per session, and never while Claude is already continuing for a Stop hook
-	expectQuiet("title step, stop hook active", hook("title", stop("s1", true)), 0)
-	r := hook("title", stop("s1", false))
-	if r.code != 2 || !strings.Contains(r.stderr, `run: rostr agent task --session s1 "<your 3-5 word summary`) ||
-		strings.Contains(r.stderr, "set_session_title") || !strings.Contains(r.stderr, "end your turn by writing only the new title") {
-		t.Fatalf("title step: exit %d, stderr %q", r.code, r.stderr)
-	}
-	expectQuiet("title step again", hook("title", stop("s1", false)), 0)
-	expectQuiet("title step, never drafted", hook("title", stop("s0", false)), 0)
+	// The Stop hook older installs have does nothing
+	expectQuiet("old title step", hook("title", `{"session_id":"s1","hook_event_name":"Stop"}`), 0)
 
 	// A prompt that looks like the first again neither re-tells the name nor retitles the session with its text
 	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.AdditionalContext != "" ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
-		t.Fatalf("wake-up prompt: %+v", out)
+		t.Fatalf("repeated first prompt: %+v", out)
 	}
 	if _, err := os.Stat(filepath.Join(keepAliveDir, "s1")); err != nil {
 		t.Fatalf("no keep-alive mark: %v", err)
@@ -419,15 +411,13 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("drafted: %+v", drafted)
 	}
 
-	// Desktop session: the title step asks Claude to set the app's title through the bridge session
+	// Remote Control session: the agent titles the app's session through its server session
 	sessionsDir := filepath.Join(s.home, ".claude", "sessions")
 	os.MkdirAll(sessionsDir, 0o755)
-	os.WriteFile(filepath.Join(sessionsDir, "4242.json"), []byte(`{"sessionId":"s2","bridgeSessionId":"session_xyz"}`), 0o644)
-	readPromptOutput(hook("prompt", firstPrompt("s2")))
-	r = hook("title", stop("s2", false))
-	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_xyz" and title "💍 Frodo · <your 3-5 word summary`) ||
-		strings.Contains(r.stderr, "rostr agent task") {
-		t.Fatalf("desktop title step: exit %d, stderr %q", r.code, r.stderr)
+	os.WriteFile(filepath.Join(sessionsDir, "4242.json"), []byte(`{"sessionId":"s2","bridgeSessionId":"session_xyz","entrypoint":"sdk-cli"}`), 0o644)
+	if out := readPromptOutput(hook("prompt", firstPrompt("s2"))); !strings.Contains(out.HookSpecificOutput.AdditionalContext,
+		`mcp__claude-code-remote__set_session_title with session_id "session_xyz" and title "💍 Frodo · <3-5 word summary`) {
+		t.Fatalf("Remote Control first prompt: %+v", out)
 	}
 
 	// Setting the app's title "<name> · <summary>" records the summary as the task; other titles are left alone
@@ -451,12 +441,38 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("task after another title: %q", task)
 	}
 
-	// Cloud session: the same, through the server session its container names. The title step reads the name the
-	// prompt hook left, so it works even when the API can't be reached
-	readPromptOutput(hook("prompt", firstPrompt("s3")))
-	r = hook("title", stop("s3", false), "CLAUDE_CODE_REMOTE_SESSION_ID=cse_abc", "ROSTR_KEY="+unregisteredKey)
-	if r.code != 2 || !strings.Contains(r.stderr, `set_session_title with session_id "session_abc" and title "🌱 Samwise · <your`) {
-		t.Fatalf("cloud title step: exit %d, stderr %q", r.code, r.stderr)
+	// When the title call (or the agent recording its task) finishes a plain answer, the turn ends there; alongside
+	// other work it goes on, and other Bash calls are left alone
+	answer := filepath.Join(t.TempDir(), "answer.jsonl")
+	os.WriteFile(answer, []byte(`{"type":"user","message":{"content":"How deep is Baikal?"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"About 1,642 m."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"rostr agent task \"Deepest lake\""}}]}}
+`), 0o644)
+	work := filepath.Join(t.TempDir(), "work.jsonl")
+	os.WriteFile(work, []byte(`{"type":"user","message":{"content":"List the newest files"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__claude-code-remote__set_session_title","input":{}},{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"ls -lt"}}]}}
+`), 0o644)
+	toolCall := func(transcript, tool, input string) string {
+		return fmt.Sprintf(`{"session_id":"s2","transcript_path":%q,"hook_event_name":"PostToolUse","tool_name":%q,"tool_use_id":"t1","tool_input":%s}`, transcript, tool, input)
+	}
+	if r := hook("title-set", toolCall(answer, "Bash", `{"command":"rostr agent task \"Deepest lake\""}`)); r.code != 0 || strings.TrimSpace(r.stdout) != `{"continue": false, "suppressOutput": true}` {
+		t.Fatalf("plain answer: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	expectQuiet("title call alongside work", hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)), 0)
+	expectQuiet("other Bash call", hook("title-set", toolCall(answer, "Bash", `{"command":"ls"}`)), 0)
+
+	// Local desktop session: the app titles it straight away, so rostr doesn't, and the agent uses the app's own tool
+	os.WriteFile(filepath.Join(sessionsDir, "4343.json"), []byte(`{"sessionId":"s9","bridgeSessionId":"session_l","entrypoint":"claude-desktop"}`), 0o644)
+	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); out.HookSpecificOutput.SessionTitle != "" ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `mcp__ccd_session_mgmt__set_session_title (load it with ToolSearch first`) {
+		t.Fatalf("Local first prompt: %+v", out)
+	}
+	expectQuiet("Local end", hook("session-end", `{"session_id":"s9","hook_event_name":"SessionEnd"}`), 0)
+
+	// Cloud session: the agent titles it through the server session its container names
+	if out := readPromptOutput(hook("prompt", firstPrompt("s3"), "CLAUDE_CODE_REMOTE_SESSION_ID=cse_abc")); !strings.Contains(
+		out.HookSpecificOutput.AdditionalContext, `set_session_title with session_id "session_abc"`) {
+		t.Fatalf("cloud first prompt: %+v", out)
 	}
 	expectQuiet("cloud end", hook("session-end", `{"session_id":"s3","hook_event_name":"SessionEnd"}`), 0)
 
@@ -507,7 +523,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	if env, _ := os.ReadFile(envFile); !strings.HasSuffix(string(env), "export ROSTR_SESSION=s6\n") {
 		t.Fatalf("CLAUDE_ENV_FILE: %q", env)
 	}
-	r = s.run(repo, "", nil, "hook", "claude-code", "draft", "--session", "s4")
+	r := s.run(repo, "", nil, "hook", "claude-code", "draft", "--session", "s4")
 	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 👑 Aragorn for this session") || !strings.Contains(r.stdout, "rostr agent task") {
 		t.Fatalf("/draft: exit %d, stdout %q", r.code, r.stdout)
 	}
@@ -547,8 +563,8 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 		Hooks map[string][]any
 	}
 	json.Unmarshal(second, &settings)
-	if settings.Theme != "dark" || len(settings.Hooks["Stop"]) != 2 || len(settings.Hooks["SessionStart"]) != 1 ||
-		len(settings.Hooks["UserPromptSubmit"]) != 1 || len(settings.Hooks["SessionEnd"]) != 1 {
+	if settings.Theme != "dark" || len(settings.Hooks["Stop"]) != 1 || len(settings.Hooks["SessionStart"]) != 1 ||
+		len(settings.Hooks["UserPromptSubmit"]) != 1 || len(settings.Hooks["PostToolUse"]) != 1 || len(settings.Hooks["SessionEnd"]) != 1 {
 		t.Fatalf("settings: %s", second)
 	}
 	for _, path := range []string{"skills/rostr/SKILL.md", "commands/draft.md"} {

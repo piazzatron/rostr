@@ -55,6 +55,8 @@ Decide once there's a working build to play with.
 - [ ] General copy pass on everything on the website.
 - [ ] Decide the final tagline ("Give your agents names and remember who's doing what"), used in the CLI's help and on
       the website.
+- [ ] A "How it works" section on the site, linking to a write-up of how rostr names sessions (hooks, the app's own
+      titles, Remote Control vs Local vs terminal, the title cache) from `docs/claude-code-session-titles.md`.
 - [ ] Upgrade the home page's "Works out of the box with Claude Code and Codex" line to say where: the Claude Code and
       Codex desktop apps, the terminal, tmux, and herdr.
 - [ ] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
