@@ -66,6 +66,7 @@ func newRootCommand() *cobra.Command {
 		newPresetsCommand(),
 		newDisbandCommand(),
 		newUninstallCommand(),
+		newInstallCommand(),
 		newAgentCommand(),
 		newConfigCommand(),
 		newHookCommand(),
