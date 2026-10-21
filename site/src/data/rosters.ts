@@ -88,20 +88,20 @@ export const PRESET_ROSTERS = [
     bTeam: ["👻 Derrida", "⚖️ Arendt", "☕ Sartre", "🖋️ Beauvoir", "🪨 Camus", "👼 Benjamin", "🎭 Butler", "🌿 Deleuze"],
   },
   {
-    emoji: "🛡️",
-    id: "avengers",
-    name: "Avengers",
-    source: "Marvel",
-    aTeam: ["🦾 Iron Man", "🛡️ Captain America", "🔨 Thor", "💚 Hulk", "🕷️ Black Widow", "🏹 Hawkeye"],
-    bTeam: ["🕸️ Spider-Man", "🐆 Black Panther", "🔮 Doctor Strange", "🌀 Scarlet Witch", "💎 Vision", "🐜 Ant-Man", "🦅 Falcon", "🐝 Wasp"],
-  },
-  {
     emoji: "🖖",
     id: "enterprise",
     name: "The Enterprise",
     source: "Star Trek: TNG",
     aTeam: ["🍵 Picard", "🎺 Riker", "🤖 Data", "⚔️ Worf", "🍫 Troi", "🕶️ Geordi"],
     bTeam: ["🩺 Crusher", "🧒 Wesley", "🍸 Guinan", "🔧 O'Brien", "🥋 Tasha", "🧭 Ro", "🎭 Barclay", "🃏 Q"],
+  },
+  {
+    emoji: "🛡️",
+    id: "avengers",
+    name: "Avengers",
+    source: "Marvel",
+    aTeam: ["🦾 Iron Man", "🛡️ Captain America", "🔨 Thor", "💚 Hulk", "🕷️ Black Widow", "🏹 Hawkeye"],
+    bTeam: ["🕸️ Spider-Man", "🐆 Black Panther", "🔮 Doctor Strange", "🌀 Scarlet Witch", "💎 Vision", "🐜 Ant-Man", "🦅 Falcon", "🐝 Wasp"],
   },
   {
     emoji: "🐉",
