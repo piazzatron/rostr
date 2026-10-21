@@ -573,7 +573,7 @@ const LIST_JSON_EXAMPLE = `{
       const popover = tile.querySelector<HTMLElement>(".roster-teams");
       if (!popover) return;
       // Measured a frame later, once the hover style has made the popover visible. Layout sizes (offsetLeft and
-      // offsetWidth) ignore the pop-in animation's scale and rotation.
+      // offsetWidth) ignore the fade-in's slide.
       const keepPopoverOnScreen = () =>
         requestAnimationFrame(() => {
           popover.style.marginLeft = "0px";
