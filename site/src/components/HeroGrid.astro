@@ -20,6 +20,16 @@
     mask-composite: intersect;
   }
 
+  /* On phones the grid ends where the call to action starts (the script sets its bottom), fading out through the intro,
+     and the side fades are narrow, since there's no room beside the text */
+  @media (max-width: 640px) {
+    .hero-grid {
+      mask-image:
+        linear-gradient(to bottom, #000 50%, transparent 100%),
+        linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+    }
+  }
+
   canvas {
     display: block;
     width: 100%;
@@ -61,6 +71,7 @@
   if (grid && hero && canvas && ctx) {
     const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     const darkMode = matchMedia("(prefers-color-scheme: dark)");
+    const phone = matchMedia("(max-width: 640px)");
 
     const bench = document.createElement("canvas"); // the idle squares, drawn once per resize or theme change
     const agents = new Map<number, Agent>(); // drafted squares by cell index
@@ -88,6 +99,12 @@
     });
 
     function layout() {
+      // On phones the hero is one tall column, so the grid stops at the call to action instead of running down behind
+      // the terminal. On wider screens it fills the hero.
+      const callToAction = hero!.querySelector<HTMLElement>(".cta-title");
+      grid!.style.bottom =
+        phone.matches && callToAction ? `${hero!.clientHeight - callToAction.offsetTop}px` : "";
+
       const dpr = Math.min(devicePixelRatio || 1, 2);
       const box = grid!.getBoundingClientRect();
       width = box.width;

@@ -69,7 +69,7 @@ const COMMAND_GROUP_CARDS = [
   {
     href: "/cli#roster-commands",
     title: "🎯 Roster commands",
-    description: "Assemble rosters, give projects their own, see who's on what, and edit your cast.",
+    description: "Assemble and edit rosters, link them to your repos, see who's working on what.",
     commands: ["assemble", "link", "list", "edit", "presets", "disband"],
   },
   {
@@ -77,12 +77,6 @@ const COMMAND_GROUP_CARDS = [
     title: "🤖 Agent commands",
     description: "Your hooks run these for you. Draft by hand with /draft.",
     commands: ["agent draft", "agent release", "agent task"],
-  },
-  {
-    href: "/cli#settings",
-    title: "⚙️ Settings",
-    description: "Emoji, auto-draft, cloud, and your default roster.",
-    commands: ["config"],
   },
 ];
 
@@ -187,8 +181,8 @@ const LIST_JSON_EXAMPLE = `{
         </span>
       </p>
       <p class="lede">
-        rostr automatically drafts a name for each agent from a stable roster you set. It works across all your favorite
-        harnesses in local and cloud sessions.
+        rostr automatically drafts a name for each agent from a stable roster you set. It works across your favorite
+        harnesses, in local and cloud sessions.
       </p>
       <p class="cta-title">Get started: paste this into your agent</p>
       <div class="cta">
@@ -225,18 +219,18 @@ const LIST_JSON_EXAMPLE = `{
       <ol class="steps">
         <li>
           <h3>Assemble your roster</h3>
-          <p>Run <code>rostr assemble</code>, or just ask your agent to do it for you.</p>
+          <p>Run <code>rostr assemble</code>, or ask your agent to do it for you.</p>
         </li>
         <li>
           <h3>Sessions draft agents</h3>
           <p>
-            When a session starts, a hook drafts the next available name and tells the agent its identity.
+            When a session starts, a hook drafts the next available name and gives the agent its identity.
           </p>
         </li>
         <li>
           <h3>Done? Back to the bench</h3>
           <p>
-            When a session ends, its agent is free for the next one.
+            When a session ends, the agent's identity automatically returns to the bench.
           </p>
         </li>
       </ol>
@@ -255,46 +249,12 @@ const LIST_JSON_EXAMPLE = `{
       <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
     </section>
 
-    <!-- Why -->
-    <section class="section">
-      <h2>Why anthropomorphize your agents?</h2>
-      <p class="section-lede">A bunch of reasons, it turns out.</p>
-      <ol class="value-list">
-        <li>
-          <h3>Triage notifications</h3>
-          <p>Know who's asking before you click, just by referencing an emoji.</p>
-        </li>
-        <li>
-          <h3>Exploit your human psychology</h3>
-          <p>
-            Your brain doesn't want to remember 25 abstract "work streams". It may remember that Aragorn and Sauron are
-            tag-teaming the CI fix.
-          </p>
-        </li>
-        <li>
-          <h3>Better async</h3>
-          <p>
-            When an agent reaches out on Slack, a PR, or email, it signs with its name, so you know exactly which session
-            to open.
-          </p>
-        </li>
-        <li>
-          <h3>Help agents find each other</h3>
-          <p>Names give agents a way to address each other. Point one at another by name and it knows who you mean.</p>
-        </li>
-        <li>
-          <h3>It's funny</h3>
-          <p>Gandalf fixing your CSS is objectively funnier than session 4f2a fixing your CSS.</p>
-        </li>
-      </ol>
-    </section>
-
     <!-- Rosters -->
     <section class="section">
       <h2>Squad up</h2>
       <p class="section-lede">
-        Pick a pre-built roster or assemble your own. Every roster has an A team and a B team (hover to meet them), and
-        every agent gets its own emoji, which you can turn off if that's not your thing.
+        Pick a pre-built roster or assemble your own. Every roster has an <span class="team-label team-a">A team</span> and a{" "}
+        <span class="team-label team-b">B team</span>. Every agent gets its own emoji (which you can turn off).
       </p>
       <ul class="rosters">
         {HOME_GRID_ROSTERS.map((roster) => (
@@ -345,20 +305,43 @@ const LIST_JSON_EXAMPLE = `{
         <div class="card">
           <h3>🅰️ A team, B team</h3>
           <p>
-            Twenty names are too many to get to know, so every roster has a small A team: six by default, picked
-            with <code>rostr edit</code>. rostr always drafts from the A team first and only calls up the B team when all your
-            starters are busy.
+            Twenty names are too many to get to know. rostr always drafts from your small{" "}
+            <span class="team-label team-a">A team</span> first, and only calls up the{" "}
+            <span class="team-label team-b">B team</span> when your starters are busy.
           </p>
         </div>
         <div class="card">
-          <h3>📁 One roster for work, one for side projects</h3>
-          <p>
-            Keep as many rosters as you like and give each project its own with <code>rostr link</code>. The Fellowship
-            works your day job and the NBA Legends work your side projects, so when Jordan pings you, you know which
-            one it is before you read a word.
-          </p>
+          <h3>📁 Different rosters for different projects</h3>
+          <p>Easily distinguish different projects by giving them different rosters with <code>rostr link</code>.</p>
         </div>
       </div>
+    </section>
+
+    <!-- Why -->
+    <section class="section">
+      <h2>Reasons to anthropomorphize</h2>
+      <ol class="value-list">
+        <li>
+          <h3>It exploits your human psychology</h3>
+          <p>Your brain is built to remember people and what they're doing, not "25 independent work streams".</p>
+        </li>
+        <li>
+          <h3>Notifications become easy to triage</h3>
+          <p>When a notification says 🌱 Samwise, you know what it's about before you open it.</p>
+        </li>
+        <li>
+          <h3>Every message gets provenance</h3>
+          <p>
+            When an agent pings you on Slack, GitHub, or email, it signs its name, so you know exactly which session it came
+            from.
+          </p>
+        </li>
+        <li>
+          <h3>Agents can find each other</h3>
+          <p>"Check with Hermione before you merge."</p>
+        </li>
+      </ol>
+      <p class="value-closer">Also, it's really funny.</p>
     </section>
 
     <!-- Local and cloud -->
@@ -367,20 +350,20 @@ const LIST_JSON_EXAMPLE = `{
       <dl class="modes">
         <div>
           <dt>💻 Local</dt>
-          <dd>The default. Nothing leaves your machine.</dd>
+          <dd>The default, nothing leaves your machine.</dd>
         </div>
         <div>
           <dt>☁️ Cloud</dt>
           <dd>
-            For when you also run agents in the cloud. Every session shares one roster, with no account, just a key. Task
-            and repo metadata are end-to-end encrypted. <a class="accent-link" href="/privacy"
+            For when you run agents in the cloud or across different machines. No account needed; agent task and repo
+            metadata are end-to-end encrypted. <a class="accent-link" href="/privacy"
               >Learn more about privacy →</a
             >
           </dd>
         </div>
       </dl>
       <p class="modes-note">
-        Choose during <code>rostr assemble</code>, or move to the cloud later with <code>rostr config cloud on</code>.
+        Set up during <code>rostr assemble</code>, or migrate to the cloud later with <code>rostr config cloud on</code>.
       </p>
     </section>
 
@@ -460,26 +443,23 @@ const LIST_JSON_EXAMPLE = `{
     <!-- Why I built this -->
     <section class="section narrow" id="why-i-built-this">
       <h2>Why I built this</h2>
-      <p>A few threads led to rostr:</p>
-      <ol class="threads">
-        <li>
-          Once you adopt a long-running, async agent workflow, your agents need a way to <strong
-            >reach you when they get stuck</strong
-          >. And whatever tool you build or adopt for this, you should be able to tell at a glance which session is
-          reaching out.
-        </li>
-        <li>
-          Stable agent identities seem like a useful primitive! Regardless of what harness or agent management tool you
-          use, you should be able to easily port your team. I was inspired by the named agents in <a href="https://github.com/gastownhall/gastown">Gas Town</a>,
-          but without the whole kitchen sink.
-        </li>
-        <li>
-          rostr is an experiment in exercising some restraint with agents. It's tempting to spin up countless sessions on
-          experimental workstreams, get exhausted, and then lose context picking your work back up the next morning. A
-          fixed team might nudge you to bite off a more human-manageable amount of work and prioritize around your
-          team's size, the way an EM does.
-        </li>
-      </ol>
+      <p>There were a few reasons:</p>
+      <p>
+        When you adopt an async, multi-agent workflow, you absolutely need a way for your agents to proactively{" "}
+        <strong>reach you when they get stuck</strong>. Without this, you're constantly checking in on different sessions.
+        But if you wire this up without stable agent identities, incoming messages require a few extra cycles to remember
+        which workstream they originated from. Names make this easy.
+      </p>
+      <p>
+        On top of that, stable agent identities seem like a generally useful primitive. I was inspired by the named agents
+        in <a href="https://github.com/gastownhall/gastown">Gas Town</a>, but didn't want to bring the whole kitchen sink.
+      </p>
+      <p>
+        Finally, rostr is an experiment in exercising some restraint with using agents. It's tempting to spin up countless
+        sessions over the course of the day, frying your poor, limited human noggin, and wake up the next morning to a
+        demoralizing mess. Or maybe it's just me? Perhaps having a fixed team size could be a hedge against these
+        tendencies and a nudge towards a bit more prioritization.
+      </p>
     </section>
 
     <!-- Install -->

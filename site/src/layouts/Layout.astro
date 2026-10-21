@@ -629,22 +629,53 @@ const { title, description } = Astro.props;
     margin-bottom: 0;
   }
 
-  /* "Why anthropomorphize" section: a plain numbered list of reasons */
+  /* "Why anthropomorphize" section: a narrow numbered list, with orange number circles (like "How it works") in a gutter */
   .value-list {
+    list-style: none;
+    counter-reset: reason;
     display: grid;
-    gap: 20px;
-    margin: 16px 0 0;
-    padding-left: 1.4em;
+    gap: 24px;
+    max-width: 38em;
+    margin: 28px 0 0;
+    padding: 0;
+  }
+
+  .value-list li {
+    counter-increment: reason;
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    column-gap: 14px;
+  }
+
+  /* The circle is centered on the heading's first line */
+  .value-list li::before {
+    content: counter(reason);
+    grid-row: span 2;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .value-list h3 {
-    margin: 0 0 4px;
+    margin: 1px 0 4px;
     font-size: 19px;
   }
 
   .value-list p {
     margin: 0;
     color: var(--muted);
+  }
+
+  /* Lines up with the reasons' text, past the number gutter (24px circle + 14px gap) */
+  .value-closer {
+    margin: 32px 0 0 38px;
+    font-size: 19px;
   }
 
   /* The notification sits over the top-right corner of the terminal, like a real macOS banner */
@@ -1073,17 +1104,6 @@ const { title, description } = Astro.props;
     }
   }
 
-  .threads {
-    margin: 0;
-    padding-left: 22px;
-    max-width: 40em;
-  }
-
-  .threads li {
-    margin-bottom: 14px;
-    padding-left: 4px;
-  }
-
   .install-cloud {
     margin: 20px 0 0;
   }
@@ -1221,6 +1241,24 @@ const { title, description } = Astro.props;
     background: var(--bg);
     font-size: 12.5px;
     white-space: nowrap;
+  }
+
+  /* "A team" and "B team" in running text, colored like the roster popover's A team and B team chips */
+  .team-label {
+    padding: 0.05em 0.45em;
+    border-radius: 999px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .team-a {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    color: var(--accent);
+  }
+
+  .team-b {
+    background: color-mix(in srgb, var(--muted) 14%, var(--surface));
+    color: var(--muted);
   }
 
   .chip-a {
