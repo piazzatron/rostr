@@ -23,7 +23,7 @@ title: `🧙 Gandalf · Fix auth redirect loop`. It also teaches your agent to r
 pings you on Slack, GitHub, or email, you know exactly which session needs you.
 
 <p align="center">
-  <img alt="rostr assemble pulls up the Fellowship and its A team; each new session drafts the next A-teamer off the bench; Samwise asks for input, Gandalf posts in Slack, and Frodo comments on a PR, each signed with their name; Gandalf finishes and goes back to the bench." src=".github/assets/demo.gif" width="720" />
+  <img alt="rostr assemble sets up the Fellowship and its A team; each new session drafts the next A-teamer off the bench; Samwise asks for input, Gandalf posts in Slack, and Frodo comments on a PR, each signed with their name; Gandalf finishes and goes back to the bench." src=".github/assets/demo.gif" width="720" />
 </p>
 
 ## Install
