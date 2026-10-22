@@ -1,0 +1,55 @@
+<!doctype html>
+<!--
+  The link preview image, public/og.png. tag.png is a GPT Image render of the logo, cut out of its background.
+  To update it, screenshot this page at a 1200x630 viewport on macOS (for its system fonts and emoji), e.g. with Playwright.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=block" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        width: 1200px; height: 630px; overflow: hidden; position: relative;
+        background: #fbfaf7; color: #1c1b19;
+        font-family: -apple-system, "SF Pro Display", system-ui, sans-serif;
+      }
+      .dots {
+        position: absolute; inset: 0;
+        background-image: radial-gradient(circle, #d8d3c9 1.6px, transparent 1.8px);
+        background-size: 24px 24px; background-position: 12px 12px;
+        -webkit-mask-image: linear-gradient(100deg, transparent 25%, #000 70%);
+      }
+      .mono { font-family: "SF Mono", Menlo, monospace; }
+      .brand { position: absolute; top: 64px; left: 80px; display: flex; align-items: center; gap: 14px; font-size: 38px; font-weight: 700; }
+      .brand img { width: 56px; }
+      .url { position: absolute; bottom: 64px; left: 80px; font-size: 26px; color: #6b675f; }
+      .copy { position: absolute; left: 80px; top: 200px; width: 560px; }
+      h1 { font-size: 84px; font-weight: 800; letter-spacing: -0.045em; line-height: 0.98; }
+      h1 span { color: #d9480f; }
+      p { margin-top: 22px; font-size: 36px; font-weight: 700; letter-spacing: -0.02em; color: #6b675f; }
+      .tag { position: absolute; right: 40px; top: 105px; width: 520px; height: 520px; transform: rotate(-7deg); }
+      .tag img { width: 100%; }
+      /* Sits over the tag image's white name area */
+      .name {
+        position: absolute; left: 14.9%; width: 69.9%; top: 40.9%; height: 27.2%;
+        display: flex; align-items: center; justify-content: center; white-space: nowrap;
+        font-family: "Permanent Marker"; font-size: 60px;
+      }
+      .name .emoji { font-family: "Apple Color Emoji"; font-size: 0.82em; margin-right: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="dots"></div>
+    <div class="brand mono"><img src="../public/favicon.svg" />rostr</div>
+    <div class="copy">
+      <h1>Give your agents <span>names</span>.</h1>
+      <p>Remember who's doing what.</p>
+    </div>
+    <div class="url mono">getrostr.sh</div>
+    <div class="tag">
+      <img src="tag.png" />
+      <div class="name"><span class="emoji">🧙</span>Gandalf</div>
+    </div>
+  </body>
+</html>

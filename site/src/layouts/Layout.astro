@@ -1,6 +1,7 @@
 ---
 import { GITHUB_URL, UMAMI_WEBSITE_ID, X_HANDLE, X_URL } from "../consts";
 import GitHubIcon from "../assets/github.svg";
+import Logo from "../assets/logo.svg";
 
 interface Props {
   title: string;
@@ -48,7 +49,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   </head>
   <body>
     <header class="nav">
-      <a class="wordmark" href="/">rostr</a>
+      <a class="wordmark" href="/"><Logo class="wordmark-logo" aria-hidden="true" />rostr</a>
       <nav>
         <a href="/#how-it-works">How it works</a>
         <a href="/cli">CLI docs</a>
@@ -181,10 +182,18 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   }
 
   .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-family: var(--mono);
     font-weight: 700;
     font-size: 20px;
     text-decoration: none;
+  }
+
+  .wordmark-logo {
+    width: 24px;
+    height: auto;
   }
 
   /* "rostr" in running text: the wordmark's monospace and weight, in full-strength text color even inside gray copy */
