@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  The link preview image, public/og.png. tag.png is a GPT Image render of the logo, cut out of its background.
+  To update it, screenshot this page at a 1200x630 viewport on macOS (for its system fonts and emoji), e.g. with Playwright.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=block" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      body { width: 1200px; height: 630px; overflow: hidden; position: relative; background: #fbfaf7; }
+      .dots {
+        position: absolute; inset: 0;
+        background-image: radial-gradient(circle, #d8d3c9 1.6px, transparent 1.8px);
+        background-size: 24px 24px; background-position: 12px 12px;
+      }
+      .tag { position: absolute; left: 50%; top: 50%; width: 660px; height: 660px; translate: -50% -48%; rotate: -7deg; }
+      .tag img { width: 100%; }
+      /* Sits over the tag image's white name area */
+      .name {
+        position: absolute; left: 14.9%; width: 69.9%; top: 40.9%; height: 27.2%;
+        display: flex; align-items: center; justify-content: center; white-space: nowrap;
+        font-family: "Permanent Marker"; font-size: 76px; color: #1c1b19;
+      }
+      .name .emoji { font-family: "Apple Color Emoji"; font-size: 0.82em; margin-right: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="dots"></div>
+    <div class="tag">
+      <img src="tag.png" />
+      <div class="name"><span class="emoji">🧙</span>Gandalf</div>
+    </div>
+  </body>
+</html>
