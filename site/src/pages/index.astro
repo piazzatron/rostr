@@ -368,6 +368,30 @@ const LIST_JSON_EXAMPLE = `{
       </p>
     </section>
 
+    <!-- Fast -->
+    <section class="section" id="fast">
+      <h2>It's fast</h2>
+      <p class="section-lede">
+        Drafting a name takes about zero milliseconds. <Rostr /> keeps a local copy of who's idle in each roster, so the
+        hook that runs on your first prompt picks a name from that list and answers right away. Your agent never waits
+        on the <Rostr /> API.
+      </p>
+      <ul class="fast-list">
+        <li>
+          <strong>The server hears about it afterwards</strong>, in the background. If another session elsewhere took the
+          same name in the same moment, the server gives yours the next copy, so once in a while you'll see 🧹 Ginny 2
+          instead of 🧹 Ginny. That's the trade-off, and it takes two machines starting sessions at the same instant.
+        </li>
+        <li><strong>Local mode is instant too.</strong> It's a SQLite file on your machine.</li>
+        <li>
+          <strong>A fresh cloud container</strong> (Claude Code on the web) has no local copy yet, so its first prompt
+          makes one trip to the server. After that it's cached. Cloud sessions take seconds to boot anyway, so you won't
+          notice.
+        </li>
+      </ul>
+      <p class="docs-link"><a href="/how-it-works">How the session hooks work under the hood →</a></p>
+    </section>
+
     <!-- Build on it -->
     <section class="section">
       <h2>Build on it</h2>

@@ -1184,6 +1184,22 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     }
   }
 
+  /* "It's fast": a short list of the trade-offs, in the muted body color with the lead of each item in bold */
+  .fast-list {
+    margin: 0;
+    padding-left: 20px;
+    max-width: 44em;
+    color: var(--muted);
+  }
+
+  .fast-list li {
+    margin-bottom: 8px;
+  }
+
+  .fast-list strong {
+    color: var(--text);
+  }
+
   .install-cloud {
     margin: 20px 0 0;
   }
