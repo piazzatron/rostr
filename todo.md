@@ -16,8 +16,8 @@ Get everything working end to end, then a final pass over the landing page.
          release doesn't reach an environment until the cache is invalidated. Per the docs, it's rebuilt when the
          setup script or allowed network hosts change, or after about 7 days. Decide how users pick up new releases
          (tell them to edit the script, or have rostr update itself in the background from a SessionStart hook).
-4. [ ] **Codex** (agent): `rostr hook codex …`, a skill-based `/draft`, thread renaming.
-5. [ ] **tmux and herdr** (agent): pane tag and window name in tmux; `herdr pane report-metadata` in herdr.
+4. [x] **Codex** (agent): `rostr hook codex …`, a skill-based `/draft`, thread renaming.
+5. [x] **tmux and herdr** (agent): pane tag and window name in tmux; `herdr pane report-metadata` in herdr.
 6. [ ] **Cleanup**: review findings N10 and N11 (then delete `cli-review.md`), Uptime Robot with Discord alerts.
 7. [ ] **Final landing page pass.**
 
@@ -50,11 +50,11 @@ Decide once there's a working build to play with.
 - [ ] Finalize the A team and B team for each preset roster.
 - [x] Make a few more pre-built rosters (added NBA, MLB, NFL, and NHL Legends).
 - [ ] Design pass on the /rosters page.
-- [ ] Logo and iconography design: the logo, the favicon (the site still uses Astro's default), and icons for the site.
+- [x] Logo and iconography design: the logo, the favicon (the site still uses Astro's default), and icons for the site.
 - [ ] General copy pass on everything on the website.
 - [ ] Decide the final tagline ("Give your agents names and remember who's doing what"), used in the CLI's help and on
       the website.
-- [ ] A "How it works" section on the site, linking to a write-up of how rostr names sessions (hooks, the app's own
+- [x] A "How it works" section on the site, linking to a write-up of how rostr names sessions (hooks, the app's own
       titles, Remote Control vs Local vs terminal, the title cache) from `docs/claude-code-session-titles.md`.
 - [ ] Upgrade the home page's "Works out of the box with Claude Code and Codex" line to say where: the Claude Code and
       Codex desktop apps, the terminal, tmux, and herdr.
@@ -63,7 +63,7 @@ Decide once there's a working build to play with.
 
 ## Legal
 
-- [ ] Terms of service and a privacy policy before launching the cloud API (the /privacy page explains the design but
+- [x] Terms of service and a privacy policy before launching the cloud API (the /privacy page explains the design but
       isn't a formal policy).
 - [ ] Move rostr under Rosebud Labs: the `LICENSE` copyright, the getrostr.sh domain, and the Vercel, Railway, and
       Cloudflare accounts.
@@ -72,17 +72,17 @@ Decide once there's a working build to play with.
 
 Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 
-- [ ] Go CLI for macOS and Linux.
+- [x] Go CLI for macOS and Linux.
 - [x] Install paths that `setup.md` and the site promise: GitHub releases of the binary, the `piazzatron/homebrew-tap`
       formula, and the `getrostr.sh/install` script.
-- [ ] Roster commands: `assemble` (with the wizard and the hidden `create` alias), `link` / `unlink`, `list`, `edit`,
+- [x] Roster commands: `assemble` (with the wizard and the hidden `create` alias), `link` / `unlink`, `list`, `edit`,
       `presets`, `disband`.
-- [ ] Agent commands: `draft`, `release`, `task`.
-- [ ] `config`, including the `cloud on` migration.
-- [ ] Local storage ([`docs/local-storage.md`](docs/local-storage.md)).
-- [ ] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
+- [x] Agent commands: `draft`, `release`, `task`.
+- [x] `config`, including the `cloud on` migration.
+- [x] Local storage ([`docs/local-storage.md`](docs/local-storage.md)).
+- [x] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
       task encryption, and repo fingerprints.
-- [ ] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
+- [x] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
 - [x] Make drafting and the title summary much faster: drafting happens before the first reply, and the summary
       comes when the first turn finishes.
 - [ ] Understand how Homebrew releases work (the tap, the formula GoReleaser pushes, `brew upgrade`); see
@@ -91,7 +91,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       only writes files that are missing today.
 - [ ] Archiving a desktop session doesn't seem to release its name (♟️ Ron stayed drafted); check that SessionEnd fires.
 - [ ] Detect headless `claude -p` runs in the hooks (and Codex's equivalent) and skip drafting for them.
-- [ ] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
+- [x] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
       and skill.
 - [ ] Test release and resume in local sessions and in cloud sessions.
 
@@ -107,17 +107,19 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 Write the setup steps for Claude Code on the web and Codex cloud:
 
 - [ ] Give explicit, clear instructions for setting rostr up in cloud environments, on the site and in `setup.md`.
-- [ ] Put `ROSTR_KEY` in the cloud environment's variables (never in a committed file).
-- [ ] Allow `api.getrostr.sh` in the environment's network settings.
-- [ ] Install rostr in the environment's setup script: `curl -fsSL https://getrostr.sh/install | sh`.
-- [ ] Commit the hooks to the repo's `.claude/settings.json`, since personal settings don't reach cloud containers.
+- [x] Put `ROSTR_KEY` in the cloud environment's variables (never in a committed file).
+- [x] Allow `api.getrostr.sh` in the environment's network settings.
+- [x] Install rostr in the environment's setup script: `curl -fsSL https://getrostr.sh/install | sh`.
+- [x] ~~Commit the hooks to the repo's `.claude/settings.json`~~: superseded, since the install script runs
+      `rostr cloud install` when `CLAUDE_CODE_REMOTE` is set.
 
 ## GitHub
 
-- [ ] Make the repo public so the site's "Submit your own" link works.
-- [ ] Polish the README for launch.
-- [ ] Add a contributing guide (`CONTRIBUTING.md`, linked from the README).
-- [ ] Add an issue template and a `roster-submission` label for submitted rosters.
+- [x] Make the repo public so the site's "Submit your own" link works.
+- [x] Polish the README for launch.
+- [x] Add a contributing guide (`CONTRIBUTING.md`, linked from the README).
+- [ ] Add an issue template and a `roster-submission` label for submitted rosters. The site's "Submit your own" link
+      already asks for that label, which doesn't exist yet.
 
 ## Integrations
 
