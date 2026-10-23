@@ -113,8 +113,7 @@ rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only]
 ```
 
 Interactive setup. The wizard runs full-screen: how to build the roster (a pre-built roster, with a preview of its
-cast; Free Agents, a random mix from every roster; or your own names), then who's on the A team (everyone else is the
-B team), then one last page that shows the cast and confirms every setting with its default: roster name, emoji, and,
+cast; Free Agents, a random mix from every roster; or your own names), then the cast editor, then one last page that shows the cast and confirms every setting with its default: roster name, emoji, and,
 on the first run, where rostr lives (the cloud by default, or this machine) and whether to draft every session
 automatically. Nothing is saved until Assemble is pressed; shift+tab goes back, and esc cancels. Each question can be
 skipped with a flag, so an agent can run it non-interactively. Making a cloud setup at a terminal ends by printing the
@@ -171,8 +170,15 @@ then its idle members. Name one or more rosters to show just those. `--json` pri
 rostr edit [<roster>]
 ```
 
-Opens the roster as JSON in `$EDITOR` to change members, emoji, and who's on the A team. To swap in a whole new cast,
-run `rostr assemble` and choose to replace the roster's cast.
+Opens the roster in the cast editor (see below) to add, rename, and remove members, change their emoji, and move them
+between the A and B teams, then a last page for the roster's emoji mode and a Save button. Terminal only. To swap in a
+whole new cast, run `rostr assemble` and choose to replace the roster's cast.
+
+- **The cast editor** is one list, the A team then the B team. ↑/↓ moves, space switches the highlighted member's
+  team, `a` adds (one name, or several separated by commas, each with an optional emoji in front; new members fill the
+  A team to six, then join the B team), `r` renames (and changes the emoji, if one is typed), `x` removes, and enter
+  finishes. Names without an emoji get one no one else on the roster has. It starts adding straight away for an empty
+  cast. `rostr assemble` uses the same editor for every new cast, prefilled from the preset or Free Agents.
 
 - Refuses to save an edit that renames or removes a drafted member. Wait for their session to end, or release them
   first.

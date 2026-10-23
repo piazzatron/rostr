@@ -304,33 +304,10 @@ func TestReleaseByNameAsksWhichRosterWhenAmbiguous(t *testing.T) {
 	}
 }
 
-func TestEditWithEditor(t *testing.T) {
+func TestEditNeedsATerminal(t *testing.T) {
 	s := newSandbox(t)
+	s.fails(s.home, nil, "No rosters yet", "edit")
 	s.ok(s.home, nil, "assemble", "work", "--names", "🧙 Gandalf, 💍 Frodo")
-	s.draft(s.home, "s1") // Gandalf
-
-	editor := func(json string) []string {
-		replacement := filepath.Join(t.TempDir(), "edited.json")
-		if err := os.WriteFile(replacement, []byte(json), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return []string{"EDITOR=cp " + replacement}
-	}
-
-	// Removing drafted Gandalf is refused
-	s.fails(s.home, editor(`{"emojiMode":"on","aTeam":[{"name":"Frodo","emoji":"💍"}],"bTeam":[]}`),
-		"Gandalf is drafted", "edit", "work")
-	s.fails(s.home, editor(`{"emojiMode":"on","aTeam":[],"bTeam":[]`), "valid roster JSON", "edit")
-
-	// Changing his emoji and team, and adding a member, is fine
-	out := s.ok(s.home, editor(`{"emojiMode":"off","aTeam":[{"name":"Frodo","emoji":"💍"},{"name":"Sam","emoji":"🌱"}],"bTeam":[{"name":"Gandalf","emoji":"🪄"}]}`), "edit")
-	if out != "Saved the work roster.\n" {
-		t.Fatalf("edit: %q", out)
-	}
-	if d := s.draft(s.home, "s2"); d.Display != "Frodo" {
-		t.Fatalf("after edit: %+v", d)
-	}
-
 	s.fails(s.home, nil, "needs a terminal", "edit")
 }
 

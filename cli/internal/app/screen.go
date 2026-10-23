@@ -106,11 +106,13 @@ func (s *screen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if key := msg.String(); key == "esc" || key == "ctrl+c" {
+		key := msg.String()
+		typing, ok := s.focused.(interface{ capturesKeys() bool })
+		if key == "ctrl+c" || key == "esc" && !(ok && typing.capturesKeys()) {
 			s.cancelled = true
 			return s, tea.Quit
 		}
-		s.goingBack = msg.String() == "shift+tab"
+		s.goingBack = key == "shift+tab"
 		_, cmd = s.form.Update(msg)
 	case tea.WindowSizeMsg:
 		s.width, s.height = msg.Width, msg.Height
@@ -158,7 +160,11 @@ func (s *screen) View() string {
 
 	// Footer: the keys, pinned to the bottom
 	top := lipgloss.JoinVertical(lipgloss.Left, title, rule, "", body)
-	page := top + strings.Repeat("\n", max(2, s.height-2-lipgloss.Height(top))) + s.footer()
+	footer := s.footer()
+	if lipgloss.Width(footer) > width {
+		footer = strings.ReplaceAll(footer, styleFaint.Render("  ·  "), "  ")
+	}
+	page := top + strings.Repeat("\n", max(2, s.height-2-lipgloss.Height(top))) + lipgloss.NewStyle().MaxWidth(width).Render(footer)
 	return lipgloss.NewStyle().Padding(1, screenPadX).Render(page)
 }
 
@@ -178,13 +184,21 @@ func (s *screen) progress() (current, total int) {
 
 func (s *screen) footer() string {
 	keys := [][2]string{{"↑/↓", "move"}, {"←/→", "choose"}, {"enter", "select"}}
-	if _, ok := s.focused.(*huh.MultiSelect[string]); ok {
-		keys = [][2]string{{"↑/↓", "move"}, {"space", "toggle"}, {"/", "search"}, {"enter", "done"}}
+	if field, ok := s.focused.(interface{ footerKeys() [][2]string }); ok {
+		keys = field.footerKeys()
+	}
+	typing, _ := s.focused.(interface{ capturesKeys() bool })
+	if typing != nil && typing.capturesKeys() {
+		return joinKeys(keys)
 	}
 	if len(s.steps) > 1 {
 		keys = append(keys, [2]string{"shift+tab", "back"})
 	}
 	keys = append(keys, [2]string{"esc", "quit"})
+	return joinKeys(keys)
+}
+
+func joinKeys(keys [][2]string) string {
 	parts := make([]string, len(keys))
 	for i, k := range keys {
 		parts[i] = styleMuted.Render(k[0]) + " " + styleFaint.Render(k[1])
@@ -199,6 +213,8 @@ func (s *screen) resizeForm() tea.Cmd {
 	}
 	formWidth, _ := s.layout()
 	_, cmd := s.form.Update(tea.WindowSizeMsg{Width: formWidth, Height: s.formHeight()})
+	// Every step gets the whole height, so one that grows after the form is built (like the cast editor) has room
+	s.form.WithHeight(s.formHeight())
 	return cmd
 }
 

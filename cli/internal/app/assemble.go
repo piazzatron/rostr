@@ -106,7 +106,7 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 		}
 		switch flow.action {
 		case actionEdit:
-			return editRoster(ctx, out, st, flow.roster)
+			return saveEdit(ctx, out, st, flow)
 		case actionReplace:
 			replacement := flow.chosenCast()
 			if err := st.ReplaceCast(ctx, flow.roster, replacement.aTeam, replacement.bTeam); err != nil {
@@ -300,13 +300,13 @@ const (
 	stepPickRoster
 	stepBuild
 	stepPreset
-	stepNames
 	stepTeams
 	stepSettings
+	stepEditReview
 )
 
 var assembleSteps = []assembleStep{
-	stepAction, stepPickRoster, stepBuild, stepPreset, stepNames, stepTeams, stepSettings,
+	stepAction, stepPickRoster, stepBuild, stepPreset, stepTeams, stepSettings, stepEditReview,
 }
 
 // assembleSetting is one question on the wizard's last page, where a new roster's settings are confirmed together.
@@ -331,6 +331,8 @@ type assembleSetup struct {
 	inCloud bool
 	// repo is the project you're in ("owner/repo"), or "" outside a git repo
 	repo string
+	// edit is the roster `rostr edit` opens straight away, skipping what to do and which roster
+	edit string
 }
 
 // assembleFlow is the assemble wizard's questions and answers. The setup and flags decide which questions it can ask;
@@ -346,11 +348,10 @@ type assembleFlow struct {
 	// freeAgents is the Free Agents cast drawn for this visit, and draws counts them
 	freeAgents cast
 	draws      int
-	names      string
-	namesCast  cast
-	// aTeam is who's picked for the A team, by name, out of the cast teamsFor names
-	aTeam       []string
+	// edited is the cast as changed on the teams page, starting from the cast teamsFor names
+	edited      cast
 	teamsFor    string
+	emojiFor    string
 	name        string
 	nameDefault string
 	emoji       roster.EmojiMode
@@ -368,8 +369,11 @@ func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
 		autoDraft:     true,
 		link:          true,
 	}
+	if setup.edit != "" {
+		f.action, f.roster = actionEdit, setup.edit
+	}
 	var err error
-	if !f.asks(stepBuild) {
+	if !f.asks(stepBuild) && setup.edit == "" {
 		if f.flagCast, err = chooseCast(setup.opts); err != nil {
 			return nil, err
 		}
@@ -390,11 +394,15 @@ func (f *assembleFlow) asks(step assembleStep) bool {
 	switch step {
 	case stepAction, stepPickRoster:
 		flagsGiven := len(f.args) > 0 || opts.preset != "" || opts.names != "" || opts.emoji != "" || opts.noAutoDraft
-		return !firstRun && !flagsGiven
-	case stepBuild, stepPreset, stepNames, stepTeams:
-		return opts.preset == "" && opts.names == ""
+		return !firstRun && !flagsGiven && f.edit == ""
+	case stepBuild, stepPreset:
+		return opts.preset == "" && opts.names == "" && f.edit == ""
+	case stepTeams:
+		return opts.preset == "" && opts.names == "" || f.edit != ""
 	case stepSettings:
-		return slices.ContainsFunc(assembleSettings, f.asksSetting)
+		return f.edit == "" && slices.ContainsFunc(assembleSettings, f.asksSetting)
+	case stepEditReview:
+		return f.edit != "" || f.asks(stepAction)
 	}
 	return true
 }
@@ -427,14 +435,14 @@ func (f *assembleFlow) shows(step assembleStep) bool {
 	switch step {
 	case stepPickRoster:
 		return f.action != actionNew
-	case stepBuild, stepTeams:
+	case stepBuild:
 		return f.action != actionEdit
 	case stepPreset:
 		return f.action != actionEdit && f.build == buildPreset
-	case stepNames:
-		return f.action != actionEdit && f.build == buildNames
 	case stepSettings:
 		return f.action == actionNew
+	case stepEditReview:
+		return f.action == actionEdit
 	}
 	return true
 }
@@ -459,10 +467,13 @@ func (f *assembleFlow) ask(ctx context.Context, st store.Store) error {
 	return s.run(steps)
 }
 
-// screen builds the wizard: a page for each step it can ask, the preset preview beside the preset picker, the teams
-// beside the team picker, and the text that depends on earlier answers, filled in as each step comes into view.
+// screen builds the wizard: a page for each step it can ask, the preset preview beside the preset picker, and the
+// text that depends on earlier answers, filled in as each step comes into view.
 func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []screenStep) {
 	s := newScreen("assemble")
+	if f.edit != "" {
+		s = newScreen("edit")
+	}
 
 	var presetOptions []huh.Option[string]
 	widest := 0
@@ -493,24 +504,10 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 	preset := huh.NewSelect[string]().Title("Pick a roster").
 		Description("Pick a roster: type to search, ↑/↓ to move, enter to pick.").
 		Options(presetOptions...).Filtering(true).Value(&f.presetID)
-	names := huh.NewInput().
-		Title(`Names, comma-separated. An emoji in front is optional ("🧮 Ada, Grace"). The first six are the A team.`).
-		Value(&f.names).Validate(s.forwardOnly(func(list string) error {
-		aTeam, bTeam, err := roster.ParseNames(list)
-		f.namesCast = cast{aTeam: aTeam, bTeam: bTeam}
-		return err
-	}))
-	teams := huh.NewMultiSelect[string]().
-		Description("Agents are drafted from the A team first. The B team is only called up when the whole A team is " +
-			"busy. Space moves someone between teams.").
-		Filterable(true).Value(&f.aTeam).Validate(func(picked []string) error {
-		if len(picked) == 0 && !s.goingBack {
-			return errors.New("the A team needs at least one member")
-		}
-		return nil
-	})
+	teams := newCastEditor()
+	teams.description = "Agents are drafted from the A team first. The B team is only called up when the whole A team is busy."
 
-	// The last page: the cast, then each setting with its default, then a button to make it
+	// The new roster's last page: the cast, then each setting with its default, then a button to make it
 	summary := huh.NewNote().Title("Ready to assemble?")
 	name := huh.NewInput().Title("Roster name").Value(&f.name).Validate(s.forwardOnly(func(name string) error {
 		if strings.TrimSpace(name) == "" {
@@ -521,11 +518,11 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		}
 		return nil
 	}))
-	emoji := huh.NewSelect[roster.EmojiMode]().Title("Agents show up as").Inline(true).Value(&f.emoji).
-		Validate(func(mode roster.EmojiMode) error {
-			chosen := f.chosenCast()
-			return roster.ValidateCast(chosen.aTeam, chosen.bTeam, mode)
-		})
+	validateEmoji := func(mode roster.EmojiMode) error {
+		chosen := f.chosenCast()
+		return roster.ValidateCast(chosen.aTeam, chosen.bTeam, mode)
+	}
+	emoji := huh.NewSelect[roster.EmojiMode]().Title("Agents show up as").Inline(true).Value(&f.emoji).Validate(validateEmoji)
 	link := huh.NewSelect[bool]().Inline(true).TitleFunc(func() string {
 		return fmt.Sprintf("Use it for %s", f.repo)
 	}, nil).Options(
@@ -554,9 +551,14 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 	}
 	settings.more = append(settings.more, assemble)
 
+	// An edited roster's last page: the cast, its emoji mode, and a button to save it
+	editSummary := huh.NewNote()
+	editEmoji := huh.NewSelect[roster.EmojiMode]().Title("Agents show up as").Inline(true).Value(&f.emoji).Validate(validateEmoji)
+	save := huh.NewConfirm().Affirmative("Save").Negative("").Value(&confirmed)
+	editReview := screenStep{field: editSummary, more: []huh.Field{editEmoji, save}, shown: func() bool { return f.shows(stepEditReview) }}
+
 	fields := map[assembleStep]huh.Field{
-		stepAction: action, stepPickRoster: pickRoster, stepBuild: build, stepPreset: preset, stepNames: names,
-		stepTeams: teams,
+		stepAction: action, stepPickRoster: pickRoster, stepBuild: build, stepPreset: preset, stepTeams: teams,
 	}
 	var steps []screenStep
 	for _, step := range assembleSteps {
@@ -564,13 +566,15 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		case !f.asks(step):
 		case step == stepSettings:
 			steps = append(steps, settings)
+		case step == stepEditReview:
+			steps = append(steps, editReview)
 		default:
 			steps = append(steps, screenStep{field: fields[step], shown: func() bool { return f.shows(step) }})
 		}
 	}
 
-	// The preset picker shows the highlighted roster beside it, and the team picker shows both teams
-	presetPanel := &sidePanel{
+	// The preset picker shows the highlighted roster beside it
+	s.panels = []*sidePanel{{
 		field:     preset,
 		formWidth: widest + 5,
 		render: func(width int) string {
@@ -581,20 +585,13 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 			p, _ := presets.ByID(id)
 			return presetPreview(p, width)
 		},
-	}
-	teamsPanel := &sidePanel{
-		field: teams,
-		render: func(width int) string {
-			chosen := f.chosenCast()
-			return teamsPreview(chosen.aTeam, chosen.bTeam, width, s.formHeight())
-		},
-	}
-	s.panels = []*sidePanel{presetPanel, teamsPanel}
+	}}
 
-	inSettings := false
+	inSettings, inEditReview := false, false
 	s.onFocus = func(field huh.Field) tea.Cmd {
-		wasInSettings := inSettings
+		wasInSettings, wasInEditReview := inSettings, inEditReview
 		inSettings = slices.Contains(settings.fields(), field)
+		inEditReview = slices.Contains(editReview.fields(), field)
 		switch {
 		case field == pickRoster:
 			pickRoster.Title(map[assembleAction]string{
@@ -610,46 +607,38 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 				return func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}} }
 			}
 		case field == teams:
-			f.prepareTeams(teams, teamsPanel)
+			f.prepareTeams(teams)
 		case inSettings && !wasInSettings:
 			f.prepareSettings(summary, name, emoji)
+		case inEditReview && !wasInEditReview:
+			f.prepareEditReview(editSummary, editEmoji)
 		}
 		return nil
 	}
 	return s, steps
 }
 
-// teamsFormWidth leaves the team picker's explanation room to read, beside the teams.
-const teamsFormWidth = 46
-
-// prepareTeams fills in the team picker for the cast chosen so far: who's in it, and, for a cast it hasn't shown
-// before, the cast's own A team picked.
-func (f *assembleFlow) prepareTeams(teams *huh.MultiSelect[string], panel *sidePanel) {
-	if f.build == buildFreeAgents && len(f.freeAgents.aTeam) == 0 {
+// prepareTeams fills in the teams page for the cast chosen so far, starting over from that cast when it's one the page
+// hasn't shown before.
+func (f *assembleFlow) prepareTeams(teams *castEditor) {
+	if f.build == buildFreeAgents && len(f.freeAgents.aTeam) == 0 && f.action != actionEdit {
 		f.freeAgents, _ = presetCast(presets.FreeAgentsID)
 		f.draws++
 	}
-	base := f.baseCast()
-	if key := f.castKey(); key != f.teamsFor {
+	if key := f.castKey(); key != f.teamsFor || teams.cast == nil {
 		f.teamsFor = key
-		f.aTeam = make([]string, len(base.aTeam))
-		for i, m := range base.aTeam {
-			f.aTeam[i] = m.Name
-		}
+		base := f.baseCast()
+		f.edited = cast{presetID: base.presetID, aTeam: slices.Clone(base.aTeam), bTeam: slices.Clone(base.bTeam)}
+		teams.reset(&f.edited)
 	}
-
-	title := "Who's on the A team?"
-	members := append(append([]roster.Member{}, base.aTeam...), base.bTeam...)
-	options := make([]huh.Option[string], len(members))
-	widest := 0
-	for i, m := range members {
-		label := roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)
-		options[i] = huh.NewOption(label, m.Name)
-		widest = max(widest, lipgloss.Width(label))
+	switch {
+	case f.action == actionEdit:
+		teams.title = fmt.Sprintf("Edit the %s roster", f.roster)
+	case f.build == buildNames && f.action != actionReplace:
+		teams.title = "Who's on your roster?"
+	default:
+		teams.title = "Who's on the roster?"
 	}
-	teams.Title(title).Value(&f.aTeam).Options(options...)
-	teams.Focus() // focusing it read the picks from the options it had before, so read them again
-	panel.formWidth = max(widest+8, teamsFormWidth)
 }
 
 // prepareSettings fills in the last page as it comes into view: the cast it's about to make, the name (from the
@@ -668,9 +657,32 @@ func (f *assembleFlow) prepareSettings(summary *huh.Note, name *huh.Input, emoji
 	emoji.Options(f.emojiOptions()...)
 }
 
-// baseCast is the cast from the flags, the picked preset, Free Agents, the surprise, or the names typed in, before
-// any change to who's on which team.
+// prepareEditReview fills in an edited roster's last page, starting from its own emoji mode.
+func (f *assembleFlow) prepareEditReview(summary *huh.Note, emoji *huh.Select[roster.EmojiMode]) {
+	summary.Title(fmt.Sprintf("Save the %s roster?", f.roster)).Description(noteText(castSummary(f.chosenCast())))
+	if r, ok := f.editedRoster(); ok && f.emojiFor != r.Name {
+		f.emojiFor, f.emoji = r.Name, r.EmojiMode
+	}
+	emoji.Options(f.emojiOptions()...)
+}
+
+// editedRoster is the roster being edited, or replaced.
+func (f *assembleFlow) editedRoster() (store.Roster, bool) {
+	for _, r := range f.existing {
+		if r.Name == f.roster {
+			return r, true
+		}
+	}
+	return store.Roster{}, false
+}
+
+// baseCast is the cast from the flags, the roster being edited, the picked preset, Free Agents, or, for your own
+// names, no one yet, before any change on the teams page.
 func (f *assembleFlow) baseCast() cast {
+	if f.action == actionEdit {
+		r, _ := f.editedRoster()
+		return cast{aTeam: r.ATeam, bTeam: r.BTeam}
+	}
 	if !f.asks(stepBuild) {
 		return f.flagCast
 	}
@@ -680,38 +692,29 @@ func (f *assembleFlow) baseCast() cast {
 		chosen, _ = presetCast(f.presetID)
 	case buildFreeAgents:
 		chosen = f.freeAgents
-	case buildNames:
-		chosen = f.namesCast
 	}
 	return chosen
 }
 
-// castKey names the base cast, so the team picker knows when it's a different one.
+// castKey names the base cast, so the teams page knows when it's a different one.
 func (f *assembleFlow) castKey() string {
-	switch f.build {
-	case buildNames:
-		return "names:" + f.names
-	case buildFreeAgents:
+	switch {
+	case f.action == actionEdit:
+		return "roster:" + f.roster
+	case f.build == buildNames:
+		return "names"
+	case f.build == buildFreeAgents:
 		return fmt.Sprintf("free-agents:%d", f.draws)
 	}
 	return "preset:" + f.baseCast().presetID
 }
 
-// chosenCast is the base cast, split into teams as picked.
+// chosenCast is the cast as changed on the teams page, or else the base cast.
 func (f *assembleFlow) chosenCast() cast {
-	base := f.baseCast()
 	if !f.asks(stepTeams) || f.teamsFor != f.castKey() {
-		return base
+		return f.baseCast()
 	}
-	chosen := cast{presetID: base.presetID}
-	for _, m := range append(append([]roster.Member{}, base.aTeam...), base.bTeam...) {
-		if slices.Contains(f.aTeam, m.Name) {
-			chosen.aTeam = append(chosen.aTeam, m)
-		} else {
-			chosen.bTeam = append(chosen.bTeam, m)
-		}
-	}
-	return chosen
+	return f.edited
 }
 
 // rosterName is the name typed in, or else the name argument.
@@ -765,31 +768,5 @@ func presetPreview(p presets.Preset, width int) string {
 		"",
 		styleMuted.Render("B team"),
 		wrap.Inherit(styleFaint).Render(displayMembers(p.BTeam, roster.EmojiOn)),
-	)
-}
-
-// teamsPreview shows the A team, one per line, and the B team in grey, cut short to fit.
-func teamsPreview(aTeam, bTeam []roster.Member, width, height int) string {
-	wrap := lipgloss.NewStyle().Width(width)
-	lines := make([]string, len(aTeam))
-	for i, m := range aTeam {
-		lines[i] = roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)
-	}
-	bench := displayMembers(bTeam, roster.EmojiOn)
-	room := max(1, height-len(aTeam)-4)
-	if lipgloss.Height(wrap.Render(bench)) > room {
-		for shown := len(bTeam); shown > 0; shown-- {
-			bench = displayMembers(bTeam[:shown], roster.EmojiOn) + fmt.Sprintf(", and %d more", len(bTeam)-shown)
-			if lipgloss.Height(wrap.Render(bench)) <= room {
-				break
-			}
-		}
-	}
-	return lipgloss.JoinVertical(lipgloss.Left,
-		styleMuted.Render(fmt.Sprintf("A team · %d", len(aTeam))),
-		wrap.Render(strings.Join(lines, "\n")),
-		"",
-		styleMuted.Render(fmt.Sprintf("B team · %d", len(bTeam))),
-		wrap.Inherit(styleFaint).Render(bench),
 	)
 }
