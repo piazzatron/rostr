@@ -326,24 +326,34 @@ type listedRoster struct {
 // handleListRosters is the public GET /v1/rosters: every roster with its drafted agents and idle members, in the
 // shape of `rostr list --json`. Tasks and repos are ciphertext.
 func (s *Server) handleListRosters(w http.ResponseWriter, r *http.Request, ownerID string) error {
-	rows, err := s.db.Query(r.Context(),
-		`select `+rosterColumns+` from rosters r where r.owner_id = $1 order by r.created_at, r.name`, ownerID)
+	listed, err := listRosters(r.Context(), s.db, ownerID)
 	if err != nil {
 		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rosters": listed})
+	return nil
+}
+
+// listRosters is every roster with its drafted agents and idle members, oldest roster first.
+func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster, error) {
+	rows, err := q.Query(ctx,
+		`select `+rosterColumns+` from rosters r where r.owner_id = $1 order by r.created_at, r.name`, ownerID)
+	if err != nil {
+		return nil, err
 	}
 	rosters, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (rosterRow, error) { return scanRoster(row) })
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Active drafts, leaving out any past the owner's expiry that the next write will release
-	rows, err = s.db.Query(r.Context(), `
+	rows, err = q.Query(ctx, `
 		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at
 		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
 		where r.owner_id = $1 and d.released_at is null and d.last_seen_at >= now() - o.draft_expiry
 		order by d.drafted_at, d.id`, ownerID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	type activeDraft struct {
 		rosterID, memberName, memberEmoji string
@@ -357,12 +367,17 @@ func (s *Server) handleListRosters(w http.ResponseWriter, r *http.Request, owner
 		return d, err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// A member is idle when their name (copy 1) is free, since that's who the next draft can pick
+	// A member is idle when their name (copy 1) is free, since that's who the next draft can pick; they're listed in
+	// the order drafts would take them (see freeMember)
 	listed := make([]listedRoster, 0, len(rosters))
 	for _, roster := range rosters {
+		last, err := lastDrafted(ctx, q, roster.ID)
+		if err != nil {
+			return nil, err
+		}
 		entry := listedRoster{Name: roster.Name, EmojiMode: roster.EmojiMode, Drafted: []listedDraft{}, Idle: []idleMember{}}
 		busy := map[string]bool{}
 		for _, d := range drafts {
@@ -381,16 +396,19 @@ func (s *Server) handleListRosters(w http.ResponseWriter, r *http.Request, owner
 				DraftedAt: d.draftedAt,
 			})
 		}
-		for _, m := range roster.members() {
-			if busy[nameKey(m.Name)] {
-				continue
+		for _, team := range [][]member{roster.ATeam, roster.BTeam} {
+			taken := map[string]bool{}
+			for {
+				m, ok := leastRecentlyDrafted(team, func(m member) bool { return busy[nameKey(m.Name)] || taken[nameKey(m.Name)] }, last)
+				if !ok {
+					break
+				}
+				taken[nameKey(m.Name)] = true
+				_, teamName, _ := roster.findMember(m.Name)
+				entry.Idle = append(entry.Idle, idleMember{Name: m.Name, Emoji: m.Emoji, Team: teamName})
 			}
-			_, team, _ := roster.findMember(m.Name)
-			entry.Idle = append(entry.Idle, idleMember{Name: m.Name, Emoji: m.Emoji, Team: team})
 		}
 		listed = append(listed, entry)
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"rosters": listed})
-	return nil
+	return listed, nil
 }

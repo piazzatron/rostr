@@ -71,6 +71,16 @@ create table drafts (
   released_at  timestamptz    -- null while the agent is active
 );
 
+-- A machine's next pick in a roster, held so no other machine drafts that member first (docs/api.md, Reservations).
+-- Made and extended by every response carrying the next state, for 24 hours; deleted when its member is drafted.
+create table reservations (
+  roster_id   uuid not null references rosters on delete cascade,
+  machine_id  text not null,
+  member_name text not null,  -- the cast's spelling
+  expires_at  timestamptz not null,
+  primary key (roster_id, machine_id)
+);
+
 -- A member can only be drafted once at a time, and a session can only hold one member at a time, across all of
 -- the owner's rosters.
 create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
@@ -94,13 +104,16 @@ create index drafts_roster on drafts (roster_id, released_at);
    busy for long. Every other write (edits, links, releases, settings) takes the same lock.
 2. **Expire stale drafts:** release any of the owner's active drafts whose `last_seen_at` is older than their
    `draft_expiry`. This is the backstop for sessions that die without running the release hook. Also delete released
-   rows older than 7 days. It runs here, lazily, at the start of every write, so there's no cleanup job. Reads leave
-   out drafts past the expiry that haven't been released yet.
+   rows older than 7 days, and expired reservations. It runs here, lazily, at the start of every write, so there's
+   no cleanup job. Reads leave out drafts past the expiry that haven't been released yet.
 3. **Same session, same name:** if the session already has an active draft in any of the owner's rosters (found by
    `session_id`), bump `last_seen_at` and return it.
 4. **Resume:** if the session had a member before and that member is free, draft them again, from that roster.
-5. **Otherwise** draft the first free member in roster order, which drafts the A team before the B team. If every
-   member is busy, draft the first free numbered copy (`copy` 2, then 3).
+5. **Otherwise** draft the free member drafted least recently (`max(drafted_at)` per member over the retained
+   drafts; never drafted first, then roster order), A team before the B team, skipping members other machines hold
+   reservations on, or the `preferred` member the CLI already
+   announced (their lowest free copy if their name is taken), leaving out the members in `avoid`. If every member
+   is busy, draft a free numbered copy (`copy` 2, then 3). See [api.md](api.md#post-v1agentsdraft).
 
 The unique indexes back this up: if the logic ever gets it wrong, the insert fails instead of drafting a duplicate.
 

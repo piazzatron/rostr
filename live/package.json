@@ -1,0 +1,17 @@
+{
+  "name": "rostr-live",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.7",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.152.0"
+  }
+}

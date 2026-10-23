@@ -170,12 +170,14 @@ func TestResumeGetsTheOldNameBackIfFree(t *testing.T) {
 
 func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.T) {
 	st, _ := openTestStore(t)
-	createFellowship(t, st, "work")
+	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
 	createFellowship(t, st, "play")
 
 	draft(t, st, "s1", "work") // Gandalf
 	release(t, st, "s1")
-	draft(t, st, "s2", "work") // takes Gandalf
+	draft(t, st, "s2", "work") // Frodo, never drafted
+	release(t, st, "s2")
+	draft(t, st, "s3", "work") // takes Gandalf, drafted longest ago
 
 	d := draft(t, st, "s1", "play")
 	if d.Name() != "Frodo" || d.Roster != "work" {
@@ -185,7 +187,7 @@ func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.
 
 func TestReclaimNeverDraftsANewMember(t *testing.T) {
 	st, _ := openTestStore(t)
-	createFellowship(t, st, "work")
+	createRoster(t, st, "work", members("Gandalf"), nil)
 
 	// No history: nothing
 	if d, err := st.Reclaim(ctx, "s1"); err != nil || d != nil {
@@ -214,7 +216,7 @@ func TestReclaimNeverDraftsANewMember(t *testing.T) {
 
 func TestExpiryReleasesStaleDrafts(t *testing.T) {
 	st, clock := openTestStore(t)
-	createFellowship(t, st, "work")
+	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
 
 	draft(t, st, "s1", "work") // Gandalf
 	clock.Advance(6 * 24 * time.Hour)
@@ -311,8 +313,9 @@ func TestSessionRosterIsPinnedAtFirstDraft(t *testing.T) {
 	}
 
 	// Even after expiry, with Gandalf taken, it redrafts from work and keeps its original repo
+	draft(t, st, "s2", "work") // Frodo
 	clock.Advance(8 * 24 * time.Hour)
-	draft(t, st, "s2", "work") // takes Gandalf
+	draft(t, st, "s3", "work") // both expired; takes Gandalf, drafted longest ago
 	d, err := st.Draft(ctx, DraftRequest{SessionID: "s1", Roster: "play", Repo: "other/repo"})
 	if err != nil {
 		t.Fatal(err)

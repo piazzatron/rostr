@@ -101,7 +101,7 @@ func (s *sandbox) baseEnv() []string {
 	}
 	// Cloud mode calls a closed local port unless a test says otherwise, so nothing here reaches the real API
 	return append(env, "HOME="+s.home, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
-		"ROSTR_DRAFT_PICK=first", "ROSTR_API_URL=http://127.0.0.1:1")
+		"ROSTR_API_URL=http://127.0.0.1:1", "ROSTR_CLAUDE_BIN=/usr/bin/false")
 }
 
 // gitRepo makes a repo in a temp dir, with an origin unless origin is "".
@@ -387,13 +387,30 @@ func TestClaudeCodeHooks(t *testing.T) {
 		}
 		return out
 	}
-	out := readPromptOutput(hook("prompt", firstPrompt("s1")))
+	// In a terminal the agent isn't asked to title anything: rostr summarizes the prompt itself, in the background
+	// (here with a stand-in for claude -p), and the summary becomes the task
+	fakeClaude := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(fakeClaude, []byte("#!/bin/sh\ncat >/dev/null; printf '{\"result\":\"Fix login redirect\"}\n'\n"), 0o755)
+	out := readPromptOutput(hook("prompt", firstPrompt("s1"), "ROSTR_CLAUDE_BIN="+fakeClaude))
 	if !strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're 🧙 Gandalf for this session (drafted by rostr from the \"work\" roster).") ||
-		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `run rostr task --session s1 "<3-5 word summary`) ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `run: rostr task --session s1 "<new task>"`) ||
+		strings.Contains(out.HookSpecificOutput.AdditionalContext, "summary") ||
 		strings.Contains(out.HookSpecificOutput.AdditionalContext, "set_session_title") ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
 		t.Fatalf("first prompt: %+v", out)
 	}
+	deadline := time.Now().Add(5 * time.Second)
+	for s.list().Rosters[0].Drafted[0].Task != "Fix login redirect" {
+		if time.Now().After(deadline) {
+			t.Fatalf("the summary never became the task: %+v", s.list().Rosters[0].Drafted)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	// The next prompt puts it in the title
+	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix login redirect" {
+		t.Fatalf("title after the summary: %+v", out)
+	}
+	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Fix the login redirect loop")
 
 	// A prompt that looks like the first again neither re-tells the name nor retitles the session with its text
 	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.AdditionalContext != "" ||
@@ -429,11 +446,18 @@ func TestClaudeCodeHooks(t *testing.T) {
 		}
 		return ""
 	}
-	expectQuiet("title set", hook("title-set", titleSet("💍 Frodo · Untangle the auth flow")), 0)
+	// (Without a transcript the call can't be seen to follow an answer, so the hook tells Claude to carry on)
+	expectCarryOn := func(name string, r result) {
+		t.Helper()
+		if r.code != 0 || !strings.Contains(r.stdout, "answer the user") {
+			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
+		}
+	}
+	expectCarryOn("title set", hook("title-set", titleSet("💍 Frodo · Untangle the auth flow")))
 	if task := frodoTask(); task != "Untangle the auth flow" {
 		t.Fatalf("task after title set: %q", task)
 	}
-	expectQuiet("other title set", hook("title-set", titleSet("My own title")), 0)
+	expectCarryOn("other title set", hook("title-set", titleSet("My own title")))
 	if task := frodoTask(); task != "Untangle the auth flow" {
 		t.Fatalf("task after another title: %q", task)
 	}
@@ -455,13 +479,16 @@ func TestClaudeCodeHooks(t *testing.T) {
 	if r := hook("title-set", toolCall(answer, "Bash", `{"command":"rostr task \"Deepest lake\""}`)); r.code != 0 || strings.TrimSpace(r.stdout) != `{"continue": false, "suppressOutput": true}` {
 		t.Fatalf("plain answer: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
-	expectQuiet("title call alongside work", hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)), 0)
+	if r := hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)); r.code != 0 ||
+		!strings.Contains(r.stdout, `"hookEventName":"PostToolUse"`) || !strings.Contains(r.stdout, "answer the user") || strings.Contains(r.stdout, `"continue"`) {
+		t.Fatalf("title call before the answer: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
 	expectQuiet("other Bash call", hook("title-set", toolCall(answer, "Bash", `{"command":"ls"}`)), 0)
 
-	// Local desktop session: the app titles it straight away, so rostr doesn't, and the agent uses the app's own tool
+	// Local desktop session: the name shows right away, and the agent uses the app's own tool
 	os.WriteFile(filepath.Join(sessionsDir, "4343.json"), []byte(`{"sessionId":"s9","bridgeSessionId":"session_l","entrypoint":"claude-desktop"}`), 0o644)
-	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); out.HookSpecificOutput.SessionTitle != "" ||
-		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `mcp__ccd_session_mgmt__set_session_title (load it with ToolSearch first`) {
+	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); !strings.HasSuffix(out.HookSpecificOutput.SessionTitle, " · Fix the login redirect loop") ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `mcp__ccd_session_mgmt__set_session_title, with session_id "self"`) {
 		t.Fatalf("Local first prompt: %+v", out)
 	}
 	expectQuiet("Local end", hook("session-end", `{"session_id":"s9","hook_event_name":"SessionEnd"}`), 0)
@@ -507,7 +534,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	// Resume asks for the old name back, or drafts a new one
 	hook("session-end", `{"session_id":"s1"}`)
 	expectIdentity("resume", hook("session-start", start("s1", "resume"), "CLAUDE_ENV_FILE="+envFile), "🧙 Gandalf")
-	expectIdentity("resume, new", hook("session-start", start("s3", "resume")), "🌱 Samwise")
+	expectIdentity("resume, new", hook("session-start", start("s3", "resume")), "👑 Aragorn")
 	if env, _ := os.ReadFile(envFile); !strings.HasSuffix(string(env), "export ROSTR_SESSION=s1\n") {
 		t.Fatalf("resume didn't write CLAUDE_ENV_FILE: %q", env)
 	}
@@ -521,7 +548,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("CLAUDE_ENV_FILE: %q", env)
 	}
 	r := s.run(repo, "", nil, "hook", "claude-code", "draft", "--session", "s4")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 👑 Aragorn for this session") || !strings.Contains(r.stdout, "rostr task") {
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 🏹 Legolas for this session") || !strings.Contains(r.stdout, "rostr task") {
 		t.Fatalf("/draft: exit %d, stdout %q", r.code, r.stdout)
 	}
 	if r := s.run(repo, "", nil, "hook", "claude-code", "draft"); r.code != 0 || !strings.Contains(r.stdout, "couldn't draft") {
@@ -543,11 +570,11 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	os.WriteFile(settingsPath, []byte(`{"theme":"dark","hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}`), 0o644)
 
 	out := s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
-	if !strings.Contains(out, "Installed for Claude Code: hooks in") || !strings.Contains(out, "the /draft command") {
+	if !strings.Contains(out, "Hooks installed for Claude Code") {
 		t.Fatalf("first assemble: %s", out)
 	}
 	first, _ := os.ReadFile(settingsPath)
-	if out := s.ok(s.home, nil, "assemble", "play", "--preset", "kanto"); strings.Contains(out, "Installed") {
+	if out := s.ok(s.home, nil, "assemble", "play", "--preset", "kanto"); strings.Contains(out, "installed for") {
 		t.Fatalf("second assemble reinstalled: %s", out)
 	}
 	second, _ := os.ReadFile(settingsPath)
@@ -584,7 +611,7 @@ func TestCloudInstallAddsClaudeCodeHooksOnlyInCloudSessions(t *testing.T) {
 	}
 
 	cloud := []string{"CLAUDE_CODE_REMOTE=true"}
-	if out := s.ok(s.home, cloud, "cloud", "install"); !strings.Contains(out, "Installed for Claude Code: hooks in") {
+	if out := s.ok(s.home, cloud, "cloud", "install"); !strings.Contains(out, "Hooks installed for Claude Code.") {
 		t.Fatalf("cloud install: %s", out)
 	}
 	settings, _ := os.ReadFile(settingsPath)
@@ -851,8 +878,8 @@ func TestCodexHooks(t *testing.T) {
 	expectIdentity("compact", hook("session-start", start("t1", "compact")), "SessionStart", "🧙 Gandalf")
 	expectQuiet("compact, never drafted", hook("session-start", start("never", "compact")))
 
-	// A fork is a new thread: it gets its own member and its own name
-	expectIdentity("fork", hook("session-start", start("t2", "fork")), "SessionStart", "💍 Frodo")
+	// A fork is a new thread: it gets its own member and its own name (whoever's been drafted least recently)
+	expectIdentity("fork", hook("session-start", start("t2", "fork")), "SessionStart", "🌱 Samwise")
 	expectNamed("fork")
 
 	// Session end releases quickly; resume asks for the old name back
@@ -876,7 +903,7 @@ func TestCodexHooks(t *testing.T) {
 	expectQuiet("prompt, auto-draft off", hook("prompt", prompt("t3", "null", firstPrompt)))
 	expectQuiet("fork, auto-draft off", hook("session-start", start("t4", "fork")))
 	r := s.run(repo, "", []string{path, "CODEX_THREAD_ID=t3"}, "hook", "codex", "draft")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 🌱 Samwise for this session") || !strings.Contains(r.stdout, "rostr task --session t3") {
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 👑 Aragorn for this session") || !strings.Contains(r.stdout, "rostr task --session t3") {
 		t.Fatalf("$rostr-draft: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	expectNamed("$rostr-draft")
@@ -907,11 +934,11 @@ func TestAssembleInstallsCodexOnlyWhereItsInstalled(t *testing.T) {
 	// With a ~/.codex, the hooks and skills go in once, and the output says to approve the hooks
 	os.MkdirAll(filepath.Join(s.home, ".codex"), 0o755)
 	out = s.ok(s.home, []string{noCodex}, "assemble", "play", "--preset", "kanto")
-	if !strings.Contains(out, "Installed for Codex: hooks in "+filepath.Join(s.home, ".codex", "hooks.json")+", the rostr skill, the $rostr-draft skill.") ||
+	if !strings.Contains(out, "Hooks installed for Codex.") ||
 		!strings.Contains(out, "open /hooks in Codex") {
 		t.Fatalf("assemble with Codex: %s", out)
 	}
-	if out := s.ok(s.home, []string{noCodex}, "assemble", "side", "--preset", "hogwarts"); strings.Contains(out, "for Codex") {
+	if out := s.ok(s.home, []string{noCodex}, "assemble", "side", "--preset", "hogwarts"); strings.Contains(out, "installed for") {
 		t.Fatalf("third assemble reinstalled: %s", out)
 	}
 	hooks, _ := os.ReadFile(filepath.Join(s.home, ".codex", "hooks.json"))
@@ -964,19 +991,24 @@ func TestClaudeCodeHooksLabelTheHerdrPane(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("prompt: exit %d, stderr %q", r.code, r.stderr)
 	}
-	s.run(s.home, `{"session_id":"s1","source":"compact"}`, env, "hook", "claude-code", "session-start")
+	afterPrompt, _ := os.ReadFile(herdrCalls)
+	t.Logf("after prompt: %q", afterPrompt)
+	compact := s.run(s.home, `{"session_id":"s1","source":"compact"}`, env, "hook", "claude-code", "session-start")
+	afterCompact, _ := os.ReadFile(herdrCalls)
+	t.Logf("after compact: %q", afterCompact)
 	s.run(s.home, `{"session_id":"s1"}`, env, "hook", "claude-code", "session-end")
 	want := "pane report-metadata w1:p3 --source rostr --agent claude --display-agent 🧙 Gandalf\n" +
 		"pane report-metadata w1:p3 --source rostr --agent claude --display-agent 🧙 Gandalf\n" +
 		"pane report-metadata w1:p3 --source rostr --agent claude --clear-display-agent\n"
 	if calls, _ := os.ReadFile(herdrCalls); string(calls) != want {
+		t.Logf("compact: exit %d, stdout %q, stderr %q", compact.code, compact.stdout, compact.stderr)
 		t.Fatalf("herdr calls:\n%s", calls)
 	}
 
 	// Codex hooks never label panes: their environment belongs to Codex's shared daemon
 	os.Remove(herdrCalls)
 	r = s.run(s.home, `{"session_id":"t1","transcript_path":null,"prompt":"Fix it"}`, env, "hook", "codex", "prompt")
-	if r.code != 0 || !strings.Contains(r.stdout, "You're 🧙 Gandalf") {
+	if r.code != 0 || !strings.Contains(r.stdout, "You're 💍 Frodo") {
 		t.Fatalf("codex prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	s.run(s.home, `{"session_id":"t1"}`, env, "hook", "codex", "session-end")

@@ -82,7 +82,9 @@ func TestIsDesktopLocal(t *testing.T) {
 	}
 	write(t, filepath.Join(sessions, "1.json"), `{"sessionId":"local","entrypoint":"claude-desktop","bridgeSessionId":"session_l"}`)
 	write(t, filepath.Join(sessions, "2.json"), `{"sessionId":"remote-control","entrypoint":"sdk-cli","bridgeSessionId":"session_r"}`)
-	if !IsDesktopLocal(claudeDir, "local") || IsDesktopLocal(claudeDir, "remote-control") || IsDesktopLocal(claudeDir, "unknown") {
+	write(t, filepath.Join(sessions, "3.json"), `{"sessionId":"local-3p","entrypoint":"claude-desktop-3p"}`)
+	if !IsDesktopLocal(claudeDir, "local") || !IsDesktopLocal(claudeDir, "local-3p") || IsDesktopLocal(claudeDir, "remote-control") ||
+		IsDesktopLocal(claudeDir, "unknown") {
 		t.Error("IsDesktopLocal")
 	}
 }
@@ -141,7 +143,7 @@ func TestIdentityText(t *testing.T) {
 func TestTitleInstruction(t *testing.T) {
 	const title = `"🧙 Gandalf · <3-5 word summary of what the user wants>"`
 	local := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{DesktopLocal: true, ServerSessionID: "session_abc"})
-	if !strings.Contains(local, LocalTitleTool+" (load it with ToolSearch first") || !strings.Contains(local, `session_id "self" and title `+title) {
+	if !strings.Contains(local, LocalTitleTool+", with session_id") || !strings.Contains(local, "load it with ToolSearch right before calling it") || !strings.Contains(local, `session_id "self" and title `+title) {
 		t.Errorf("local: %s", local)
 	}
 	remote := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{ServerSessionID: "session_abc"})
@@ -149,13 +151,18 @@ func TestTitleInstruction(t *testing.T) {
 		t.Errorf("remote: %s", remote)
 	}
 	terminal := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{})
-	if strings.Contains(terminal, "set_session_title") || !strings.Contains(terminal, `rostr task --session s1 "<3-5 word summary`) {
-		t.Errorf("terminal: %s", terminal)
+	if terminal != "" || !(TitleWhere{}).IsTerminal() || (TitleWhere{DesktopLocal: true}).IsTerminal() || (TitleWhere{ServerSessionID: "x"}).IsTerminal() {
+		t.Fatalf("terminal: %q", terminal)
 	}
-	for _, text := range []string{local, remote, terminal} {
-		if !strings.Contains(text, "write your answer first, then make this call at the end of that same message") {
-			t.Errorf("when: %s", text)
-		}
+	// Local titles after the answer; Remote Control and cloud title first
+	if !strings.Contains(local, "Write your complete answer to the user first") {
+		t.Errorf("local when: %s", local)
+	}
+	if !strings.Contains(remote, "Make this call first, before you write anything") || strings.Contains(remote, "answer to the user first") {
+		t.Errorf("remote when: %s", remote)
+	}
+	if !(TitleWhere{ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{DesktopLocal: true, ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{}).TitlesFirst() {
+		t.Error("TitlesFirst")
 	}
 }
 

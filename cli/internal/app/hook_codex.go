@@ -58,12 +58,8 @@ func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr 
 	}
 	defer st.Close()
 
-	settings, err := st.Settings(ctx)
-	if err != nil || !settings.AutoDraft {
-		return err
-	}
-	d, err := draftSession(ctx, st, input.SessionID, "", hookDir(input.Cwd), claudecode.PlaceholderTask(input.Prompt))
-	if err != nil {
+	d, drafted, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), claudecode.PlaceholderTask(input.Prompt))
+	if err != nil || !drafted {
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
@@ -107,7 +103,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := draftSession(cmd.Context(), st, session, "", workingDir(), "")
+			d, err := fastDraftSession(cmd.Context(), st, session, workingDir(), "")
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil

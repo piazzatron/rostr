@@ -27,6 +27,15 @@ type Cloud struct {
 	baseURL string
 	keys    crypto.DerivedKeys
 	http    *http.Client
+	cache   *cloudCache // nil without UseCache
+	// MachineID is sent as X-Rostr-Machine, so the API reserves this machine's next picks (docs/api.md).
+	MachineID string
+}
+
+// UseCache keeps the local cache in dir (see cloudcache.go). spawn starts a background confirmation of a Fast draft,
+// returning once it's started.
+func (c *Cloud) UseCache(dir string, spawn func(Confirmation) error) {
+	c.cache = &cloudCache{dir: dir, spawn: spawn}
 }
 
 // NewCloud returns a Cloud that calls the API at baseURL with the keys derived from key.
@@ -135,7 +144,11 @@ func (c *Cloud) Register(ctx context.Context, setup Setup) error {
 	}
 	imp["drafts"] = drafts
 
-	return c.call(ctx, "POST", "/v1/register", map[string]any{"authToken": c.keys.AuthToken(), "import": imp}, nil)
+	if err := c.call(ctx, "POST", "/v1/register", map[string]any{"authToken": c.keys.AuthToken(), "import": imp}, nil); err != nil {
+		return err
+	}
+	c.RefreshNext(ctx)
+	return nil
 }
 
 // Rosters
@@ -174,7 +187,11 @@ func (c *Cloud) CreateRoster(ctx context.Context, r Roster) (Roster, error) {
 	err := c.call(ctx, "POST", "/v1/rosters", map[string]any{
 		"name": r.Name, "emojiMode": r.EmojiMode, "aTeam": r.ATeam, "bTeam": nonNil(r.BTeam),
 	}, &created)
-	return created.toRoster(), err
+	if err != nil {
+		return Roster{}, err
+	}
+	c.RefreshNext(ctx)
+	return created.toRoster(), nil
 }
 
 func (c *Cloud) ReplaceCast(ctx context.Context, rosterName string, aTeam, bTeam []roster.Member) error {
@@ -185,14 +202,14 @@ func (c *Cloud) ReplaceCast(ctx context.Context, rosterName string, aTeam, bTeam
 	if err := roster.ValidateCast(aTeam, bTeam, r.EmojiMode); err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name)+"/cast", castBody(r.EmojiMode, aTeam, bTeam), nil)
+	return c.refreshed(ctx, c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name)+"/cast", castBody(r.EmojiMode, aTeam, bTeam), nil))
 }
 
 func (c *Cloud) EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, aTeam, bTeam []roster.Member) error {
 	if err := roster.ValidateCast(aTeam, bTeam, mode); err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(rosterName), castBody(mode, aTeam, bTeam), nil)
+	return c.refreshed(ctx, c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(rosterName), castBody(mode, aTeam, bTeam), nil))
 }
 
 func (c *Cloud) SetEmojiMode(ctx context.Context, rosterName string, mode roster.EmojiMode) error {
@@ -203,7 +220,7 @@ func (c *Cloud) SetEmojiMode(ctx context.Context, rosterName string, mode roster
 	if err := roster.ValidateCast(r.ATeam, r.BTeam, mode); err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name), castBody(mode, r.ATeam, r.BTeam), nil)
+	return c.refreshed(ctx, c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name), castBody(mode, r.ATeam, r.BTeam), nil))
 }
 
 func (c *Cloud) Usage(ctx context.Context, rosterName string) (Usage, error) {
@@ -223,6 +240,11 @@ func (c *Cloud) Disband(ctx context.Context, rosterName string) (DisbandResult, 
 	}
 	if err := c.call(ctx, "DELETE", "/v1/rosters/"+url.PathEscape(r.Name), nil, &resp); err != nil {
 		return DisbandResult{}, err
+	}
+	if c.cache != nil && resp.OwnerDeleted {
+		c.cache.clearAll()
+	} else {
+		c.RefreshNext(ctx)
 	}
 	return DisbandResult{WasDefault: r.IsDefault, NewDefault: deref(resp.NewDefault), CloudSetupDeleted: resp.OwnerDeleted}, nil
 }
@@ -245,8 +267,8 @@ func (c *Cloud) LinkProject(ctx context.Context, repo, rosterName string) error 
 	if err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/links/"+c.keys.Fingerprint(repo),
-		map[string]any{"repo": encrypted, "roster": rosterName}, nil)
+	return c.refreshed(ctx, c.call(ctx, "PUT", "/v1/links/"+c.keys.Fingerprint(repo),
+		map[string]any{"repo": encrypted, "roster": rosterName}, nil))
 }
 
 func (c *Cloud) UnlinkProject(ctx context.Context, repo string) (bool, error) {
@@ -254,7 +276,7 @@ func (c *Cloud) UnlinkProject(ctx context.Context, repo string) (bool, error) {
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
-	return err == nil, err
+	return err == nil, c.refreshed(ctx, err)
 }
 
 // Settings
@@ -266,11 +288,11 @@ func (c *Cloud) Settings(ctx context.Context) (Settings, error) {
 }
 
 func (c *Cloud) SetDefaultRoster(ctx context.Context, rosterName string) error {
-	return c.call(ctx, "PATCH", "/v1/settings", map[string]any{"defaultRoster": rosterName}, nil)
+	return c.refreshed(ctx, c.call(ctx, "PATCH", "/v1/settings", map[string]any{"defaultRoster": rosterName}, nil))
 }
 
 func (c *Cloud) SetAutoDraft(ctx context.Context, on bool) error {
-	return c.call(ctx, "PATCH", "/v1/settings", map[string]any{"autoDraft": on}, nil)
+	return c.refreshed(ctx, c.call(ctx, "PATCH", "/v1/settings", map[string]any{"autoDraft": on}, nil))
 }
 
 func (c *Cloud) SetExpiry(ctx context.Context, expiry string) error {
@@ -287,6 +309,22 @@ func (c *Cloud) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 	if req.SessionID == "" {
 		return Draft{}, errors.New("drafting needs a session ID")
 	}
+	now := time.Now()
+
+	// A session that has its draft keeps it; a Fast draft is answered from the cache, and confirmed afterwards
+	if c.cache != nil {
+		// A cached draft is trusted while unconfirmed (the confirmation is on its way) or recently confirmed;
+		// otherwise the server may have expired or released it, so ask
+		if cs := c.cache.session(req.SessionID); cs != nil && (!cs.Confirmed || now.Sub(cs.At) < cachedDraftTrust) {
+			return cs.Draft, nil
+		}
+		if req.Fast {
+			if d, ok, err := c.fastDraft(req, now); err != nil || ok {
+				return d, err
+			}
+		}
+	}
+
 	body := map[string]any{"session": req.SessionID}
 	if req.Roster != "" {
 		body["roster"] = req.Roster
@@ -297,15 +335,151 @@ func (c *Cloud) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 	if err := c.addTask(body, req.Task); err != nil {
 		return Draft{}, err
 	}
-	return c.draftCall(ctx, "POST", "/v1/agents/draft", body)
+	if c.cache != nil {
+		if avoid := c.cache.pendingMembers(now); len(avoid) > 0 {
+			body["avoid"] = avoid
+		}
+	}
+	if req.IfAutoDraft {
+		on, known := false, false
+		if c.cache != nil {
+			on, known = c.cache.autoDraft(now)
+		}
+		if !known {
+			settings, err := c.Settings(ctx)
+			if err != nil {
+				return Draft{}, err
+			}
+			on = settings.AutoDraft
+		}
+		if !on {
+			// Unless the session has a draft already, which the server returns either way
+			if d, err := c.SessionDraft(ctx, req.SessionID); err != nil {
+				return Draft{}, err
+			} else if d != nil {
+				return *d, nil
+			}
+			return Draft{}, ErrAutoDraftOff
+		}
+	}
+	d, err := c.draftCall(ctx, "POST", "/v1/agents/draft", body)
+	if err != nil {
+		return Draft{}, err
+	}
+	if c.cache != nil {
+		_ = c.cache.saveConfirmed(d, now)
+	}
+	return d, nil
+}
+
+// fastDraft picks from the cached next state and starts the confirmation. ok is false when the cache can't answer.
+func (c *Cloud) fastDraft(req DraftRequest, now time.Time) (d Draft, ok bool, err error) {
+	var repoHash string
+	if req.Repo != "" {
+		repoHash = c.keys.Fingerprint(req.Repo)
+	}
+	d, conf, err := c.cache.pick(req, repoHash, now)
+	if err != nil || d.Member == "" {
+		return Draft{}, false, err
+	}
+	cs := cachedSession{Draft: d, Confirm: &conf, Announced: d.Display(), At: now}
+	if err := c.cache.saveSession(cs); err != nil {
+		return Draft{}, false, err
+	}
+	if err := c.cache.spawn(conf); err != nil {
+		// Not confirmed in the background, so SessionDraft retries it on the next prompt
+		cs.LastTry = now
+		_ = c.cache.saveSession(cs)
+	}
+	return d, true, nil
+}
+
+// ConfirmDraft tells the server about a Fast draft, asking for the member the session was told. The server's answer,
+// which may be that member's next copy, replaces the session's cached draft; the next prompt tells the session.
+func (c *Cloud) ConfirmDraft(ctx context.Context, conf Confirmation) (Draft, error) {
+	body := map[string]any{"session": conf.SessionID, "preferred": conf.Preferred}
+	if conf.Roster != "" {
+		body["roster"] = conf.Roster
+	}
+	if err := c.addRepo(body, conf.Repo); err != nil {
+		return Draft{}, err
+	}
+	if err := c.addTask(body, conf.Task); err != nil {
+		return Draft{}, err
+	}
+	d, err := c.draftCall(ctx, "POST", "/v1/agents/draft", body)
+	if err != nil {
+		return Draft{}, err
+	}
+	if c.cache != nil {
+		_ = c.cache.saveConfirmed(d, time.Now())
+	}
+	return d, nil
 }
 
 func (c *Cloud) Reclaim(ctx context.Context, sessionID string) (*Draft, error) {
-	return c.optionalDraft(c.draftCall(ctx, "POST", "/v1/agents/keepalive", map[string]any{"session": sessionID}))
+	d, err := c.optionalDraft(c.draftCall(ctx, "POST", "/v1/agents/keepalive", map[string]any{"session": sessionID}))
+	if c.cache != nil && err == nil {
+		if d == nil {
+			c.cache.releaseSession(sessionID, time.Now())
+		} else {
+			_ = c.cache.saveConfirmed(*d, time.Now())
+		}
+	}
+	return d, err
 }
 
+// SessionDraft answers from the session's cached draft when there is one. An unconfirmed draft whose confirmation
+// hasn't landed is confirmed here instead, at most once a minute. RenamedFrom is set while the session has been
+// told a different name than the server confirmed; MarkAnnounced clears it.
 func (c *Cloud) SessionDraft(ctx context.Context, sessionID string) (*Draft, error) {
-	return c.optionalDraft(c.draftCall(ctx, "GET", "/v1/sessions/"+url.PathEscape(sessionID), nil))
+	if c.cache == nil {
+		return c.optionalDraft(c.draftCall(ctx, "GET", "/v1/sessions/"+url.PathEscape(sessionID), nil))
+	}
+	now := time.Now()
+	cs := c.cache.session(sessionID)
+	if cs == nil {
+		d, err := c.optionalDraft(c.draftCall(ctx, "GET", "/v1/sessions/"+url.PathEscape(sessionID), nil))
+		if err == nil && d != nil {
+			_ = c.cache.saveConfirmed(*d, now)
+		}
+		return d, err
+	}
+	if !cs.Confirmed && cs.Confirm != nil && now.Sub(cs.At) > confirmRetryAfter && now.Sub(cs.LastTry) > confirmRetryEvery {
+		cs.LastTry = now
+		_ = c.cache.saveSession(*cs)
+		if _, err := c.ConfirmDraft(ctx, *cs.Confirm); err == nil {
+			cs = c.cache.session(sessionID)
+		}
+	}
+	d := cs.Draft
+	if cs.Announced != "" && cs.Announced != d.Display() {
+		d.RenamedFrom = cs.Announced
+	}
+	return &d, nil
+}
+
+// CachedSessionDraft is the session's draft from the cache alone, or nil when it isn't cached.
+func (c *Cloud) CachedSessionDraft(sessionID string) *Draft {
+	if c.cache == nil {
+		return nil
+	}
+	cs := c.cache.session(sessionID)
+	if cs == nil {
+		return nil
+	}
+	return &cs.Draft
+}
+
+// MarkAnnounced records that the session has been told its current name.
+func (c *Cloud) MarkAnnounced(sessionID string) {
+	if c.cache == nil {
+		return
+	}
+	if cs := c.cache.session(sessionID); cs != nil && cs.Announced != cs.Draft.Display() {
+		cs.Announced = cs.Draft.Display()
+		_ = c.cache.saveSession(*cs)
+	}
 }
 
 // ActiveDrafts reads the public listing, which has no session IDs or last-seen times, so those are left empty.
@@ -336,11 +510,18 @@ func (c *Cloud) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 }
 
 func (c *Cloud) Release(ctx context.Context, sessionID string) (*Draft, error) {
+	if c.cache != nil {
+		c.cache.releaseSession(sessionID, time.Now())
+	}
 	return c.optionalDraft(c.draftCall(ctx, "POST", "/v1/agents/release", map[string]any{"session": sessionID}))
 }
 
 func (c *Cloud) ReleaseAgent(ctx context.Context, agent AgentKey) (Draft, error) {
-	return c.draftCall(ctx, "POST", "/v1/agents/release", agentBody(agent))
+	d, err := c.draftCall(ctx, "POST", "/v1/agents/release", agentBody(agent))
+	if c.cache != nil && err == nil {
+		c.cache.releaseSession(d.SessionID, time.Now())
+	}
+	return d, err
 }
 
 func (c *Cloud) SetTask(ctx context.Context, agent AgentKey, task string) (Draft, error) {
@@ -348,7 +529,33 @@ func (c *Cloud) SetTask(ctx context.Context, agent AgentKey, task string) (Draft
 	if err := c.addTask(body, task); err != nil {
 		return Draft{}, err
 	}
-	return c.draftCall(ctx, "POST", "/v1/agents/task", body)
+	d, err := c.draftCall(ctx, "POST", "/v1/agents/task", body)
+	if c.cache != nil && err == nil {
+		_ = c.cache.saveConfirmed(d, time.Now())
+	}
+	return d, err
+}
+
+// RefreshNext fetches the next state after a write whose response doesn't carry it. A failed fetch drops the cached
+// state rather than leaving a stale one.
+func (c *Cloud) RefreshNext(ctx context.Context) {
+	if c.cache == nil {
+		return
+	}
+	var next apiNext
+	if err := c.call(ctx, "GET", "/v1/next", nil, &next); err != nil {
+		c.cache.clearNext()
+		return
+	}
+	_ = c.cache.storeNext(next, "", time.Now())
+}
+
+// refreshed refreshes the next state after a successful write and passes its error through.
+func (c *Cloud) refreshed(ctx context.Context, err error) error {
+	if err == nil {
+		c.RefreshNext(ctx)
+	}
+	return err
 }
 
 // call sends one request to the API, decoding a successful response into out (if not nil) and an error response into
@@ -371,6 +578,9 @@ func (c *Cloud) call(ctx context.Context, method, path string, body, out any) er
 	}
 	if path != "/v1/register" {
 		req.Header.Set("Authorization", "Bearer "+c.keys.AuthToken())
+	}
+	if c.MachineID != "" {
+		req.Header.Set("X-Rostr-Machine", c.MachineID)
 	}
 
 	resp, err := c.http.Do(req)
@@ -411,6 +621,9 @@ func (c *Cloud) draftCall(ctx context.Context, method, path string, body any) (D
 	var d apiDraft
 	if err := c.call(ctx, method, path, body, &d); err != nil {
 		return Draft{}, err
+	}
+	if c.cache != nil && d.Next != nil {
+		_ = c.cache.storeNext(*d.Next, d.Session, time.Now())
 	}
 	task, err := c.decrypt(d.Task)
 	if err != nil {
@@ -495,6 +708,27 @@ type apiDraft struct {
 	Task      *string   `json:"task"`
 	Repo      *string   `json:"repo"`
 	DraftedAt time.Time `json:"draftedAt"`
+	Next      *apiNext  `json:"next"`
+}
+
+// apiNext is the owner's next state: GET /v1/next, and the next field of draft-changing responses.
+type apiNext struct {
+	AutoDraft     bool    `json:"autoDraft"`
+	DefaultRoster *string `json:"defaultRoster"`
+	Links         []struct {
+		RepoHash string `json:"repoHash"`
+		Roster   string `json:"roster"`
+	} `json:"links"`
+	Rosters []struct {
+		Name      string `json:"name"`
+		EmojiMode string `json:"emojiMode"`
+		Idle      []struct {
+			Name  string `json:"name"`
+			Emoji string `json:"emoji"`
+			Team  string `json:"team"`
+		} `json:"idle"`
+		Reserved *string `json:"reserved"`
+	} `json:"rosters"`
 }
 
 type apiSettings struct {

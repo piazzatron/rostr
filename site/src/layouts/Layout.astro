@@ -431,6 +431,63 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     color: var(--text);
   }
 
+  /* The live bar: pinned to the bottom of the screen and sliding up once the visitor scrolls down, with "LIVE · X agents
+     drafted out of Y" crawling slowly across it. Six copies, so the crawl never runs out; the track moves by half
+     (three copies) per loop. */
+  .live-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: #1c1b19;
+    color: #ece8df;
+    font-family: var(--mono);
+    font-size: 13px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    transform: translateY(110%);
+    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .live-bar.is-shown {
+    transform: none;
+  }
+
+  .live-bar-track {
+    display: inline-flex;
+    padding: 10px 0;
+    animation: live-bar 75s linear infinite;
+  }
+
+  .live-bar-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: max(240px, 35vw);
+  }
+
+  .live-bar-badge {
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: #e03131;
+    color: #fff;
+    font-weight: 800;
+  }
+
+  .live-bar b {
+    color: #ff7a3d;
+    font-weight: 800;
+  }
+
+  @keyframes live-bar {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
   /* The hero's install prompt: the old layout, with an accent outline, small hard shadow, and a filled Copy button */
   .copy-hero {
     padding: 8px 8px 8px 16px;
@@ -544,7 +601,8 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   @media (prefers-reduced-motion: reduce) {
     .hero-notification,
     .hero > :is(h1, .hero-subtitle, .lede, .cta-title, .cta, .cta-alt),
-    .hero-terminal > .expressive-code {
+    .hero-terminal > .expressive-code,
+    .live-bar-track {
       animation: none !important;
     }
   }

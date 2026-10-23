@@ -22,9 +22,10 @@ const DefaultExpiry = "7d"
 const ReleasedRetention = 7 * 24 * time.Hour
 
 var (
-	ErrNotFound  = errors.New("not found")
-	ErrNameTaken = errors.New("name taken")
-	ErrNoRosters = errors.New("No rosters yet. Run `rostr assemble`.")
+	ErrNotFound     = errors.New("not found")
+	ErrNameTaken    = errors.New("name taken")
+	ErrNoRosters    = errors.New("No rosters yet. Run `rostr assemble`.")
+	ErrAutoDraftOff = errors.New("auto-draft is off")
 )
 
 // Store is everything the CLI reads and writes.
@@ -136,6 +137,12 @@ type DraftRequest struct {
 	Roster    string // the --roster flag, used only for a session's first draft
 	Repo      string // the project the session started in, "" outside git
 	Task      string // optional; replaces the task of an existing draft
+	// IfAutoDraft makes a new draft conditional on the auto-draft setting: with it off, the error is ErrAutoDraftOff.
+	// A session that already has a draft gets it back either way.
+	IfAutoDraft bool
+	// Fast lets cloud mode answer from its local cache, picking the member itself and confirming with the server
+	// afterwards, so a hook doesn't wait on the API. Without it, every draft is a server call.
+	Fast bool
 }
 
 // ProjectLink is a project linked to a roster.
@@ -173,6 +180,9 @@ type Draft struct {
 	Task       string
 	DraftedAt  time.Time
 	LastSeenAt time.Time
+	// RenamedFrom is the name this session was told before the server confirmed a different one (cloud mode only;
+	// see Cloud). "" once the session has been told the new name, or when the names never differed.
+	RenamedFrom string
 }
 
 // Name is the agent's name, with its copy number ("Gandalf 2").

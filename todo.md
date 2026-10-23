@@ -27,13 +27,13 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 
 - [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
       that file.
-- [ ] Get rostr API call latency down. From Tokyo (Oct 21): one call is ~0.4s from a fresh process (TCP+TLS ~160ms,
-      then ~230ms to the origin; even a 404 takes that long), ~0.2–0.45s on a reused connection. The path is
-      Cloudflare (NRT) → Railway edge (hnd1) → the origin, likely in a US region. Every hook is a new process, so every
-      hook pays the handshake, and commands make several calls in a row (`rostr list` makes 3, ~1.4s). Levers: fewer
-      calls per command (e.g. set a task by session in one call), cache what hooks need locally, a closer or
-      multi-region origin, and not proxying through both Cloudflare and Railway's edge. Check the origin's region and
-      DB time (a `Server-Timing` header) first.
+- [x] Get rostr API call latency off the first prompt: hooks draft from a local cache and confirm in the background
+      (see [`docs/drafting-latency.md`](docs/drafting-latency.md)).
+- [ ] Measure the API's latency from a Claude Code cloud container (the one place a first prompt still waits on it),
+      and `rostr list`'s several calls (~1.4s from Tokyo).
+- [ ] Real first prompts are long tasks, so the agent sets its `name · summary` title late: after a long plain answer,
+      or behind slow first tool calls. Local sessions show no name until then. Think about how to get the name up
+      sooner.
 - [ ] An easier way to see, from inside a session, what the whole roster is doing (today it's asking the agent to run
       `rostr list`).
 
@@ -56,6 +56,9 @@ Decide once there's a working build to play with.
       the website.
 - [x] A "How it works" section on the site, linking to a write-up of how rostr names sessions (hooks, the app's own
       titles, Remote Control vs Local vs terminal, the title cache) from `docs/claude-code-session-titles.md`.
+- [ ] Do a pass on the How it works page; it reads way too Claude-y.
+- [x] A latency and performance section on the site, once it's really fast: how quickly the name shows up, and how.
+      It matters a lot.
 - [ ] Upgrade the home page's "Works out of the box with Claude Code and Codex" line to say where: the Claude Code and
       Codex desktop apps, the terminal, tmux, and herdr.
 - [ ] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
@@ -89,6 +92,10 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       `RELEASING.md`.
 - [ ] Upgrading rostr should refresh what it installed (the skill and /draft text, the hooks layout); `assemble`
       only writes files that are missing today.
+- [x] A Remote Control host's own first session has no `claude-code-remote` title tool (only sessions started from the
+      app or claude.ai get it); the instruction now tells the agent to skip titling without it.
+- [ ] Hook titles don't reach the app or claude.ai in any Remote Control session, even on Claude Code 2.1.308:
+      anthropics/claude-code#104473 (the app and the `remote-control` host both ignore the engine's title report).
 - [ ] Archiving a desktop session doesn't seem to release its name (♟️ Ron stayed drafted); check that SessionEnd fires.
 - [ ] Detect headless `claude -p` runs in the hooks (and Codex's equivalent) and skip drafting for them.
 - [x] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
