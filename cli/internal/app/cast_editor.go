@@ -21,6 +21,8 @@ import (
 type castEditor struct {
 	title, description string
 	cast               *cast
+	// validate, when set, checks the cast before the page is done
+	validate func(cast) error
 
 	cursor int
 	mode   castEditorMode
@@ -219,6 +221,11 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			e.err = errors.New("the A team needs at least one member")
 			return e, nil
 		}
+		if e.validate != nil {
+			if e.err = e.validate(*e.cast); e.err != nil {
+				return e, nil
+			}
+		}
 		return e, huh.NextField
 	}
 	return e, nil
@@ -231,6 +238,11 @@ func (e *castEditor) updateTyping(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			e.stopTyping()
 		}
 		return e, nil
+	case "shift+tab":
+		if e.size() > 0 {
+			e.stopTyping()
+		}
+		return e, huh.PrevField
 	case "enter":
 		text := strings.TrimSpace(e.input.Value())
 		if e.mode == castAdding && text == "" {
@@ -264,7 +276,7 @@ func (e *castEditor) updateTyping(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // capturesKeys reports whether the editor is taking typing, so esc stops typing instead of leaving the screen.
 func (e *castEditor) capturesKeys() bool {
-	return e.mode != castBrowsing
+	return e.mode != castBrowsing && e.size() > 0
 }
 
 // footerKeys are the keys that work right now.

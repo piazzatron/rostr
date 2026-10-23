@@ -115,7 +115,7 @@ rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only]
 Interactive setup. The wizard runs full-screen: how to build the roster (a pre-built roster, with a preview of its
 cast; Free Agents, a random mix from every roster; or your own names), then the cast editor, then one last page that shows the cast and confirms every setting with its default: roster name, emoji, and,
 on the first run, where rostr lives (the cloud by default, or this machine) and whether to draft every session
-automatically. Nothing is saved until Assemble is pressed; shift+tab goes back, and esc cancels. Each question can be
+automatically. Nothing is saved until the last page is done; shift+tab goes back, and esc cancels. Each question can be
 skipped with a flag, so an agent can run it non-interactively. Making a cloud setup at a terminal ends by printing the
 new rostr key and how to use it on other machines and in cloud environments.
 

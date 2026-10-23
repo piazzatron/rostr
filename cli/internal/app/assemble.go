@@ -349,15 +349,17 @@ type assembleFlow struct {
 	freeAgents cast
 	draws      int
 	// edited is the cast as changed on the teams page, starting from the cast teamsFor names
-	edited      cast
-	teamsFor    string
-	emojiFor    string
-	name        string
-	nameDefault string
-	emoji       roster.EmojiMode
-	cloud       bool
-	autoDraft   bool
-	link        bool
+	edited   cast
+	teamsFor string
+	// emojiFor is the roster whose emoji mode f.emoji was set from, so making a new one goes back to defaultEmoji
+	emojiFor     string
+	defaultEmoji roster.EmojiMode
+	name         string
+	nameDefault  string
+	emoji        roster.EmojiMode
+	cloud        bool
+	autoDraft    bool
+	link         bool
 }
 
 func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
@@ -383,6 +385,7 @@ func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
 			return nil, err
 		}
 	}
+	f.defaultEmoji = f.emoji
 	return f, nil
 }
 
@@ -519,6 +522,9 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		return nil
 	}))
 	validateEmoji := func(mode roster.EmojiMode) error {
+		if s.goingBack {
+			return nil // so shift+tab can go back to the cast to fix it
+		}
 		chosen := f.chosenCast()
 		return roster.ValidateCast(chosen.aTeam, chosen.bTeam, mode)
 	}
@@ -631,6 +637,13 @@ func (f *assembleFlow) prepareTeams(teams *castEditor) {
 		f.edited = cast{presetID: base.presetID, aTeam: slices.Clone(base.aTeam), bTeam: slices.Clone(base.bTeam)}
 		teams.reset(&f.edited)
 	}
+	// Replacing a cast, or a new roster whose emoji mode came from --emoji, saves without a page to check it on
+	teams.validate = nil
+	if r, ok := f.editedRoster(); ok && f.action == actionReplace {
+		teams.validate = func(c cast) error { return roster.ValidateCast(c.aTeam, c.bTeam, r.EmojiMode) }
+	} else if f.action == actionNew && !f.asksSetting(settingEmoji) {
+		teams.validate = func(c cast) error { return roster.ValidateCast(c.aTeam, c.bTeam, f.emoji) }
+	}
 	switch {
 	case f.action == actionEdit:
 		teams.title = fmt.Sprintf("Edit the %s roster", f.roster)
@@ -646,6 +659,9 @@ func (f *assembleFlow) prepareTeams(teams *castEditor) {
 func (f *assembleFlow) prepareSettings(summary *huh.Note, name *huh.Input, emoji *huh.Select[roster.EmojiMode]) {
 	chosen := f.chosenCast()
 	summary.Description(noteText(castSummary(chosen)))
+	if f.emojiFor != "" {
+		f.emojiFor, f.emoji = "", f.defaultEmoji // the mode came from the roster being edited
+	}
 	if f.name == f.nameDefault {
 		f.nameDefault = chosen.presetID
 		if f.nameDefault == "" {

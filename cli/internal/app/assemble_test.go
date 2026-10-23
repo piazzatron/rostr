@@ -228,6 +228,75 @@ func TestAssembleWizardEmptyBTeam(t *testing.T) {
 	}
 }
 
+func TestAssembleWizardLeavesAnEmptyCast(t *testing.T) {
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(context.Background(), nil)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, key(tea.KeyDown), key(tea.KeyDown))
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "Who's on your roster?", "shift+tab back", "esc quit")
+
+	// Shift+tab goes back with no one added, and esc quits
+	drive(s, nil, key(tea.KeyShiftTab))
+	expectView(t, s, "How do you want to build your roster?")
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, key(tea.KeyEsc))
+	if !s.cancelled {
+		t.Fatal("esc didn't quit an empty cast")
+	}
+}
+
+func TestAssembleWizardNewRosterDoesntTakeAnEditedEmojiMode(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	p, _ := presetCast("hogwarts")
+	r := store.Roster{Name: "wizards", EmojiMode: roster.EmojiOff, ATeam: p.aTeam, BTeam: p.bTeam}
+	f, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(context.Background(), st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 40})
+	for _, k := range []tea.KeyType{tea.KeyDown, tea.KeyDown, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
+		drive(s, nil, key(k))
+	}
+	expectView(t, s, "Save the wizards roster?")
+	if f.emoji != roster.EmojiOff {
+		t.Fatalf("editing starts from %s", f.emoji)
+	}
+	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyUp, tea.KeyUp, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
+		drive(s, nil, key(k))
+	}
+	expectView(t, s, "Ready to assemble?")
+	if f.emoji != roster.EmojiOn {
+		t.Fatalf("a new roster starts from %s", f.emoji)
+	}
+}
+
+func TestAssembleWizardChecksAReplacedCast(t *testing.T) {
+	r := store.Roster{Name: "work", EmojiMode: roster.EmojiOnly, ATeam: []roster.Member{{Name: "Ada", Emoji: "🧮"}}}
+	f, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.action, f.roster, f.build = actionReplace, "work", buildNames
+	teams := newCastEditor()
+	f.prepareTeams(teams)
+	teams.Focus()
+	f.edited = cast{aTeam: []roster.Member{{Name: "Ada", Emoji: "🧮"}, {Name: "Grace", Emoji: "🧮"}}}
+	teams.cast, teams.mode = &f.edited, castBrowsing
+	if _, cmd := teams.Update(key(tea.KeyEnter)); cmd != nil || teams.err == nil {
+		t.Fatal("finished a cast its roster's emoji mode can't save")
+	}
+}
+
 func TestAssembleWizardEdits(t *testing.T) {
 	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
 	if err != nil {
