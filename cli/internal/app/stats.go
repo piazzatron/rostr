@@ -51,11 +51,12 @@ type benchMemberJSON struct {
 	Team    string `json:"team"`
 }
 
-func newListCommand() *cobra.Command {
+func newStatsCommand() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "list [<roster>...]",
-		Short: "Show who's drafted and what they're working on, who's resting, and who's on the bench",
+		Use:     "stats [<roster>, ...]",
+		Aliases: []string{"list"},
+		Short:   "Show who's drafted and what they're working on, who's resting, and who's on the bench",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			st, err := openStore()
@@ -68,9 +69,9 @@ func newListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(args) > 0 {
+			if names := splitNames(args); len(names) > 0 {
 				rosters = nil
-				for _, name := range args {
+				for _, name := range names {
 					r, err := st.Roster(ctx, name)
 					if err != nil {
 						return err
@@ -230,7 +231,7 @@ func isEmojiGrapheme(runes []rune) bool {
 	return false
 }
 
-// since formats a duration the way `rostr list` shows time since drafting: "just now", "5m", "2h", "3d".
+// since formats a duration the way `rostr stats` shows time since drafting: "just now", "5m", "2h", "3d".
 func since(d time.Duration) string {
 	switch {
 	case d < time.Minute:

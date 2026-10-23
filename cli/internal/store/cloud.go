@@ -156,7 +156,7 @@ func (c *Cloud) Register(ctx context.Context, setup Setup) error {
 func (c *Cloud) Rosters(ctx context.Context) ([]Roster, error) {
 	// The listing gives every roster's name, oldest first; each roster's cast comes from its own endpoint
 	var listing apiListing
-	if err := c.call(ctx, "GET", "/v1/rosters", nil, &listing); err != nil {
+	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
 		return nil, err
 	}
 	out := make([]Roster, len(listing.Rosters))
@@ -485,7 +485,7 @@ func (c *Cloud) MarkAnnounced(sessionID string) {
 // ActiveDrafts reads the public listing, which has no session IDs or last-seen times, so those are left empty.
 func (c *Cloud) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 	var listing apiListing
-	if err := c.call(ctx, "GET", "/v1/rosters", nil, &listing); err != nil {
+	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
 		return nil, err
 	}
 	var out []Draft
@@ -756,7 +756,7 @@ func (s apiSettings) toSettings() Settings {
 	return Settings{DefaultRoster: deref(s.DefaultRoster), AutoDraft: s.AutoDraft, Expiry: s.DraftExpiry}
 }
 
-// apiListing is the public GET /v1/rosters.
+// apiListing is the public GET /v1/stats.
 type apiListing struct {
 	Rosters []struct {
 		Name      string `json:"name"`

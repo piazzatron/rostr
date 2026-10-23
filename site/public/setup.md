@@ -74,7 +74,7 @@ Don't edit `~/.claude/settings.json` or other agent config by hand.
 ## 5. Check it worked
 
 ```sh
-rostr list
+rostr stats
 ```
 
 It should show the new roster with everyone on the bench.

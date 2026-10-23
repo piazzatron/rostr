@@ -78,7 +78,7 @@ const KEY_DERIVATION = `rostr key
     <h2>Consequences</h2>
     <ul class="terse-list">
       <li><strong>No recovery.</strong> A lost key means your cloud data is unrecoverable, by you or by us.</li>
-      <li><strong>API responses</strong> contain task ciphertext. <code>rostr list --json</code> decrypts it for you.</li>
+      <li><strong>API responses</strong> contain task ciphertext. <code>rostr stats --json</code> decrypts it for you.</li>
       <li><strong>Cloud environments</strong> need <code>ROSTR_KEY</code> to decrypt tasks. Never commit it.</li>
     </ul>
   </section>

@@ -301,7 +301,7 @@ func (m *machine) gitRepo(origin string) string {
 	return dir
 }
 
-// listing is `rostr list --json`.
+// listing is `rostr stats --json`.
 type listing struct {
 	Rosters []struct {
 		Name      string
@@ -314,7 +314,7 @@ type listing struct {
 func (m *machine) list() listing {
 	m.t.Helper()
 	var out listing
-	if err := json.Unmarshal([]byte(m.ok("list", "--json")), &out); err != nil {
+	if err := json.Unmarshal([]byte(m.ok("stats", "--json")), &out); err != nil {
 		m.t.Fatal(err)
 	}
 	return out

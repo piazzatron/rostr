@@ -44,7 +44,7 @@ const HERO_STATUS_TASKS = ["CI", "billing", "auth", "the docs", "the API", "dark
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
-// The hero's `rostr list --all`: one roster for work and one for side projects
+// The hero's `rostr stats --all`: one roster for work and one for side projects
 const HERO_ROSTERS = [
   {
     name: "work",
@@ -71,7 +71,7 @@ const COMMAND_GROUP_CARDS = [
     href: "/cli#roster-commands",
     title: "🎯 Roster commands",
     description: "Assemble and edit rosters, link them to your repos, see who's working on what.",
-    commands: ["assemble", "link", "list", "edit", "presets", "disband"],
+    commands: ["assemble", "link", "stats", "edit", "presets", "disband"],
   },
   {
     href: "/cli#agent-commands",
@@ -84,7 +84,7 @@ const COMMAND_GROUP_CARDS = [
 
 // The "Build on it" dashboard example uses the Smash Bros roster
 const DASHBOARD_ROSTER = PRESET_ROSTERS.find((roster) => roster.id === "smash-bros")!;
-// What GET /v1/rosters gives a dashboard: each drafted agent's name, emoji, team, task, repo, and when it was drafted
+// What GET /v1/stats gives a dashboard: each drafted agent's name, emoji, team, task, repo, and when it was drafted
 // (here, minutes ago), and everyone idle
 const DASHBOARD_MEMBERS = [
   { emoji: "🍄", name: "Mario", team: "A", task: "Ship the onboarding redesign", repo: "acme/web", minutes: 25 },
@@ -116,7 +116,7 @@ const formatElapsed = (minutes: number) =>
 // Terminal examples, rendered with Expressive Code
 const HERO_LIST_EXAMPLE = toTerminalText(
   [
-    "$ rostr list",
+    "$ rostr stats",
     ...HERO_ROSTERS.flatMap((roster, index) => [
       ...(index > 0 ? [""] : []),
       `${ANSI_DIM}${roster.name} roster${ANSI_RESET}`,
@@ -131,10 +131,10 @@ const HERO_LIST_EXAMPLE = toTerminalText(
 const INSTALL_EXAMPLE = `curl -fsSL https://getrostr.sh/install | sh
 rostr assemble`;
 const INSTALL_SCRIPT_SOURCE = "https://github.com/piazzatron/rostr/blob/main/site/public/install";
-const API_EXAMPLE = `curl https://api.getrostr.sh/v1/rosters \\
+const API_EXAMPLE = `curl https://api.getrostr.sh/v1/stats \\
   -H "Authorization: Bearer $ROSTR_TOKEN"`;
 // Pasted to an agent so it can write the ~15 lines that derive the auth token and decrypt tasks and repos
-const DECRYPT_PROMPT = `Build me a dashboard of my rostr agents using the rostr API. My rostr key is in ROSTR_KEY: "rostr_sk_" followed by 32 bytes as base64url. Derive two 32-byte keys from those bytes with HKDF-SHA256 (no salt): info "auth" is the bearer token (send it base64url-encoded), and info "encrypt" is an AES-256-GCM key. Fetch GET https://api.getrostr.sh/v1/rosters with that token. Each drafted agent's task and repo are base64: the first 12 bytes are the nonce, and the rest is the ciphertext and tag.`;
+const DECRYPT_PROMPT = `Build me a dashboard of my rostr agents using the rostr API. My rostr key is in ROSTR_KEY: "rostr_sk_" followed by 32 bytes as base64url. Derive two 32-byte keys from those bytes with HKDF-SHA256 (no salt): info "auth" is the bearer token (send it base64url-encoded), and info "encrypt" is an AES-256-GCM key. Fetch GET https://api.getrostr.sh/v1/stats with that token. Each drafted agent's task and repo are base64: the first 12 bytes are the nonce, and the rest is the ciphertext and tag.`;
 
 const LIST_JSON_EXAMPLE = `{
   "rosters": [
@@ -372,13 +372,13 @@ const LIST_JSON_EXAMPLE = `{
     <section class="section">
       <h2>Build on it</h2>
       <p class="section-lede">
-        Use the output of <code>rostr list --json</code> or the list API endpoint to build your own dashboards,
+        Use the output of <code>rostr stats --json</code> or the list API endpoint to build your own dashboards,
         monitoring, and integrations.
       </p>
 
       <figure
         class="dashboard"
-        aria-label="Example team dashboard built on rostr list --json"
+        aria-label="Example team dashboard built on rostr stats --json"
         data-tasks={JSON.stringify(DASHBOARD_TASKS)}
       >
         <div class="dashboard-app">
@@ -416,12 +416,12 @@ const LIST_JSON_EXAMPLE = `{
             </div>
           </div>
         </div>
-        <figcaption>A team dashboard built on <code>rostr list --json</code>.</figcaption>
+        <figcaption>A team dashboard built on <code>rostr stats --json</code>.</figcaption>
       </figure>
       <div class="cards build-cards">
         <div class="card">
           <h3>💻 On your machine</h3>
-          <Code code="rostr list --json" lang="sh" />
+          <Code code="rostr stats --json" lang="sh" />
           <p class="build-note">Local or cloud mode. Tasks and repos come back decrypted.</p>
           <h3 class="build-subhead">🌐 On the web</h3>
           <Code code={API_EXAMPLE} lang="sh" />
@@ -688,7 +688,7 @@ const LIST_JSON_EXAMPLE = `{
       if (openTile.contains(event.target as Node)) event.preventDefault();
       openTile.blur();
     });
-    // The "Build on it" dashboard behaves like one polling GET /v1/rosters every few seconds, so it only animates what
+    // The "Build on it" dashboard behaves like one polling GET /v1/stats every few seconds, so it only animates what
     // the API gives it: time since each agent was drafted ticks up, and some polls bring news: an agent's task changes,
     // or an agent goes back to the bench and someone from the bench is drafted in their place.
     const dashboard = document.querySelector<HTMLElement>(".dashboard");

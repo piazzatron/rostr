@@ -52,8 +52,8 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 	mux.HandleFunc("POST /v1/register", s.handleRegister)
 
 	// The public endpoints. CORS allows any origin so browser dashboards and the site can call them.
-	mux.Handle("GET /v1/rosters", withPublicCORS(s.authed(s.handleListRosters)))
-	mux.Handle("OPTIONS /v1/rosters", withPublicCORS(http.HandlerFunc(handlePreflight)))
+	mux.Handle("GET /v1/stats", withPublicCORS(s.authed(s.handleStats)))
+	mux.Handle("OPTIONS /v1/stats", withPublicCORS(http.HandlerFunc(handlePreflight)))
 
 	mux.Handle("POST /v1/rosters", s.authed(s.handleCreateRoster))
 	mux.Handle("GET /v1/rosters/{name}", s.authed(s.handleGetRoster))

@@ -139,7 +139,7 @@ type listOutput struct {
 func (s *sandbox) list(args ...string) listOutput {
 	s.t.Helper()
 	var out listOutput
-	if err := json.Unmarshal([]byte(s.ok(s.home, nil, append([]string{"list", "--json"}, args...)...)), &out); err != nil {
+	if err := json.Unmarshal([]byte(s.ok(s.home, nil, append([]string{"stats", "--json"}, args...)...)), &out); err != nil {
 		s.t.Fatal(err)
 	}
 	return out
@@ -162,7 +162,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	repo := s.gitRepo("api-checkout", "git@github.com:Acme/API.git")
 
 	// Nothing works before assemble
-	s.fails(s.home, nil, "No rosters yet. Run `rostr assemble`.", "list")
+	s.fails(s.home, nil, "No rosters yet. Run `rostr assemble`.", "stats")
 	s.fails(s.home, session("s0"), "No rosters yet", "draft")
 
 	// assemble: presets, own names, taken names, and the default name
@@ -180,7 +180,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Bench) != 20 {
 		t.Fatalf("list: %+v", listing)
 	}
-	if text := s.ok(s.home, nil, "list", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {
+	if text := s.ok(s.home, nil, "stats", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {
 		t.Fatalf("list work: %s", text)
 	}
 
@@ -219,11 +219,12 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	s.fails(s.home, nil, "no session", "task", "Something")
 	s.fails(s.home, session("nobody"), "no drafted agent", "task", "Something")
 
-	listing = s.list("play", "work")
+	listing = s.list("play,", "work")
 	ada, gandalf := listing.Rosters[0].Drafted[0], listing.Rosters[1].Drafted[0]
 	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "Review the PR" || gandalf.Repo != "" {
 		t.Fatalf("list: %+v", listing)
 	}
+	// list is an alias for stats
 	if text := s.ok(s.home, nil, "list", "play"); !strings.Contains(text, "Ada   Fix auth redirect loop   acme/api   just now") || !strings.Contains(text, "Bench: Grace") {
 		t.Fatalf("list text:\n%s", text)
 	}
@@ -233,6 +234,16 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("bench by name: %q", out)
 	}
 	s.fails(s.home, nil, `no agent named "ada" is drafted`, "bench", "ada")
+	// names are separated by commas, since they can have spaces the shell splits apart
+	s.draft(s.home, "s4", "--roster", "play")
+	s.draft(s.home, "s5", "--roster", "play")
+	if d := s.draft(s.home, "s6", "--roster", "play"); d.Name != "Ada 2" {
+		t.Fatalf("draft copy: %+v", d)
+	}
+	if out := s.ok(s.home, nil, "bench", "ada", "2,", "grace"); out != "Benched Ada 2 from the play roster.\nBenched Grace from the play roster.\n" {
+		t.Fatalf("bench copy: %q", out)
+	}
+	s.ok(s.home, nil, "bench", "ada", "--roster", "play")
 	if out := s.ok(s.home, session("s2"), "bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
 		t.Fatalf("bench by session: %q", out)
 	}
@@ -270,7 +281,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	if out := s.ok(s.home, nil, "disband", "work", "--yes"); !strings.Contains(out, "last roster") {
 		t.Fatalf("disband last: %q", out)
 	}
-	s.fails(s.home, nil, "No rosters yet", "list")
+	s.fails(s.home, nil, "No rosters yet", "stats")
 }
 
 func TestSessionKeepsItsRosterWhenItChangesDirectory(t *testing.T) {
@@ -315,11 +326,11 @@ func TestBenchSeveralNamesAndAll(t *testing.T) {
 	names := s.list("work").Rosters[0].Drafted
 
 	// A typo benches nobody
-	s.fails(s.home, nil, `no agent named "nobody" is drafted`, "bench", names[0].Name, "nobody", "--roster", "work")
+	s.fails(s.home, nil, `no agent named "nobody" is drafted`, "bench", names[0].Name+",", "nobody", "--roster", "work")
 
 	// Several names at once
 	want := fmt.Sprintf("Benched %s from the work roster.\nBenched %s from the work roster.\n", names[0].Display, names[1].Display)
-	if out := s.ok(s.home, nil, "bench", names[0].Name, names[1].Name, "--roster", "work"); out != want {
+	if out := s.ok(s.home, nil, "bench", names[0].Name+",", names[1].Name, "--roster", "work"); out != want {
 		t.Fatalf("bench several: %q", out)
 	}
 
@@ -680,7 +691,7 @@ func TestCloudInstallAddsClaudeCodeHooksOnlyInCloudSessions(t *testing.T) {
 	if out := s.ok(s.home, cloud, "cloud", "install"); strings.Contains(out, "Installed") {
 		t.Fatalf("second install reinstalled: %s", out)
 	}
-	s.fails(s.home, nil, "No rosters yet", "list")
+	s.fails(s.home, nil, "No rosters yet", "stats")
 }
 
 func TestAssembleLinksTheRepoYoureIn(t *testing.T) {
@@ -729,7 +740,7 @@ func TestUninstallRemovesEverything(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.home, ".config", "rostr", "rostr.db")); !os.IsNotExist(err) {
 		t.Fatalf("database still there: %v", err)
 	}
-	s.fails(s.home, nil, "No rosters yet", "list")
+	s.fails(s.home, nil, "No rosters yet", "stats")
 
 	// Running it again finds nothing left
 	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "Nothing to remove") {
@@ -741,7 +752,7 @@ func TestMissingArgumentsPrintUsage(t *testing.T) {
 	s := newSandbox(t)
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 
-	for _, args := range [][]string{{"disband"}, {"config", "emoji"}, {"assemble", "--emoji", "on"}, {"list", "--bogus"}} {
+	for _, args := range [][]string{{"disband"}, {"config", "emoji"}, {"assemble", "--emoji", "on"}, {"stats", "--bogus"}} {
 		r := s.run(s.home, "", nil, args...)
 		if r.code != 1 || !strings.Contains(r.stderr, "Usage:") {
 			t.Errorf("rostr %v: exit %d, stderr %q", args, r.code, r.stderr)
@@ -824,8 +835,8 @@ func TestCloudModeWithoutTheAPI(t *testing.T) {
 	s.fails(s.home, nil, "rostr cloud on", "assemble", "play", "--preset", "kanto", "--cloud")
 
 	// A key puts the machine in cloud mode: a bad one is an error, and an unreachable API is reported
-	s.fails(s.home, []string{"ROSTR_KEY=rostr_sk_x"}, "ROSTR_KEY", "list")
-	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "can't reach the rostr API at http://127.0.0.1:1", "list")
+	s.fails(s.home, []string{"ROSTR_KEY=rostr_sk_x"}, "ROSTR_KEY", "stats")
+	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "can't reach the rostr API at http://127.0.0.1:1", "stats")
 	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "already in cloud mode", "cloud", "on")
 
 	// A first setup in the cloud that can't reach the API saves no key

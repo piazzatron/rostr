@@ -30,12 +30,12 @@ Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
 - [x] Get rostr API call latency off the first prompt: hooks draft from a local cache and confirm in the background
       (see [`docs/drafting-latency.md`](docs/drafting-latency.md)).
 - [ ] Measure the API's latency from a Claude Code cloud container (the one place a first prompt still waits on it),
-      and `rostr list`'s several calls (~1.4s from Tokyo).
+      and `rostr stats`'s several calls (~1.4s from Tokyo).
 - [ ] Real first prompts are long tasks, so the agent sets its `name · summary` title late: after a long plain answer,
       or behind slow first tool calls. Local sessions show no name until then. Think about how to get the name up
       sooner.
 - [ ] An easier way to see, from inside a session, what the whole roster is doing (today it's asking the agent to run
-      `rostr list`).
+      `rostr stats`).
 
 ## Deferred decisions
 

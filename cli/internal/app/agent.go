@@ -63,12 +63,13 @@ func newDraftCommand() *cobra.Command {
 func newBenchCommand() *cobra.Command {
 	var session, rosterFlag string
 	cmd := &cobra.Command{
-		Use:   "bench [<name>... | all]",
+		Use:   "bench [<name>, ... | all]",
 		Short: "Send this session's agent, named ones, or all of them back to the bench",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			out := cmd.OutOrStdout()
-			if len(args) == 0 && session == "" {
+			names := splitNames(args)
+			if len(names) == 0 && session == "" {
 				return errNoSession
 			}
 			st, err := openStore()
@@ -78,7 +79,7 @@ func newBenchCommand() *cobra.Command {
 			defer st.Close()
 
 			// This session's agent
-			if len(args) == 0 {
+			if len(names) == 0 {
 				d, err := st.Bench(ctx, session)
 				if err != nil {
 					return err
@@ -93,7 +94,7 @@ func newBenchCommand() *cobra.Command {
 
 			// Every drafted agent, or the named ones. Names are all looked up first, so a typo benches nobody.
 			var agents []store.Draft
-			if len(args) == 1 && args[0] == "all" {
+			if len(names) == 1 && names[0] == "all" {
 				if agents, err = draftedAgentsIn(ctx, st, rosterFlag); err != nil {
 					return err
 				}
@@ -102,7 +103,7 @@ func newBenchCommand() *cobra.Command {
 					return nil
 				}
 			} else {
-				for _, name := range args {
+				for _, name := range names {
 					agent, err := findDraftedAgent(ctx, st, name, rosterFlag)
 					if err != nil {
 						return err
@@ -215,6 +216,18 @@ func findDraftedAgent(ctx context.Context, st store.Store, name, rosterFlag stri
 		return store.Draft{}, err
 	}
 	return matches[picked], nil
+}
+
+// splitNames reads a comma-separated list of names from args, so `bench donkey kong 2, gimli` names "donkey kong 2"
+// and "gimli" whether or not the shell split them.
+func splitNames(args []string) []string {
+	var names []string
+	for _, name := range strings.Split(strings.Join(args, " "), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // draftedAgentsIn returns every active draft, or only rosterFlag's.
