@@ -233,6 +233,16 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("bench by name: %q", out)
 	}
 	s.fails(s.home, nil, `no agent named "ada" is drafted`, "bench", "ada")
+	// copies: the shell splits "Ada 2" into two args, which still name one agent
+	s.draft(s.home, "s4", "--roster", "play")
+	s.draft(s.home, "s5", "--roster", "play")
+	if d := s.draft(s.home, "s6", "--roster", "play"); d.Name != "Ada 2" {
+		t.Fatalf("draft copy: %+v", d)
+	}
+	if out := s.ok(s.home, nil, "bench", "ada", "2", "grace"); out != "Benched Ada 2 from the play roster.\nBenched Grace from the play roster.\n" {
+		t.Fatalf("bench copy: %q", out)
+	}
+	s.ok(s.home, nil, "bench", "ada", "--roster", "play")
 	if out := s.ok(s.home, session("s2"), "bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
 		t.Fatalf("bench by session: %q", out)
 	}

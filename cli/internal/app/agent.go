@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -102,7 +103,7 @@ func newBenchCommand() *cobra.Command {
 					return nil
 				}
 			} else {
-				for _, name := range args {
+				for _, name := range joinCopyNumbers(args) {
 					agent, err := findDraftedAgent(ctx, st, name, rosterFlag)
 					if err != nil {
 						return err
@@ -215,6 +216,20 @@ func findDraftedAgent(ctx context.Context, st store.Store, name, rosterFlag stri
 		return store.Draft{}, err
 	}
 	return matches[picked], nil
+}
+
+// joinCopyNumbers rejoins copy numbers the shell split off their names, so `bench aragorn 2 gimli` names
+// "aragorn 2" and "gimli".
+func joinCopyNumbers(args []string) []string {
+	var names []string
+	for _, arg := range args {
+		if _, err := strconv.Atoi(strings.TrimSpace(arg)); err == nil && len(names) > 0 {
+			names[len(names)-1] += " " + strings.TrimSpace(arg)
+			continue
+		}
+		names = append(names, arg)
+	}
+	return names
 }
 
 // draftedAgentsIn returns every active draft, or only rosterFlag's.
