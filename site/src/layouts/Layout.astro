@@ -431,6 +431,33 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     color: var(--text);
   }
 
+  /* The live count of agents working and on the bench, after a pulsing dot. It fades up like the rest of the hero once
+     it loads. */
+  .live-stats {
+    margin: 20px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+    /* Digits keep their width while the counts tick, so the line doesn't jitter */
+    font-variant-numeric: tabular-nums;
+    animation: rise-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin: 0 8px 1px 0;
+    border-radius: 50%;
+    background: #2f9e44;
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes live-pulse {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
   /* The hero's install prompt: the old layout, with an accent outline, small hard shadow, and a filled Copy button */
   .copy-hero {
     padding: 8px 8px 8px 16px;
@@ -544,7 +571,9 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   @media (prefers-reduced-motion: reduce) {
     .hero-notification,
     .hero > :is(h1, .hero-subtitle, .lede, .cta-title, .cta, .cta-alt),
-    .hero-terminal > .expressive-code {
+    .hero-terminal > .expressive-code,
+    .live-stats,
+    .live-dot {
       animation: none !important;
     }
   }

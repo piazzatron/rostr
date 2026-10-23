@@ -46,6 +46,8 @@ func main() {
 		Handler: api.NewHandler(db, api.Config{
 			RegistrationsPerHour: envInt("RATE_LIMIT_REGISTRATIONS_PER_HOUR", 20),
 			RequestsPerMinute:    envInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 300),
+			LiveURL:              os.Getenv("LIVE_URL"),
+			LiveSecret:           os.Getenv("LIVE_SECRET"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

@@ -1,0 +1,13 @@
+name = "rostr-live"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+routes = [{ pattern = "live.getrostr.sh", custom_domain = true }]
+
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "Stats"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Stats"]
+
