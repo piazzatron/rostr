@@ -15,6 +15,11 @@ lives on the API instead; `credentials` and a cache are kept on disk.
   machine-id       a random ID for this machine, sent to the API so it reserves this machine's next picks
 ~/.cache/rostr/
   keepalive/<session>       the session's last keep-alive bump (the file's modification time)
+  hooks/<agent>             the fingerprint of the hooks rostr last installed for claude-code or codex, so a
+                            session start can tell when an upgrade changed them (see cli-spec.md, Upgrading)
+  turns/<session>           when the session's last turn ended, and its name and task then, from the Stop hook;
+                            the next prompt or tool call reads it to tell whether the session rested; it's deleted
+                            once the next turn's start is recorded
   cloud/next.json           cloud mode: the next state to draft from (which roster each project uses, who's idle,
                             auto-draft), as the API last returned it, plus this machine's unconfirmed picks
   cloud/sessions/<session>.json   cloud mode: the session's own draft, so later prompts make no call
@@ -60,11 +65,13 @@ create table drafts (
   task         text,
   drafted_at   text not null default (datetime('now')),
   last_seen_at text not null default (datetime('now')),
-  released_at  text                        -- null while the agent is active
+  benched_at   text,                        -- null while the agent is active
+  turn_started_at text,                    -- when the session's turn last started and ended; resting: ended at
+  turn_ended_at   text                     -- least 15 minutes ago, and no later start (added in user_version 3)
 );
 
-create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
-create unique index drafts_active_session on drafts (session_id) where released_at is null;
+create unique index drafts_active_member on drafts (roster_id, member_name, copy) where benched_at is null;
+create unique index drafts_active_session on drafts (session_id) where benched_at is null;
 create index drafts_session on drafts (session_id, drafted_at desc);
 ```
 

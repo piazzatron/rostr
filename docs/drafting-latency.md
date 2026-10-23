@@ -50,7 +50,8 @@ Cloud mode keeps a local cache in `~/.cache/rostr/cloud/` (see [local-storage.md
 3. **Reservations, so machines don't announce the same name.** With every response that carries the next state,
    the server holds the member this machine will take next, per roster, for 24 hours (`X-Rostr-Machine`
    identifies the machine; see [api.md](api.md#reservations)). Other machines see that member as busy, so their
-   caches never offer it. A collision now takes a cache more than 24 hours stale.
+   caches never offer it. A collision now takes a cache more than 24 hours stale. Cloud session containers send no
+   machine ID, so they reserve nothing: each drafts once, with a server call, and is thrown away.
 4. **Confirmation.** The server drafts the preferred member if they're free. If, with a stale cache, a session
    elsewhere took them first, it drafts their next copy (Ginny 2), so the session keeps a name it can recognize. A preferred member who was the
    session's previous member is a resume, old task included. The server's answer replaces the session's cached

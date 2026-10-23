@@ -168,6 +168,12 @@ func Renamed(display, from string) string {
 		"time got that name first). Sign as %s from now on.", display, from, display)
 }
 
+// RenamedAfterRest tells the agent that another session took its name while it was resting.
+func RenamedAfterRest(display, from string) string {
+	return fmt.Sprintf("rostr renamed this session: you're %s now, not %s (another session took that name while this "+
+		"one was resting). Sign as %s from now on.", display, from, display)
+}
+
 func Identity(display, rosterName, sessionID string) string {
 	return strings.Join([]string{
 		fmt.Sprintf("You're %s for this session (drafted by rostr from the %q roster).", display, rosterName),
@@ -185,32 +191,46 @@ type TitleWhere struct {
 	ServerSessionID string // a Remote Control or cloud session, titled with Claude Code's remote tool
 }
 
-// TitleInstruction asks the agent to title the session "<display> · <summary>" at the end of the message with its
-// answer, after the text, so the title never comes before the answer and costs no round trip of its own. rostr's
-// PostToolUse hook then records the summary as the task and ends the turn, so Claude doesn't reply to the tool's
-// result. Terminal sessions have no title tool, so the agent isn't asked: rostr summarizes the prompt itself
-// (Summarize) and the next prompt's hook retitles the session.
+// TitleInstruction asks the agent to title the session "<display> · <summary>" with its title tool.
+//
+// In desktop Local sessions the call goes at the end of the message with the answer, so the title never changes
+// before the answer, and rostr's PostToolUse hook then ends the turn so Claude doesn't reply to the tool's result.
+//
+// In Remote Control and cloud sessions the call comes first, before any text. Those apps show the model's progress
+// updates, and text written just before a tool call can come back as one: a server-written summary of the answer,
+// followed, after the title call, by the answer again. The first thing in a turn is never turned into one, and the
+// answer then ends the turn as usual.
+//
+// Terminal sessions have no title tool, so the agent isn't asked: rostr summarizes the prompt itself (Summarize) and
+// the next prompt's hook retitles the session.
 func TitleInstruction(display, sessionID string, where TitleWhere) string {
-	const when = "Write your complete answer to the user first; then, as the very last thing in that same message, " +
-		"after all of your answer text, make this call. Never make it before your answer or alongside other tool " +
-		"calls, and never mention it or the tool's result."
 	title := fmt.Sprintf("%q", display+" · <3-5 word summary of what the user wants>")
 	switch {
 	case where.DesktopLocal:
 		return fmt.Sprintf("Title this session with %s, with session_id \"self\" and title %s (load it with "+
-			"ToolSearch right before calling it). %s", LocalTitleTool, title, when)
+			"ToolSearch right before calling it). Write your complete answer to the user first; then, as the very "+
+			"last thing in that same message, after all of your answer text, make this call. Never make it before "+
+			"your answer or alongside other tool calls, and never mention it or the tool's result.",
+			LocalTitleTool, title)
 	case where.ServerSessionID != "":
 		// A Remote Control host's own first session doesn't get the tool; only sessions started from the app do
-		return fmt.Sprintf("Title this session: call %s with session_id %q and title %s. %s If you don't have "+
-			"that tool, skip this step.", RemoteTitleTool, where.ServerSessionID, title, when)
+		return fmt.Sprintf("Title this session: call %s with session_id %q and title %s. Make this call first, "+
+			"before you write anything, then carry on with the user's request as usual. Never mention the call or "+
+			"its result. If you don't have that tool, skip this step.", RemoteTitleTool, where.ServerSessionID, title)
 	}
 	return ""
 }
 
-// TitleSetContext is what the PostToolUse hook tells the agent when its title call came before its answer, so it
-// answers the user rather than reporting the rename.
+// TitleSetContext is what the PostToolUse hook tells the agent when its title call came before its answer (always,
+// in Remote Control and cloud sessions), so it answers the user rather than reporting the rename.
 const TitleSetContext = "The session is titled; the user sees neither this call nor its result, so don't mention " +
 	"either. Carry on and answer the user."
+
+// TitlesFirst reports whether the agent makes its title call before its answer: in Remote Control and cloud sessions
+// (see TitleInstruction).
+func (w TitleWhere) TitlesFirst() bool {
+	return !w.DesktopLocal && w.ServerSessionID != ""
+}
 
 // IsTerminal reports whether the session has no title tool for its agent: it's neither a desktop Local session nor a
 // Remote Control or cloud one.

@@ -71,8 +71,9 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 
 	mux.Handle("POST /v1/agents/draft", s.authed(s.handleDraft))
 	mux.Handle("POST /v1/agents/keepalive", s.authed(s.handleKeepAlive))
-	mux.Handle("POST /v1/agents/release", s.authed(s.handleRelease))
+	mux.Handle("POST /v1/agents/bench", s.authed(s.handleBench))
 	mux.Handle("POST /v1/agents/task", s.authed(s.handleSetTask))
+	mux.Handle("POST /v1/agents/turn", s.authed(s.handleTurn))
 	mux.Handle("GET /v1/sessions/{session}", s.authed(s.handleGetSession))
 	mux.Handle("GET /v1/next", s.authed(s.handleGetNext))
 
@@ -137,10 +138,10 @@ func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx
 
 		// Expire stale drafts
 		_, err := tx.Exec(ctx, `
-			update drafts d set released_at = now()
+			update drafts d set benched_at = now()
 			from rosters r, owners o
 			where d.roster_id = r.id and r.owner_id = $1 and o.id = $1
-			  and d.released_at is null and d.last_seen_at < now() - o.draft_expiry`, ownerID)
+			  and d.benched_at is null and d.last_seen_at < now() - o.draft_expiry`, ownerID)
 		if err != nil {
 			return err
 		}
@@ -148,7 +149,7 @@ func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx
 		// Prune released drafts past the 7-day resume window, and expired reservations
 		_, err = tx.Exec(ctx, `
 			delete from drafts d using rosters r
-			where d.roster_id = r.id and r.owner_id = $1 and d.released_at < now() - interval '7 days'`, ownerID)
+			where d.roster_id = r.id and r.owner_id = $1 and d.benched_at < now() - interval '7 days'`, ownerID)
 		if err != nil {
 			return err
 		}

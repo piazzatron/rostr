@@ -86,23 +86,23 @@ Unlinked me/recipes. It now uses your default roster, work`,
       {
         id: "list",
         usage: "rostr list [<roster>...] [--json]",
-        summary: "See who's working on what, and who's idle, across all your rosters. Name rosters to see just those.",
+        summary: "See who's working on what, who's resting, and who's on the bench, across all your rosters. Name rosters to see just those.",
         options: [{ flag: "--json", description: "Print the result as JSON." }],
         example: `$ rostr list
 work roster
 🧙 Gandalf   Fix auth redirect loop         acme/api      12m
 💍 Frodo     Flaky e2e tests on CI          acme/web      3m
 🌱 Samwise   Migrate billing to Stripe v3   acme/billing  1h
-idle: Aragorn, Legolas, Gimli, Boromir, Merry, Pippin
+bench: Aragorn, Legolas, Gimli, Boromir, Merry, Pippin
 
 side roster
 🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
-idle: LeBron, Kobe, Magic, Bird, Curry, Shaq
+bench: LeBron, Kobe, Magic, Bird, Curry, Shaq
 
 $ rostr list side
 side roster
 🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
-idle: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
+bench: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
       },
       {
         id: "edit",
@@ -138,14 +138,14 @@ Disbanded work. side is now your default roster`,
     commands: [
       {
         id: "draft",
-        heading: "draft / release",
+        heading: "draft / bench",
         badge: "⚙️ On session start and end",
-        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr release [<name>] [--session <id>]",
+        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr bench [<name>... | all] [--session <id>]",
         summary:
           "Draft the next free agent when a session starts, A team first, and send it back to the bench when the session ends. The same session always gets the same name back.",
         options: [
           { flag: "--task <description>", description: "What the agent is working on. Shown in rostr list." },
-          { flag: "--session <id>", description: "The session to draft or release for. The hooks pass this, and it defaults to ROSTR_SESSION." },
+          { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION." },
           { flag: "--json", description: "Print the drafted agent as JSON." },
         ],
         example: `$ rostr draft --task "Fix auth redirect loop"
@@ -154,8 +154,8 @@ Disbanded work. side is now your default roster`,
 $ rostr draft --json
 {"name": "Gandalf", "emoji": "🧙", "team": "A", "roster": "work", "display": "🧙 Gandalf"}
 
-$ rostr release gandalf
-🧙 Gandalf is back on the bench`,
+$ rostr bench gandalf
+Benched 🧙 Gandalf from the work roster.`,
       },
       {
         id: "task",

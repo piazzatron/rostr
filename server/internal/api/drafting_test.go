@@ -31,7 +31,7 @@ func TestDraftPicksATeamThenBTeamThenCopies(t *testing.T) {
 	}
 
 	// A freed copy-1 slot is drafted before any further copies
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"name": "frodo"}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"name": "frodo"}, http.StatusOK)
 	if d := draftSessionNamed(c, c.session("next")); displayOf(d) != "Frodo" {
 		t.Fatalf("after releasing Frodo, drafted %s", displayOf(d))
 	}
@@ -47,7 +47,7 @@ func TestDraftsCycleThroughTheCast(t *testing.T) {
 	for i := range 5 {
 		d := draftSessionNamed(c, c.session(fmt.Sprint(i)))
 		got = append(got, displayOf(d))
-		call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": c.session(fmt.Sprint(i))}, http.StatusOK)
+		call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session(fmt.Sprint(i))}, http.StatusOK)
 	}
 	if want := []string{"Gandalf", "Frodo", "Samwise", "Gandalf", "Frodo"}; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("drafted %v, want %v", got, want)
@@ -111,8 +111,8 @@ func TestDraftResumesPreviousMemberWhenFree(t *testing.T) {
 
 	draftSessionNamed(c, s1)
 	draft(c, map[string]any{"session": s2, "task": fakeCiphertext("fix auth")})
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": s1}, http.StatusOK)
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": s2}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": s1}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": s2}, http.StatusOK)
 
 	// Gandalf is free and first in order, but s2 gets Frodo back, with its task
 	resumed := draftSessionNamed(c, s2)
@@ -138,7 +138,7 @@ func TestDraftResumesFromTheSessionsOriginalRoster(t *testing.T) {
 	session := c.session("s1")
 
 	draft(c, map[string]any{"session": session, "roster": "games"})
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": session}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": session}, http.StatusOK)
 
 	if d := draftSessionNamed(c, session); d.Name != "Mario" || d.Roster != "games" {
 		t.Fatalf("resume gave %s from %s, want Mario from games", d.Name, d.Roster)
@@ -166,15 +166,15 @@ func TestDraftExpiresStaleDraftsUsingOwnersExpiry(t *testing.T) {
 	if d := draftSessionNamed(c, c.session("new")); d.Name != "Gandalf" {
 		t.Fatalf("drafted %s, want Gandalf (freed by expiry)", d.Name)
 	}
-	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and released_at is not null`, stale); n != 1 {
+	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is not null`, stale); n != 1 {
 		t.Fatal("stale draft wasn't released")
 	}
-	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and released_at is null`, recent); n != 1 {
+	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is null`, recent); n != 1 {
 		t.Fatal("recent draft was released")
 	}
 }
 
-func TestDraftPrunesReleasedDraftsAfterSevenDays(t *testing.T) {
+func TestDraftPrunesBenchedDraftsAfterSevenDays(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
 	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
@@ -182,10 +182,10 @@ func TestDraftPrunesReleasedDraftsAfterSevenDays(t *testing.T) {
 
 	draftSessionNamed(c, old)
 	draftSessionNamed(c, recent)
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": old}, http.StatusOK)
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": recent}, http.StatusOK)
-	execSQL(t, `update drafts set released_at = now() - interval '8 days' where session_id = $1`, old)
-	execSQL(t, `update drafts set released_at = now() - interval '6 days' where session_id = $1`, recent)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": old}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": recent}, http.StatusOK)
+	execSQL(t, `update drafts set benched_at = now() - interval '8 days' where session_id = $1`, old)
+	execSQL(t, `update drafts set benched_at = now() - interval '6 days' where session_id = $1`, recent)
 
 	draftSessionNamed(c, c.session("trigger"))
 
@@ -314,7 +314,7 @@ func TestDatabaseAllowsOneActiveDraftPerSessionAcrossAnOwnersRosters(t *testing.
 	}
 
 	// Once the session's draft is released, it can hold a member in another roster
-	call[draftResponse](a, "POST", "/v1/agents/release", map[string]any{"session": session}, http.StatusOK)
+	call[draftResponse](a, "POST", "/v1/agents/bench", map[string]any{"session": session}, http.StatusOK)
 	if err := insertIntoGames(); err != nil {
 		t.Fatalf("draft after release: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestDraftPreferredMemberThenTheirCopies(t *testing.T) {
 		t.Fatalf("preferred, not in the cast: %s", displayOf(d))
 	}
 	// Preferred means the session was already told the name, so it beats getting the old name back
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": c.session("s3")}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session("s3")}, http.StatusOK)
 	if d := draft(c, map[string]any{"session": c.session("s3"), "preferred": "Frodo"}); displayOf(d) != "Frodo 3" {
 		t.Fatalf("preferred over resume: %s", displayOf(d))
 	}
@@ -357,7 +357,7 @@ func TestDraftPreferredMemberThenTheirCopies(t *testing.T) {
 	}
 	// A preferred member who was the session's previous one is a resume, old task included
 	draft(c, map[string]any{"session": c.session("s5"), "task": fakeCiphertext("old task")})
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": c.session("s5")}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session("s5")}, http.StatusOK)
 	if d := draft(c, map[string]any{"session": c.session("s5"), "preferred": "Gandalf"}); displayOf(d) != "Gandalf" || d.Task == nil || *d.Task != fakeCiphertext("old task") {
 		t.Fatalf("preferred resume: %s, task %v", displayOf(d), d.Task)
 	}
@@ -400,7 +400,7 @@ func TestDraftResponsesCarryTheNextState(t *testing.T) {
 	}
 
 	// Releasing puts the member back; GET /v1/next gives the same state on its own
-	released := call[draftWithNext](c, "POST", "/v1/agents/release", map[string]any{"session": c.session("s1")}, http.StatusOK)
+	released := call[draftWithNext](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session("s1")}, http.StatusOK)
 	if idle := released.Next.Rosters[0].Idle; len(idle) != 2 || idle[0].Name != "Frodo" || idle[1].Name != "Gandalf" {
 		t.Fatalf("after release (never-drafted Frodo first): %+v", idle)
 	}

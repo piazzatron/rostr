@@ -154,10 +154,15 @@ func TestTitleInstruction(t *testing.T) {
 	if terminal != "" || !(TitleWhere{}).IsTerminal() || (TitleWhere{DesktopLocal: true}).IsTerminal() || (TitleWhere{ServerSessionID: "x"}).IsTerminal() {
 		t.Fatalf("terminal: %q", terminal)
 	}
-	for _, text := range []string{local, remote} {
-		if !strings.Contains(text, "Write your complete answer to the user first") {
-			t.Errorf("when: %s", text)
-		}
+	// Local titles after the answer; Remote Control and cloud title first
+	if !strings.Contains(local, "Write your complete answer to the user first") {
+		t.Errorf("local when: %s", local)
+	}
+	if !strings.Contains(remote, "Make this call first, before you write anything") || strings.Contains(remote, "answer to the user first") {
+		t.Errorf("remote when: %s", remote)
+	}
+	if !(TitleWhere{ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{DesktopLocal: true, ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{}).TitlesFirst() {
+		t.Error("TitlesFirst")
 	}
 }
 
@@ -236,11 +241,13 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake {
 		t.Errorf("UserPromptSubmit: %+v", prompt)
 	}
-	if stop, ok := settings.Hooks["Stop"]; ok {
+	if stop := settings.Hooks["Stop"]; len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("turn-end") || stop[0].Hooks[0].Async {
 		t.Errorf("Stop: %+v", stop)
 	}
-	if post := settings.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" ||
-		post[0].Hooks[0].Command != HookCommand("title-set") || post[0].Hooks[0].Async {
+	// PostToolUse: the title hook on the title tools and Bash, and the turn-start check on every tool
+	if post := settings.Hooks["PostToolUse"]; len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" ||
+		post[0].Hooks[0].Command != HookCommand("title-set") || post[0].Hooks[0].Async ||
+		post[1].Matcher != "" || post[1].Hooks[0].Command != HookCommand("working") {
 		t.Errorf("PostToolUse: %+v", post)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {
@@ -339,9 +346,11 @@ func TestInstallReplacesTheOldBackgroundHooks(t *testing.T) {
 	data, _ := os.ReadFile(settingsPath)
 	json.Unmarshal(data, &settings)
 	prompt, post := settings.Hooks["UserPromptSubmit"], settings.Hooks["PostToolUse"]
-	_, hasStop := settings.Hooks["Stop"]
-	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake || hasStop ||
-		len(post) != 1 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" || post[0].Hooks[0].Async {
+	// The old Stop title step is replaced by the turn-end hook
+	stop := settings.Hooks["Stop"]
+	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake ||
+		len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("turn-end") ||
+		len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" || post[0].Hooks[0].Async {
 		t.Fatalf("hooks: %s", data)
 	}
 }
@@ -369,5 +378,41 @@ func write(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestIsPrintRun(t *testing.T) {
+	for _, tc := range []struct {
+		args string
+		want bool
+	}{
+		{"claude", false},
+		{"/opt/claude-code/bin/claude --preload /home/claude/.claude/remote/spare.sock", false},
+		{"claude -p say hi", true},
+		{"node /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js --print --model haiku", true},
+		{"claude -p --input-format stream-json --output-format stream-json", false},
+		{"claude --print --input-format=stream-json", false},
+		{"claude -p --sdk-url wss://example.com", false},
+	} {
+		if got := isPrintRun(strings.Fields(tc.args)); got != tc.want {
+			t.Errorf("isPrintRun(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestIsShellCommand(t *testing.T) {
+	for _, tc := range []struct {
+		args string
+		want bool
+	}{
+		{"/bin/sh -c rostr hook claude-code prompt", true},
+		{"-bash -lc rostr", true},
+		{"/bin/sh /tmp/claude -p", false},
+		{"bash --norc", false},
+		{"claude -p", false},
+	} {
+		if got := isShellCommand(strings.Fields(tc.args)); got != tc.want {
+			t.Errorf("isShellCommand(%q) = %v, want %v", tc.args, got, tc.want)
+		}
 	}
 }

@@ -72,7 +72,7 @@ func (f *fakeRoster) respond(w http.ResponseWriter, r recordedRequest) {
 		}
 		f.busy["Gandalf"]++
 		json.NewEncoder(w).Encode(draft("Gandalf", f.busy["Gandalf"], session))
-	case "/v1/agents/release":
+	case "/v1/agents/bench":
 		json.NewEncoder(w).Encode(draft("Gandalf", 1, r.body["session"].(string)))
 	case "/v1/sessions/s-elsewhere":
 		json.NewEncoder(w).Encode(draft("Frodo", 1, "s-elsewhere"))
@@ -260,8 +260,8 @@ func TestSessionCacheFollowsTheServer(t *testing.T) {
 		t.Fatal("second read wasn't cached")
 	}
 
-	// Release forgets it, and an unknown session is asked for each time
-	if _, err := cloud.Release(ctx, "s-elsewhere"); err != nil {
+	// Bench forgets it, and an unknown session is asked for each time
+	if _, err := cloud.Bench(ctx, "s-elsewhere"); err != nil {
 		t.Fatal(err)
 	}
 	if d, err := cloud.SessionDraft(ctx, "s-elsewhere"); err != nil || api.count("/v1/sessions/s-elsewhere") != 2 || d == nil {
@@ -315,5 +315,31 @@ func TestAStaleCachedDraftIsCheckedWithTheServer(t *testing.T) {
 	cloud.cache.saveSession(*cs)
 	if _, err := cloud.Draft(ctx, DraftRequest{SessionID: "s1"}); err != nil || api.count("/v1/agents/draft") != before+1 {
 		t.Fatalf("stale cached draft wasn't checked: %v", err)
+	}
+}
+
+func TestATurnReportKeepsAnUnconfirmedDraft(t *testing.T) {
+	_, cloud, _ := newCachedCloud(t, func(Confirmation) error { return nil }) // the confirmation never lands
+	if _, err := cloud.Draft(ctx, DraftRequest{SessionID: "warm"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cloud.Draft(ctx, DraftRequest{SessionID: "s1", Fast: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The server doesn't have s1's draft yet, which doesn't mean it's gone
+	if err := cloud.RecordTurn(ctx, "s1", true, time.Now()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("turn: %v", err)
+	}
+	if cs := cloud.cache.session("s1"); cs == nil || cs.Confirm == nil {
+		t.Fatal("dropped the unconfirmed draft")
+	}
+
+	// A confirmed draft the server doesn't have is gone: its name was taken while it rested
+	if err := cloud.RecordTurn(ctx, "warm", false, time.Now()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("turn: %v", err)
+	}
+	if cloud.cache.session("warm") != nil {
+		t.Fatal("kept a confirmed draft the server doesn't have")
 	}
 }

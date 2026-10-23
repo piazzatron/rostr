@@ -21,6 +21,10 @@ const DefaultExpiry = "7d"
 // ReleasedRetention is how long released drafts are kept, so a resumed session can ask for its old name back.
 const ReleasedRetention = 7 * 24 * time.Hour
 
+// RestAfter is how long after its turn ends a session's draft starts resting: a draft that would otherwise get a
+// numbered copy takes the longest-resting member's name instead.
+const RestAfter = 15 * time.Minute
+
 var (
 	ErrNotFound     = errors.New("not found")
 	ErrNameTaken    = errors.New("name taken")
@@ -72,12 +76,16 @@ type Store interface {
 	SessionDraft(ctx context.Context, sessionID string) (*Draft, error)
 	// ActiveDrafts returns every active draft across all rosters.
 	ActiveDrafts(ctx context.Context) ([]Draft, error)
-	// Release frees the session's member, returning the released draft or nil if it had none.
-	Release(ctx context.Context, sessionID string) (*Draft, error)
-	// ReleaseAgent frees one drafted agent. The error wraps ErrNotFound if it isn't drafted.
-	ReleaseAgent(ctx context.Context, agent AgentKey) (Draft, error)
+	// Bench frees the session's member, returning the released draft or nil if it had none.
+	Bench(ctx context.Context, sessionID string) (*Draft, error)
+	// BenchAgent frees one drafted agent. The error wraps ErrNotFound if it isn't drafted.
+	BenchAgent(ctx context.Context, agent AgentKey) (Draft, error)
 	// SetTask sets a drafted agent's task and bumps its last-seen time.
 	SetTask(ctx context.Context, agent AgentKey, task string) (Draft, error)
+	// RecordTurn records that the session's turn started or ended at at (never later than now), and bumps its draft's
+	// last-seen time. Each time only moves forward, so a late report can't undo a newer one. The error wraps
+	// ErrNotFound when the session has no active draft, as when another session took its name while it rested.
+	RecordTurn(ctx context.Context, sessionID string, ended bool, at time.Time) error
 }
 
 // Roster is a named cast of members.
@@ -180,6 +188,9 @@ type Draft struct {
 	Task       string
 	DraftedAt  time.Time
 	LastSeenAt time.Time
+	// RestingSince is when the session finished its last turn, once it has been resting (see RestAfter); zero while
+	// it's working or was recently.
+	RestingSince time.Time
 	// RenamedFrom is the name this session was told before the server confirmed a different one (cloud mode only;
 	// see Cloud). "" once the session has been told the new name, or when the names never differed.
 	RenamedFrom string
@@ -198,6 +209,15 @@ func (d Draft) Display() string {
 // Key identifies this draft's agent.
 func (d Draft) Key() AgentKey {
 	return AgentKey{Roster: d.Roster, Member: d.Member, Copy: d.Copy}
+}
+
+// restingSince is when a session whose turn last started and ended at these times started resting, or zero.
+func restingSince(started, ended, now time.Time) time.Time {
+	// Times can be equal (SQLite keeps seconds): a start in the same second as the end counts as after it
+	if ended.IsZero() || !ended.After(started) || now.Sub(ended) < RestAfter {
+		return time.Time{}
+	}
+	return ended
 }
 
 // ParseExpiry parses a draft expiry in hours, days, or weeks ("48h", "7d", "2w").

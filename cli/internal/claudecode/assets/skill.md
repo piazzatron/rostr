@@ -14,7 +14,7 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 
 ## Who's running
 
-- `rostr list`: every roster, its drafted agents (name, task, repo, time since drafted), then its idle members.
+- `rostr list`: every roster, its working agents (name, task, repo, time since drafted), its resting ones (their session finished its turn a while ago), then its members on the bench.
 - `rostr list <roster>... --json`: the same as JSON.
 
 ## Your task
@@ -39,7 +39,7 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
   `rostr config auto-draft on|off`, `rostr config expiry 7d`.
 - `rostr edit <roster>` opens a full-screen editor in the terminal: ask the user to run it.
 - `rostr disband <roster> --yes` deletes a roster. Only run it when the user explicitly asks.
-- `rostr release <name>` frees a name held by a session that died.
+- `rostr bench <name>...` frees names held by sessions that died (`rostr bench all` frees every name).
 
 ## Rules
 

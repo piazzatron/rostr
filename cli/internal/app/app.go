@@ -68,7 +68,7 @@ func newRootCommand() *cobra.Command {
 		newUninstallCommand(),
 		newCloudCommand(),
 		newDraftCommand(),
-		newReleaseCommand(),
+		newBenchCommand(),
 		newTaskCommand(),
 		newConfigCommand(),
 		newHookCommand(),
@@ -120,7 +120,11 @@ func newCloudStore(key crypto.Key) (*store.Cloud, error) {
 	if err != nil {
 		return nil, err
 	}
-	cloud.MachineID = machineID()
+	// A cloud session's container is a machine that drafts once and is thrown away, so it gets no reservation, which
+	// would only hold a name for a day
+	if os.Getenv("CLAUDE_CODE_REMOTE") != "true" {
+		cloud.MachineID = machineID()
+	}
 	cloud.UseCache(paths.CloudCacheDir(), spawnConfirmDraft)
 	return cloud, nil
 }

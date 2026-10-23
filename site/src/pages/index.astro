@@ -77,7 +77,7 @@ const COMMAND_GROUP_CARDS = [
     href: "/cli#agent-commands",
     title: "🤖 Agent commands",
     description: "Your hooks run these for you. Draft by hand with /draft.",
-    commands: ["draft", "release", "task"],
+    commands: ["draft", "bench", "task"],
   },
 ];
 
@@ -123,7 +123,7 @@ const HERO_LIST_EXAMPLE = toTerminalText(
       ...roster.drafted.map(
         (member) => `${member.emoji} ${member.name.padEnd(8)} ${member.task.padEnd(30)} ${member.where.padEnd(13)} ${member.since}`,
       ),
-      `${ANSI_DIM}idle: ${roster.idle.join(", ")}${ANSI_RESET}`,
+      `${ANSI_DIM}bench: ${roster.idle.join(", ")}${ANSI_RESET}`,
     ]),
   ].join("\n"),
 );
@@ -163,7 +163,7 @@ const LIST_JSON_EXAMPLE = `{
 ---
 
 <Layout
-  title="rostr · Give your agents names"
+  title="rostr · give your agents names"
   description="rostr gives each coding agent a name from a roster you pick, so you remember who's doing what. Works with Claude Code, Codex, and terminal multiplexers."
 >
     <!-- Hero -->

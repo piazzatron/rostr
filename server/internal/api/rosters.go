@@ -121,7 +121,7 @@ func rosterDetails(ctx context.Context, q querier, ownerID string, r rosterRow) 
 		select
 		  coalesce((select default_roster_id = $2 from owners where id = $1), false),
 		  (select count(*) from drafts d join owners o on o.id = $1
-		   where d.roster_id = $2 and d.released_at is null and d.last_seen_at >= now() - o.draft_expiry),
+		   where d.roster_id = $2 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry),
 		  (select count(*) from project_links where roster_id = $2)`,
 		ownerID, r.ID).Scan(&resp.IsDefault, &resp.ActiveDrafts, &resp.LinkedProjects)
 	return resp, err
@@ -207,7 +207,7 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 		// An edit must keep every drafted member, under the same name
 		if keepDraftedMembers {
 			rows, err := tx.Query(r.Context(),
-				`select distinct member_name from drafts where roster_id = $1 and released_at is null order by 1`, roster.ID)
+				`select distinct member_name from drafts where roster_id = $1 and benched_at is null order by 1`, roster.ID)
 			if err != nil {
 				return err
 			}
@@ -251,7 +251,7 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var resp struct {
 		Name             string  `json:"name"`
-		ReleasedDrafts   int     `json:"releasedDrafts"`
+		BenchedDrafts    int     `json:"benchedDrafts"`
 		UnlinkedProjects int     `json:"unlinkedProjects"`
 		NewDefault       *string `json:"newDefault"`
 		OwnerDeleted     bool    `json:"ownerDeleted"`
@@ -265,7 +265,7 @@ func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, own
 		if err != nil {
 			return err
 		}
-		resp.Name, resp.ReleasedDrafts, resp.UnlinkedProjects = roster.Name, details.ActiveDrafts, details.LinkedProjects
+		resp.Name, resp.BenchedDrafts, resp.UnlinkedProjects = roster.Name, details.ActiveDrafts, details.LinkedProjects
 
 		// Deleting cascades to drafts and links, and clears the owner's default if it was this roster
 		if _, err := tx.Exec(r.Context(), `delete from rosters where id = $1`, roster.ID); err != nil {
@@ -308,6 +308,9 @@ type listedDraft struct {
 	Task      *string   `json:"task"`
 	Repo      *string   `json:"repo"`
 	DraftedAt time.Time `json:"draftedAt"`
+	// RestingSince is when the agent's session finished its last turn, once it has been resting (15 minutes); null
+	// while it's working or was recently
+	RestingSince *time.Time `json:"restingSince"`
 }
 
 type idleMember struct {
@@ -348,9 +351,9 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 
 	// Active drafts, leaving out any past the owner's expiry that the next write will release
 	rows, err = q.Query(ctx, `
-		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at
+		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at, `+restingSince+`
 		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
-		where r.owner_id = $1 and d.released_at is null and d.last_seen_at >= now() - o.draft_expiry
+		where r.owner_id = $1 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry
 		order by d.drafted_at, d.id`, ownerID)
 	if err != nil {
 		return nil, err
@@ -360,10 +363,11 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 		copy                              int
 		task, repo                        []byte
 		draftedAt                         time.Time
+		restingSince                      *time.Time
 	}
 	drafts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (activeDraft, error) {
 		var d activeDraft
-		err := row.Scan(&d.rosterID, &d.memberName, &d.memberEmoji, &d.copy, &d.task, &d.repo, &d.draftedAt)
+		err := row.Scan(&d.rosterID, &d.memberName, &d.memberEmoji, &d.copy, &d.task, &d.repo, &d.draftedAt, &d.restingSince)
 		return d, err
 	})
 	if err != nil {
@@ -388,12 +392,13 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 				busy[nameKey(d.memberName)] = true
 			}
 			entry.Drafted = append(entry.Drafted, listedDraft{
-				Name:      displayName(d.memberName, d.copy),
-				Emoji:     d.memberEmoji,
-				Team:      roster.team(d.memberName),
-				Task:      encodeCiphertext(d.task),
-				Repo:      encodeCiphertext(d.repo),
-				DraftedAt: d.draftedAt,
+				Name:         displayName(d.memberName, d.copy),
+				Emoji:        d.memberEmoji,
+				Team:         roster.team(d.memberName),
+				Task:         encodeCiphertext(d.task),
+				Repo:         encodeCiphertext(d.repo),
+				DraftedAt:    d.draftedAt,
+				RestingSince: d.restingSince,
 			})
 		}
 		for _, team := range [][]member{roster.ATeam, roster.BTeam} {

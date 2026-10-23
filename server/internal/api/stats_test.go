@@ -20,10 +20,10 @@ func TestStatsCountEveryOwner(t *testing.T) {
 	draftSessionNamed(a, a.session("s1"))
 	draft(a, map[string]any{"session": a.session("s2"), "roster": "games"})
 	draft(a, map[string]any{"session": a.session("s3"), "roster": "games"})
-	call[draftResponse](a, "POST", "/v1/agents/release", map[string]any{"name": "Mario", "roster": "games"}, http.StatusOK)
+	call[draftResponse](a, "POST", "/v1/agents/bench", map[string]any{"name": "Mario", "roster": "games"}, http.StatusOK)
 	draftSessionNamed(b, b.session("s1"))
 	draftSessionNamed(b, b.session("s2"))
-	call[draftResponse](b, "POST", "/v1/agents/release", map[string]any{"session": b.session("s2")}, http.StatusOK)
+	call[draftResponse](b, "POST", "/v1/agents/bench", map[string]any{"session": b.session("s2")}, http.StatusOK)
 
 	after := stats(t)
 	if working, benched := after.Working-before.Working, after.Benched-before.Benched; working != 3 || benched != 5 {

@@ -166,9 +166,10 @@ func (s *Server) handleKeepAlive(w http.ResponseWriter, r *http.Request, ownerID
 //  3. the preferred member if they're in the cast, or the member the machine holds a reservation on: their name if
 //     it's free, else their lowest free copy, so a session announced as Ginny becomes Ginny 2 rather than someone
 //     else;
-//  4. otherwise the free member drafted least recently, A team first, then numbered copies, skipping members other
-//     machines hold reservations on and the ones this machine has announced to other sessions (avoid), unless only
-//     copies are left.
+//  4. otherwise the free member drafted least recently, A team first, skipping members other machines hold
+//     reservations on and the ones this machine has announced to other sessions (avoid);
+//  5. when no name is free, the member whose draft has rested longest, whose session loses the name;
+//  6. otherwise numbered copies, the same way as 4.
 func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (draftResponse, error) {
 	resp, found, err := reclaimSession(ctx, tx, ownerID, in)
 	if err != nil || found {
@@ -215,7 +216,56 @@ func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput)
 		busy[slot{nameKey(name), 1}] = true
 	}
 	m, copy := freeMember(roster, busy, last)
+
+	// Every name is taken: before handing out a copy, take the name of the member who has rested longest
+	if copy > 1 {
+		rested, ok, err := takeRestingMember(ctx, tx, roster)
+		if err != nil {
+			return draftResponse{}, err
+		}
+		if ok {
+			m, copy = rested, 1
+		}
+	}
 	return insertReservedDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
+}
+
+// restingSince is when a draft (aliased d) started resting, or null: its session's turn ended, after it last started,
+// at least 15 minutes ago.
+const restingSince = `case when d.turn_ended_at <= now() - interval '15 minutes'
+	and d.turn_ended_at > coalesce(d.turn_started_at, '-infinity') then d.turn_ended_at end`
+
+// takeRestingMember releases the roster's longest-resting draft of a member's own name (copy 1) whose member is still
+// in the cast, and returns that member. ok is false when none is resting.
+func takeRestingMember(ctx context.Context, tx pgx.Tx, roster rosterRow) (member, bool, error) {
+	rows, err := tx.Query(ctx, `
+		select d.id, d.member_name from drafts d
+		where d.roster_id = $1 and d.copy = 1 and d.benched_at is null and (`+restingSince+`) is not null
+		order by d.turn_ended_at, d.id`, roster.ID)
+	if err != nil {
+		return member{}, false, err
+	}
+	type resting struct {
+		id   int64
+		name string
+	}
+	drafts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (resting, error) {
+		var d resting
+		err := row.Scan(&d.id, &d.name)
+		return d, err
+	})
+	if err != nil {
+		return member{}, false, err
+	}
+	for _, d := range drafts {
+		m, _, inCast := roster.findMember(d.name)
+		if !inCast {
+			continue
+		}
+		_, err := tx.Exec(ctx, `update drafts set benched_at = now() where id = $1`, d.id)
+		return m, err == nil, err
+	}
+	return member{}, false, nil
 }
 
 // insertReservedDraft inserts a draft and drops the reservations on its member's name, now taken.
@@ -237,7 +287,7 @@ func reclaimSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInpu
 	err := tx.QueryRow(ctx, `
 		update drafts d set last_seen_at = now(), task = coalesce($3, d.task)
 		from rosters r
-		where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.released_at is null
+		where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.benched_at is null
 		returning d.id`, ownerID, in.session, in.task).Scan(&id)
 	if err == nil {
 		resp, err := loadDraft(ctx, tx, id)
@@ -327,7 +377,7 @@ type slot struct {
 }
 
 func busySlots(ctx context.Context, tx pgx.Tx, rosterID string) (map[slot]bool, error) {
-	rows, err := tx.Query(ctx, `select member_name, copy from drafts where roster_id = $1 and released_at is null`, rosterID)
+	rows, err := tx.Query(ctx, `select member_name, copy from drafts where roster_id = $1 and benched_at is null`, rosterID)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +483,7 @@ func findTargetDraftID(ctx context.Context, tx pgx.Tx, ownerID string, target ag
 		var id int64
 		err := tx.QueryRow(ctx, `
 			select d.id from drafts d join rosters r on r.id = d.roster_id
-			where r.owner_id = $1 and d.session_id = $2 and d.released_at is null`, ownerID, *target.Session).Scan(&id)
+			where r.owner_id = $1 and d.session_id = $2 and d.benched_at is null`, ownerID, *target.Session).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, errNotDrafted
 		}
@@ -451,7 +501,7 @@ func findTargetDraftID(ctx context.Context, tx pgx.Tx, ownerID string, target ag
 	}
 	rows, err := tx.Query(ctx, `
 		select d.id, r.name, d.member_name, d.copy from drafts d join rosters r on r.id = d.roster_id
-		where r.owner_id = $1 and d.released_at is null and ($2::uuid is null or r.id = $2)
+		where r.owner_id = $1 and d.benched_at is null and ($2::uuid is null or r.id = $2)
 		order by r.created_at, r.name`, ownerID, rosterID)
 	if err != nil {
 		return 0, err
@@ -494,8 +544,8 @@ func findTargetDraftID(ctx context.Context, tx pgx.Tx, ownerID string, target ag
 	}
 }
 
-// handleRelease frees a session's member, or a member by name (the manual fix for a name stuck by a dead session).
-func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, ownerID string) error {
+// handleBench frees a session's member, or a member by name (the manual fix for a name stuck by a dead session).
+func (s *Server) handleBench(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var req agentTarget
 	if err := decodeJSON(w, r, &req); err != nil {
 		return err
@@ -510,7 +560,7 @@ func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, ownerID s
 		if err != nil {
 			return draftResponse{}, err
 		}
-		if _, err := tx.Exec(r.Context(), `update drafts set released_at = now() where id = $1`, id); err != nil {
+		if _, err := tx.Exec(r.Context(), `update drafts set benched_at = now() where id = $1`, id); err != nil {
 			return draftResponse{}, err
 		}
 		return loadDraft(r.Context(), tx, id)
@@ -561,12 +611,52 @@ func (s *Server) handleSetTask(w http.ResponseWriter, r *http.Request, ownerID s
 	return nil
 }
 
+// handleTurn records that the session's turn started or ended, at the client's time but never later than now, and
+// bumps the draft's last-seen time. Each time only moves forward, so a report that arrives late can't undo a newer one.
+func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request, ownerID string) error {
+	var req struct {
+		Session string    `json:"session"`
+		Ended   bool      `json:"ended"`
+		At      time.Time `json:"at"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		return err
+	}
+	if err := validateSession(req.Session); err != nil {
+		return err
+	}
+	if req.At.IsZero() {
+		return invalidRequest("at is required.")
+	}
+
+	column := "turn_started_at"
+	if req.Ended {
+		column = "turn_ended_at"
+	}
+	err := s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(r.Context(), `
+			update drafts d set `+column+` = greatest(d.`+column+`, least($3::timestamptz, now())), last_seen_at = now()
+			from rosters r
+			where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.benched_at is null`,
+			ownerID, req.Session, req.At)
+		if err == nil && tag.RowsAffected() == 0 {
+			return errNotDrafted
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 // handleGetSession returns the session's active draft, without bumping it.
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	_, resp, err := scanDraft(s.db.QueryRow(r.Context(), `
 		select `+draftColumns+`
 		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
-		where r.owner_id = $1 and d.session_id = $2 and d.released_at is null
+		where r.owner_id = $1 and d.session_id = $2 and d.benched_at is null
 		  and d.last_seen_at >= now() - o.draft_expiry`, ownerID, r.PathValue("session")))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errNotDrafted

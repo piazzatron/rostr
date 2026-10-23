@@ -1,0 +1,43 @@
+name: Roster submission
+description: Suggest a roster for the presets
+title: "Roster submission: "
+labels: ["roster-submission"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Roster name
+      placeholder: The Fellowship
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Where it's from
+      description: The book, show, team, or field the members come from.
+      placeholder: The Lord of the Rings
+    validations:
+      required: true
+  - type: textarea
+    id: a-team
+    attributes:
+      label: A team
+      description: The six members drafted first, one per line, each with an emoji.
+      placeholder: |
+        🧙 Gandalf
+        💍 Frodo
+        🌱 Samwise
+        👑 Aragorn
+        🏹 Legolas
+        🪓 Gimli
+    validations:
+      required: true
+  - type: textarea
+    id: b-team
+    attributes:
+      label: B team
+      description: Everyone else, one per line, each with an emoji.
+      placeholder: |
+        🛡️ Boromir
+        🍺 Merry
+        🍄 Pippin

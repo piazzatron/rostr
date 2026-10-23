@@ -73,7 +73,7 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 | Command | What it does |
 |---|---|
 | `rostr draft` | Draft the next free member for this session, A team first |
-| `rostr release [<name>]` | Send this session's agent, or a named one, back to the bench |
+| `rostr bench [<name>... \| all]` | Send this session's agent, named ones, or all of them back to the bench |
 | `rostr task [<name>] <description>` | Set what an agent is working on |
 
 **Settings**
