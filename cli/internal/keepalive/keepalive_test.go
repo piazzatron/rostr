@@ -43,3 +43,24 @@ func TestSessionIDsCantEscapeTheDirectory(t *testing.T) {
 		t.Fatalf("got %v", entries)
 	}
 }
+
+func TestForgetTurnEndKeepsANewerOne(t *testing.T) {
+	dir := t.TempDir()
+	first := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	if err := SaveTurnEnd(dir, "s1", TurnEnd{At: first, Display: "Ada"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A newer turn ended before the report for the first one finished
+	if err := SaveTurnEnd(dir, "s1", TurnEnd{At: first.Add(time.Minute), Display: "Ada"}); err != nil {
+		t.Fatal(err)
+	}
+	ForgetTurnEnd(dir, "s1", first)
+	if end, ok := LoadTurnEnd(dir, "s1"); !ok || !end.At.Equal(first.Add(time.Minute)) {
+		t.Fatalf("removed the newer turn's end: %+v, %v", end, ok)
+	}
+	ForgetTurnEnd(dir, "s1", first.Add(time.Minute))
+	if _, ok := LoadTurnEnd(dir, "s1"); ok {
+		t.Fatal("kept the turn's end after its start was reported")
+	}
+}

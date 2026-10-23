@@ -77,7 +77,7 @@ Don't edit `~/.claude/settings.json` or other agent config by hand.
 rostr list
 ```
 
-It should show the new roster with everyone idle.
+It should show the new roster with everyone on the bench.
 
 ## 6. Tell the user what's next
 

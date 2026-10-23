@@ -2,7 +2,9 @@ package codex
 
 import (
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +31,8 @@ var hookEvents = []struct {
 }{
 	{"SessionStart", "session-start", 0},
 	{"UserPromptSubmit", "prompt", 0},
+	{"PostToolUse", "working", 0},
+	{"Stop", "turn-end", 0},
 	{"SessionEnd", "session-end", 3},
 }
 
@@ -39,6 +43,19 @@ func Detected(codexDir string) bool {
 	}
 	_, err := exec.LookPath("codex")
 	return err == nil
+}
+
+// Fingerprint identifies the hooks this version of rostr installs, so an upgrade that changes them can be noticed and
+// the hooks reinstalled.
+func Fingerprint() string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%v", hookEvents))
+	return hex.EncodeToString(sum[:8])
+}
+
+// Installed reports whether hooks.json in codexDir has any of rostr's hooks, current or not.
+func Installed(codexDir string) bool {
+	data, err := os.ReadFile(filepath.Join(codexDir, "hooks.json"))
+	return err == nil && strings.Contains(string(data), "rostr hook codex ")
 }
 
 // Install adds rostr's hooks to hooks.json in codexDir, and writes the rostr and rostr-draft skills to skillsDir

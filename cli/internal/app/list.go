@@ -20,11 +20,14 @@ type listJSON struct {
 	Rosters []rosterJSON `json:"rosters"`
 }
 
+// rosterJSON is one roster: its drafted agents, working first and then resting (their session finished its turn a
+// while ago, so a draft takes their name once no other is free), then the members on the bench.
 type rosterJSON struct {
 	Name      string             `json:"name"`
 	EmojiMode roster.EmojiMode   `json:"emojiMode"`
 	Drafted   []draftedAgentJSON `json:"drafted"`
-	Idle      []idleMemberJSON   `json:"idle"`
+	Resting   []draftedAgentJSON `json:"resting"`
+	Bench     []benchMemberJSON  `json:"bench"`
 }
 
 type draftedAgentJSON struct {
@@ -37,9 +40,11 @@ type draftedAgentJSON struct {
 	Session    string    `json:"session,omitempty"` // not in cloud mode, whose listing leaves sessions out
 	DraftedAt  time.Time `json:"draftedAt"`
 	LastSeenAt time.Time `json:"lastSeenAt,omitzero"` // likewise
+	// RestingSince is when the session finished its last turn, for a resting agent
+	RestingSince time.Time `json:"restingSince,omitzero"`
 }
 
-type idleMemberJSON struct {
+type benchMemberJSON struct {
 	Name    string `json:"name"`
 	Emoji   string `json:"emoji"`
 	Display string `json:"display"`
@@ -50,7 +55,7 @@ func newListCommand() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "list [<roster>...]",
-		Short: "Show who's drafted and what they're working on, and who's idle",
+		Short: "Show who's drafted and what they're working on, who's resting, and who's on the bench",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			st, err := openStore()
@@ -92,28 +97,34 @@ func newListCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, `print {"rosters": [{"name", "emojiMode", "drafted", "idle"}]}`)
+	cmd.Flags().BoolVar(&asJSON, "json", false, `print {"rosters": [{"name", "emojiMode", "drafted", "resting", "bench"}]}`)
 	return cmd
 }
 
 func buildListing(rosters []store.Roster, drafts []store.Draft) listJSON {
 	listing := listJSON{Rosters: []rosterJSON{}}
 	for _, r := range rosters {
-		entry := rosterJSON{Name: r.Name, EmojiMode: r.EmojiMode, Drafted: []draftedAgentJSON{}, Idle: []idleMemberJSON{}}
+		entry := rosterJSON{Name: r.Name, EmojiMode: r.EmojiMode, Drafted: []draftedAgentJSON{}, Resting: []draftedAgentJSON{},
+			Bench: []benchMemberJSON{}}
 		busy := map[string]bool{}
 		for _, d := range drafts {
 			if d.Roster != r.Name {
 				continue
 			}
 			busy[d.Member] = true
-			entry.Drafted = append(entry.Drafted, draftedAgentJSON{
+			agent := draftedAgentJSON{
 				Name: d.Name(), Emoji: d.Emoji, Display: d.Display(), Team: d.Team, Task: d.Task, Repo: d.Repo,
-				Session: d.SessionID, DraftedAt: d.DraftedAt, LastSeenAt: d.LastSeenAt,
-			})
+				Session: d.SessionID, DraftedAt: d.DraftedAt, LastSeenAt: d.LastSeenAt, RestingSince: d.RestingSince,
+			}
+			if d.RestingSince.IsZero() {
+				entry.Drafted = append(entry.Drafted, agent)
+			} else {
+				entry.Resting = append(entry.Resting, agent)
+			}
 		}
 		for _, m := range r.Members() {
 			if !busy[m.Name] {
-				entry.Idle = append(entry.Idle, idleMemberJSON{
+				entry.Bench = append(entry.Bench, benchMemberJSON{
 					Name: m.Name, Emoji: m.Emoji, Display: roster.Display(m.Emoji, m.Name, 1, r.EmojiMode), Team: r.Team(m.Name),
 				})
 			}
@@ -134,20 +145,29 @@ func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.
 		}
 		fmt.Fprintln(w, heading)
 
+		// Working agents with the time since they were drafted, then resting ones with the time they've rested
 		rows := make([][]string, len(r.Drafted))
 		for j, d := range r.Drafted {
 			rows[j] = []string{d.Display, orDash(d.Task), orDash(d.Repo), since(now.Sub(d.DraftedAt))}
 		}
 		writeTable(w, "  ", rows, styleBold, stylePlain, styleMuted, styleFaint)
+		if len(r.Resting) > 0 {
+			fmt.Fprintf(w, "  %s\n", styleMuted.Render("Resting:"))
+			rows = make([][]string, len(r.Resting))
+			for j, d := range r.Resting {
+				rows[j] = []string{d.Display, orDash(d.Task), orDash(d.Repo), since(now.Sub(d.RestingSince))}
+			}
+			writeTable(w, "  ", rows, stylePlain, styleMuted, styleFaint, styleFaint)
+		}
 
-		idle := make([]string, len(r.Idle))
-		for j, m := range r.Idle {
-			idle[j] = m.Display
+		bench := make([]string, len(r.Bench))
+		for j, m := range r.Bench {
+			bench[j] = m.Display
 		}
-		if len(idle) == 0 {
-			idle = []string{"none"}
+		if len(bench) == 0 {
+			bench = []string{"none"}
 		}
-		fmt.Fprintf(w, "  %s %s\n", styleMuted.Render("Idle:"), styleFaint.Render(strings.Join(idle, ", ")))
+		fmt.Fprintf(w, "  %s %s\n", styleMuted.Render("Bench:"), styleFaint.Render(strings.Join(bench, ", ")))
 	}
 }
 

@@ -157,8 +157,10 @@ Link a roster to the current project, or unlink it to go back to the default. `-
 rostr list [<roster>...] [--json]
 ```
 
-Shows every roster, headed `<name> roster`, with its drafted agents (display, task, repo, time since drafted) and
-then its idle members. Name one or more rosters to show just those. `--json` prints the same data as `{"rosters": [{"name", "emojiMode", "drafted", "idle"}]}`.
+Shows every roster, headed `<name> roster`, with its working agents (display, task, repo, time since drafted), then
+under `Resting:` the agents whose session finished its turn at least 15 minutes ago (with the time they've rested; see
+[Resting](#resting)), then its members on the bench. Name one or more rosters to show just those. `--json` prints the
+same data as `{"rosters": [{"name", "emojiMode", "drafted", "resting", "bench"}]}`.
 
 
 #### `rostr edit`
@@ -289,23 +291,37 @@ rostr cloud install
   person's own machine.
 ## Hooks, skill, and slash command
 
-### The hidden `rostr hook` command
+### The `rostr hook` command
 
-Installed hooks are one-liners that call a hidden command, which does all the work:
+Installed hooks are one-liners that call `rostr hook`, which does all the work. It shows in `rostr --help`, but only
+`rostr hook sync` is meant to be run by hand:
 
 ```
 rostr hook claude-code session-start
 rostr hook claude-code prompt
+rostr hook claude-code title-set
+rostr hook claude-code turn-end
 rostr hook claude-code session-end
 rostr hook claude-code draft          # run by /draft
 rostr hook codex session-start
 rostr hook codex prompt
+rostr hook codex turn-end
 rostr hook codex session-end
 rostr hook codex draft                # run by the $rostr-draft skill
+rostr hook sync                       # reinstalls the hooks after an upgrade (see Upgrading)
 ```
 
 Each reads the hook's JSON input from stdin, does the work, and prints the JSON reply the agent expects. The logic,
 and the exact text the agent is told, live in the CLI, so upgrading rostr changes them without reinstalling hooks.
+
+**Upgrading.** Only a change to which hooks rostr installs (a new event or matcher, a new permission) needs the
+agent's settings rewritten. Each install records a fingerprint of the hooks it wrote in
+`~/.cache/rostr/hooks/<agent>`. Every session start (Claude Code and Codex) compares the stamps with the binary's
+own fingerprints, which costs a file read, and when one differs it starts `rostr hook sync` in the background. That
+reinstalls the hooks for each agent that has rostr's hooks already, never adding them where there are none, and
+updates the stamps. Claude Code picks up the rewritten settings on its own, so after `brew upgrade` the first session
+that starts brings everything up to date. The install script runs `rostr hook sync` too. New Codex hooks still need
+approving in Codex's `/hooks`.
 
 ### Claude Code events
 
@@ -315,13 +331,15 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
 | `SessionStart`, source `resume` | Writes `ROSTR_SESSION`, drafts (asking for the session's old name back, see [Drafting](#drafting)), and tells the agent who it is |
 | `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member (see below) |
 | `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on). In cloud mode it drafts from the local cache and confirms with the API in the background, so Claude isn't kept waiting (see [drafting-latency.md](drafting-latency.md)) |
-| `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)); in cloud mode, tells the agent if the API confirmed a different name than it was told |
-| `PostToolUse`, a title tool or `Bash` | Records the summary in a `<name> · <summary>` title as the agent's task, and ends a turn that was a plain answer (below) |
+| `UserPromptSubmit`, every prompt | Records that the turn started, renaming the session if it lost its name while resting (see [Resting](#resting)); keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)); in cloud mode, tells the agent if the API confirmed a different name than it was told |
+| `PostToolUse`, any tool | Records that the turn started, if nothing has since the last turn ended: a turn can start without a prompt, when another `Stop` hook continues it or a background task wakes the agent (see [Resting](#resting)) |
+| `PostToolUse`, a title tool or `Bash` | Records the summary in a `<name> · <summary>` title as the agent's task, and ends a turn that was a plain answer (below), recording that the turn ended, since the `Stop` hook may not run after that |
+| `Stop` | Records that the turn ended (see [Resting](#resting)) |
 | `SessionEnd` | Releases the session's member |
 
 - Release uses `SessionEnd`, not `Stop` (`Stop` fires after every reply).
-- Names are only released at session end, or by the expiry backstop. Nothing releases mid-session, so the title
-  never needs to change once set.
+- Names are benched at session end, by the expiry backstop, or when a session that has been resting loses its name
+  to a new one (see [Resting](#resting)); the next prompt then renames the session and tells the agent.
 - Setting the title in Claude Code: see [claude-code-session-titles.md](claude-code-session-titles.md). The prototype
   is `cli/hooks/claude-code/`.
 - **Verify:** that compaction keeps the session ID, and that `/clear` starts a new one (firing `SessionEnd` for the
@@ -356,7 +374,9 @@ Findings behind this are in [integrations-research.md](integrations-research.md#
 | `SessionStart`, source `fork` | A fork is a new thread carrying its parent's history and name: drafts it its own member, names the thread, and tells the agent who it is |
 | `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member |
 | `UserPromptSubmit`, first prompt | The draft step (when auto-draft is on): drafts with the start of the prompt as the task, names the thread, and adds who the agent is through `additionalContext` |
-| `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour |
+| `UserPromptSubmit`, every prompt | Records that the turn started, renaming the thread if it lost its name while resting; keeps the draft alive, at most once an hour |
+| `PostToolUse` | Records that the turn started, if nothing has since the last turn ended |
+| `Stop` | Records that the turn ended (see [Resting](#resting)) |
 | `SessionEnd` | Releases the session's member |
 
 - **Synchronous draft step.** Codex has no `asyncRewake`, so the first prompt waits for the draft, and the agent
@@ -489,7 +509,8 @@ The same steps run locally and on the server (storage specifics in the storage d
    resumed session only gets its old name back if it's still free.
 4. **Otherwise** draft the free member who was drafted least recently (never drafted first, then roster order), A
    team first, so drafts cycle through the cast instead of repeating a favorite.
-5. **Everyone's busy:** draft a numbered copy, walking the roster again in the same order: `🧙 Gandalf 2`, then
+5. **Everyone's busy:** take the name of the member who has rested longest (see [Resting](#resting)).
+6. **No one's resting:** draft a numbered copy, walking the roster again in the same order: `🧙 Gandalf 2`, then
    `💍 Frodo 2`, and so on (then `3`s). A session always gets a name.
 
 Drafts are serialized per roster (a row lock on the server, a write transaction locally), so two sessions starting at
@@ -497,6 +518,31 @@ once can't get the same member. In cloud mode the hooks pick from a cached idle 
 server afterwards; two machines announcing the same member within the same moment is resolved by the second becoming
 `Ginny 2` on its next prompt. See [drafting-latency.md](drafting-latency.md).
 
+
+### Resting
+
+A session rests once it has finished its turn and nobody has sent it a prompt for 15 minutes. It keeps its name and
+shows under `Resting:` in `rostr list`, but when a new session finds no name free, it takes the name of the member who
+has rested longest instead of drafting a copy. Fanning out to many sessions reuses the names of ones you've left,
+while a session you come back to soon keeps its name. Sessions that never fire `SessionEnd` (a closed desktop session, an
+archived cloud session, a terminal left open) rest instead of holding a name until the expiry.
+
+- **Turns.** The `Stop` hook records that the turn ended, and the next prompt's hook, or the next tool call's
+  (`PostToolUse`), that the next one started, through `POST /v1/agents/turn` in cloud mode. A turn can start without
+  a prompt, when another `Stop` hook continues it or a background task wakes the agent, hence the tool calls. Reports
+  run in the background, so they add no wait, and each time only moves forward, so reports that arrive out of order
+  can't mark a working session as resting. A session whose `Stop` hook never fires never rests.
+- **Coming back.** The `Stop` hook also saves the turn's end and the session's name to
+  `~/.cache/rostr/turns/<session-id>`, which stays until a start has been reported, so a failed report is tried again
+  on the next prompt or tool call. Tool calls only report in the background, so they never wait on the API. So does a
+  prompt within 10 minutes of the turn's end (15, less a margin for a clock behind the server's), since nothing can have
+  happened. After that the prompt reports the start and waits for the answer; if the name was taken, the session gets
+  its old name back if it's free again, or else a new one, with its task. The title tool calls are left to the title
+  hook, which may end the turn at them. The agent is told
+  (`rostr renamed this session: you're … now, not …`), and the session is retitled: by the hook where the app shows a
+  hook's title, by the agent in Remote Control and cloud sessions.
+- A cloud session that resumes after its VM was paused or rebuilt runs `SessionStart` with source `resume`, which
+  drafts as usual, asking for its old name back.
 
 ### Keep-alive
 
