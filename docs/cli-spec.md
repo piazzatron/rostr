@@ -335,7 +335,10 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
 - With auto-draft off, only the draft step is skipped: `ROSTR_SESSION` is still written and `SessionEnd` still
   releases, so `/draft` works.
 - **Headless runs aren't drafted.** Scripts and tools that run `claude -p` fire the same hooks, but don't get a name.
-  How to detect them is still to be worked out (see `todo.md`).
+  Neither the hook input nor `CLAUDE_CODE_ENTRYPOINT` tells them apart (a `claude -p` an agent starts inherits its
+  session's entrypoint, and Remote Control sessions report `sdk-cli` too), so the hooks read how the Claude process
+  that ran them was started: `-p` or `--print` is headless, unless it's driven over stream-json (`--input-format
+  stream-json`, `--sdk-url`) or has a Remote Control bridge session. Anything unreadable counts as not headless.
 - In tmux or herdr, the hooks also label the session's pane (see [tmux and herdr](#tmux-and-herdr)).
 
 ### Codex
