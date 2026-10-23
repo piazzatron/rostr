@@ -95,8 +95,8 @@ func Install(claudeDir string) ([]string, error) {
 	return installed, nil
 }
 
-// Uninstall removes what Install added: rostr's hooks and permissions from settings.json, and the skill and /draft
-// command if they're still the ones rostr wrote (a /draft the user wrote themselves is left alone). It returns a
+// Uninstall removes what Install added: rostr's hooks and permissions from settings.json, the skill if it's unchanged,
+// and /draft if it's rostr's, from any version (a /draft the user wrote themselves is left alone). It returns a
 // description of each piece it removed.
 func Uninstall(claudeDir string) ([]string, error) {
 	var removed []string

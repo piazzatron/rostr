@@ -72,8 +72,8 @@ func newHookSyncCommand() *cobra.Command {
 	}
 }
 
-// syncHooks reinstalls each agent's hooks and skills where rostr's hooks are installed already, never adding them for an agent
-// that doesn't have them, and records the stamps. A failed install is logged and leaves its stamp out of date, so the
+// syncHooks reinstalls each agent's hooks and skills where rostr's hooks are installed already, never adding them for
+// an agent that doesn't have them, and records the stamps. A failed install is logged and leaves its stamp out of date, so the
 // next session start tries again.
 func syncHooks() error {
 	for _, set := range hookSets() {
