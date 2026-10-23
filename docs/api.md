@@ -140,7 +140,7 @@ sends CORS headers, so browsers can't call them.
 ```
 
 **Next**: what a machine needs to draft on its own before telling the server (see
-[drafting-latency.md](drafting-latency.md)). Every draft-changing response (`draft`, `keepalive`, `release`, `task`)
+[drafting-latency.md](drafting-latency.md)). Every draft-changing response (`draft`, `keepalive`, `bench`, `task`)
 carries it as `next`, and `GET /v1/next` returns it alone.
 
 ```json
@@ -173,7 +173,7 @@ A draft from the holding machine without `preferred` takes its reserved member.
 |---|---|---|
 | `GET /health` | none | Deploy and compose healthchecks |
 | `POST /v1/register` | none | `cloud on` (new setup), `assemble --cloud` |
-| `GET /v1/rosters` | bearer, **public** | `list`, finding an agent by name (`release`, `task`), dashboards |
+| `GET /v1/rosters` | bearer, **public** | `list`, finding an agent by name (`bench`, `task`), dashboards |
 | `POST /v1/rosters` | bearer | `assemble` (new roster) |
 | `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `list`, `edit`, `disband` confirmation, `config emoji` |
 | `PUT /v1/rosters/{name}` | bearer | `edit`, `config emoji` |
@@ -187,7 +187,7 @@ A draft from the holding machine without `preferred` takes its reserved member.
 | `DELETE /v1/links/{repoHash}` | bearer | `unlink` |
 | `POST /v1/agents/draft` | bearer | `draft`, the draft step, resume, `/draft` |
 | `POST /v1/agents/keepalive` | bearer | Prompt-hook keep-alive, compaction, resume with auto-draft off |
-| `POST /v1/agents/release` | bearer | `release`, `SessionEnd` |
+| `POST /v1/agents/bench` | bearer | `bench`, `SessionEnd` |
 | `POST /v1/agents/task` | bearer | `task` |
 | `GET /v1/sessions/{session}` | bearer | Looking up a session's draft without bumping it (`task` without a name) |
 | `GET /v1/next` | bearer | Refreshing the local next state after a write whose response doesn't carry it |
@@ -323,7 +323,7 @@ the default. If it was the owner's **last** roster, the owner is deleted too (se
 is left; the auth token gets `401 unauthorized` from then on, and registering it again starts a fresh, empty owner.
 
 ```json
-{ "name": "work", "releasedDrafts": 2, "unlinkedProjects": 1, "newDefault": "home", "ownerDeleted": false }
+{ "name": "work", "benchedDrafts": 2, "unlinkedProjects": 1, "newDefault": "home", "ownerDeleted": false }
 ```
 
 `newDefault` is set only when the default changed; it's `null` when the roster wasn't the default, or was the last
@@ -408,34 +408,34 @@ member when they're free. It never gives the session a different member, so the 
 compaction re-tell use it. **`200`** with the Draft plus `next`, or **`404 not_drafted`**, meaning the session stays
 unnamed.
 
-### `POST /v1/agents/release`
+### `POST /v1/agents/bench`
 
-By session (the `SessionEnd` hook, `release` without a name):
+By session (the `SessionEnd` hook, `bench` without a name):
 
 ```json
 { "session": "5f0c…" }
 ```
 
-Or by name, across all the owner's rosters, optionally narrowed with `roster` (`release <name> [--roster]`):
+Or by name, across all the owner's rosters, optionally narrowed with `roster` (`bench <name>... [--roster]`, once per name):
 
 ```json
 { "name": "gandalf 2", "roster": "work" }
 ```
 
 Send exactly one of `session` and `name`. A name matches the drafted display name (`Gandalf`, or `Gandalf 2` for a
-copy), ignoring case and accents. **`200`** with the released Draft plus `next`. Errors: `400`, `404 not_drafted` (nothing to
-release, for example after `disband`; the CLI treats it as done), `404 roster_not_found`, `409 ambiguous_name` (with
+copy), ignoring case and accents. **`200`** with the benched Draft plus `next`. Errors: `400`, `404 not_drafted` (nothing to
+bench, for example after `disband`; the CLI treats it as done), `404 roster_not_found`, `409 ambiguous_name` (with
 `rosters`).
 
 ### `POST /v1/agents/task`
 
-The same target as release (`session`, or `name` with optional `roster`), plus the required task:
+The same target as bench (`session`, or `name` with optional `roster`), plus the required task:
 
 ```json
 { "session": "5f0c…", "task": "🔒" }
 ```
 
-Sets the task and bumps last-seen. **`200`** with the Draft plus `next`. Errors: as for release.
+Sets the task and bumps last-seen. **`200`** with the Draft plus `next`. Errors: as for bench.
 
 ### `GET /v1/sessions/{session}`
 

@@ -56,11 +56,11 @@ create table drafts (
   task         text,
   drafted_at   text not null default (datetime('now')),
   last_seen_at text not null default (datetime('now')),
-  released_at  text
+  benched_at   text
 );
 
-create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
-create unique index drafts_active_session on drafts (session_id) where released_at is null;
+create unique index drafts_active_member on drafts (roster_id, member_name, copy) where benched_at is null;
+create unique index drafts_active_session on drafts (session_id) where benched_at is null;
 create index drafts_session on drafts (session_id, drafted_at desc);
 `
 
@@ -99,13 +99,19 @@ func (s *SQLite) migrate(ctx context.Context) error {
 		if err := tx.QueryRowContext(ctx, "pragma user_version").Scan(&version); err != nil {
 			return err
 		}
-		if version > 0 {
+		switch version {
+		case 0:
+			if _, err := tx.ExecContext(ctx, schema); err != nil {
+				return err
+			}
+		case 1:
+			if _, err := tx.ExecContext(ctx, "alter table drafts rename column released_at to benched_at"); err != nil {
+				return err
+			}
+		default:
 			return nil
 		}
-		if _, err := tx.ExecContext(ctx, schema); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, "pragma user_version = 1")
+		_, err := tx.ExecContext(ctx, "pragma user_version = 2")
 		return err
 	})
 }
@@ -197,14 +203,14 @@ func (s *SQLite) EditRoster(ctx context.Context, rosterName string, mode roster.
 
 		// Drafted members can't be renamed or removed: their sessions still go by that name
 		edited := Roster{ATeam: aTeam, BTeam: bTeam}
-		active, err := queryDrafts(ctx, tx, "where d.roster_id = ? and d.released_at is null", r.id)
+		active, err := queryDrafts(ctx, tx, "where d.roster_id = ? and d.benched_at is null", r.id)
 		if err != nil {
 			return err
 		}
 		for _, d := range active {
 			if edited.Team(d.Member) == "" {
 				return fmt.Errorf("%s is drafted, so you can't rename or remove them. Wait for their session to end, "+
-					"or release them first: rostr release %q", d.Name(), d.Name())
+					"or release them first: rostr bench %q", d.Name(), d.Name())
 			}
 		}
 
@@ -235,7 +241,7 @@ func (s *SQLite) Usage(ctx context.Context, rosterName string) (Usage, error) {
 		if err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, "select count(*) from drafts where roster_id = ? and released_at is null",
+		if err := tx.QueryRowContext(ctx, "select count(*) from drafts where roster_id = ? and benched_at is null",
 			r.id).Scan(&usage.Drafted); err != nil {
 			return err
 		}
@@ -464,7 +470,7 @@ func (s *SQLite) SessionDraft(ctx context.Context, sessionID string) (*Draft, er
 		if err := s.expireStaleDrafts(ctx, tx); err != nil {
 			return err
 		}
-		active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.released_at is null", sessionID)
+		active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.benched_at is null", sessionID)
 		if len(active) > 0 {
 			out = &active[0].Draft
 		}
@@ -480,7 +486,7 @@ func (s *SQLite) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 			return err
 		}
 		active, err := queryDrafts(ctx, tx,
-			"where d.released_at is null order by r.created_at, r.id, d.drafted_at, d.id")
+			"where d.benched_at is null order by r.created_at, r.id, d.drafted_at, d.id")
 		for _, d := range active {
 			out = append(out, d.Draft)
 		}
@@ -489,25 +495,25 @@ func (s *SQLite) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 	return out, err
 }
 
-func (s *SQLite) Release(ctx context.Context, sessionID string) (*Draft, error) {
+func (s *SQLite) Bench(ctx context.Context, sessionID string) (*Draft, error) {
 	var out *Draft
 	err := s.write(ctx, func(tx *sql.Tx) error {
 		if err := s.expireStaleDrafts(ctx, tx); err != nil {
 			return err
 		}
-		active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.released_at is null", sessionID)
+		active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.benched_at is null", sessionID)
 		if err != nil || len(active) == 0 {
 			return err
 		}
 		out = &active[0].Draft
-		_, err = tx.ExecContext(ctx, "update drafts set released_at = ? where id = ?", s.nowText(), active[0].id)
+		_, err = tx.ExecContext(ctx, "update drafts set benched_at = ? where id = ?", s.nowText(), active[0].id)
 		return err
 	})
 	return out, err
 }
 
-func (s *SQLite) ReleaseAgent(ctx context.Context, agent AgentKey) (Draft, error) {
-	return s.updateAgent(ctx, agent, "update drafts set released_at = ? where id = ?", s.nowText())
+func (s *SQLite) BenchAgent(ctx context.Context, agent AgentKey) (Draft, error) {
+	return s.updateAgent(ctx, agent, "update drafts set benched_at = ? where id = ?", s.nowText())
 }
 
 func (s *SQLite) SetTask(ctx context.Context, agent AgentKey, task string) (Draft, error) {
@@ -524,7 +530,7 @@ func (s *SQLite) updateAgent(ctx context.Context, agent AgentKey, update string,
 			return err
 		}
 		active, err := queryDrafts(ctx, tx,
-			"where r.name = ? and d.member_name = ? and d.copy = ? and d.released_at is null",
+			"where r.name = ? and d.member_name = ? and d.copy = ? and d.benched_at is null",
 			agent.Roster, agent.Member, agent.Copy)
 		if err != nil {
 			return err
@@ -543,7 +549,7 @@ func (s *SQLite) updateAgent(ctx context.Context, agent AgentKey, update string,
 // its last member if they're still in the cast and free. It also returns the session's last draft, if any, when
 // nothing could be reclaimed.
 func (s *SQLite) reclaim(ctx context.Context, tx *sql.Tx, sessionID, task string) (*draftRow, *draftRow, error) {
-	active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.released_at is null", sessionID)
+	active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.benched_at is null", sessionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -574,7 +580,7 @@ func (s *SQLite) reclaim(ctx context.Context, tx *sql.Tx, sessionID, task string
 	}
 	var busy int
 	if err := tx.QueryRowContext(ctx,
-		"select count(*) from drafts where roster_id = ? and member_name = ? and copy = ? and released_at is null",
+		"select count(*) from drafts where roster_id = ? and member_name = ? and copy = ? and benched_at is null",
 		last.rosterID, last.Member, last.Copy).Scan(&busy); err != nil || busy > 0 {
 		return nil, &last, err
 	}
@@ -601,11 +607,11 @@ func (s *SQLite) expireStaleDrafts(ctx context.Context, tx *sql.Tx) error {
 
 	now := s.now().UTC()
 	if _, err := tx.ExecContext(ctx,
-		"update drafts set released_at = ? where released_at is null and last_seen_at < ?",
+		"update drafts set benched_at = ? where benched_at is null and last_seen_at < ?",
 		formatTime(now), formatTime(now.Add(-expiry))); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "delete from drafts where released_at is not null and released_at < ?",
+	_, err = tx.ExecContext(ctx, "delete from drafts where benched_at is not null and benched_at < ?",
 		formatTime(now.Add(-ReleasedRetention)))
 	return err
 }
@@ -680,7 +686,7 @@ func firstFreeMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Membe
 	}
 	busy := map[slot]bool{}
 	rows, err := tx.QueryContext(ctx,
-		"select member_name, copy from drafts where roster_id = ? and released_at is null", r.id)
+		"select member_name, copy from drafts where roster_id = ? and benched_at is null", r.id)
 	if err != nil {
 		return roster.Member{}, 0, err
 	}

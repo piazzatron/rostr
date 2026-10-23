@@ -139,14 +139,14 @@ Disbanded work. side is now your default roster`,
     commands: [
       {
         id: "draft",
-        heading: "draft / release",
+        heading: "draft / bench",
         badge: "⚙️ On session start and end",
-        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr release [<name>] [--session <id>]",
+        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr bench [<name>... | all] [--session <id>]",
         summary:
           "Draft the next free agent when a session starts, A team first, and send it back to the bench when the session ends. The same session always gets the same name back.",
         options: [
           { flag: "--task <description>", description: "What the agent is working on. Shown in rostr list." },
-          { flag: "--session <id>", description: "The session to draft or release for. The hooks pass this, and it defaults to ROSTR_SESSION." },
+          { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION." },
           { flag: "--json", description: "Print the drafted agent as JSON." },
         ],
         example: `$ rostr draft --task "Fix auth redirect loop"
@@ -155,8 +155,8 @@ Disbanded work. side is now your default roster`,
 $ rostr draft --json
 {"name": "Gandalf", "emoji": "🧙", "team": "A", "roster": "work", "display": "🧙 Gandalf"}
 
-$ rostr release gandalf
-🧙 Gandalf is back on the bench`,
+$ rostr bench gandalf
+Benched 🧙 Gandalf from the work roster.`,
       },
       {
         id: "task",

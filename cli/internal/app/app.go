@@ -68,7 +68,7 @@ func newRootCommand() *cobra.Command {
 		newUninstallCommand(),
 		newCloudCommand(),
 		newDraftCommand(),
-		newReleaseCommand(),
+		newBenchCommand(),
 		newTaskCommand(),
 		newConfigCommand(),
 		newHookCommand(),

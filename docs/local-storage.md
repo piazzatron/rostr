@@ -60,11 +60,11 @@ create table drafts (
   task         text,
   drafted_at   text not null default (datetime('now')),
   last_seen_at text not null default (datetime('now')),
-  released_at  text                        -- null while the agent is active
+  benched_at   text                        -- null while the agent is active
 );
 
-create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
-create unique index drafts_active_session on drafts (session_id) where released_at is null;
+create unique index drafts_active_member on drafts (roster_id, member_name, copy) where benched_at is null;
+create unique index drafts_active_session on drafts (session_id) where benched_at is null;
 create index drafts_session on drafts (session_id, drafted_at desc);
 ```
 

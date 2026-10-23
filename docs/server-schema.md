@@ -68,7 +68,7 @@ create table drafts (
   task         bytea,         -- AES-256-GCM ciphertext, encrypted on the user's machine; the server can't read it
   drafted_at   timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),  -- bumped by re-drafts, `rostr task`, and the hourly keep-alive
-  released_at  timestamptz    -- null while the agent is active
+  benched_at   timestamptz    -- null while the agent is active
 );
 
 -- A machine's next pick in a roster, held so no other machine drafts that member first (docs/api.md, Reservations).
@@ -83,14 +83,14 @@ create table reservations (
 
 -- A member can only be drafted once at a time, and a session can only hold one member at a time, across all of
 -- the owner's rosters.
-create unique index drafts_active_member on drafts (roster_id, member_name, copy) where released_at is null;
-create unique index drafts_active_session on drafts (owner_id, session_id) where released_at is null;
+create unique index drafts_active_member on drafts (roster_id, member_name, copy) where benched_at is null;
+create unique index drafts_active_session on drafts (owner_id, session_id) where benched_at is null;
 
 -- For resuming: find the member a session had before.
 create index drafts_session on drafts (session_id, drafted_at desc);
 
 -- For the cascade when a roster is disbanded, and pruning released drafts.
-create index drafts_roster on drafts (roster_id, released_at);
+create index drafts_roster on drafts (roster_id, benched_at);
 ```
 
 ## Drafting
@@ -119,7 +119,7 @@ The unique indexes back this up: if the logic ever gets it wrong, the insert fai
 
 ## Releasing
 
-`rostr release` (and the session-end hook) sets `released_at = now()` on the active draft.
+`rostr bench` (and the session-end hook) sets `benched_at = now()` on the active draft.
 
 ## Not in the schema
 
