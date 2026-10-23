@@ -20,7 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Config holds the server's rate limits and where it pushes live stats.
+// Config holds the server's rate limits and where it pushes live counts.
 type Config struct {
 	RegistrationsPerHour int    // per client IP
 	RequestsPerMinute    int    // per auth token
@@ -33,7 +33,7 @@ type Server struct {
 	db                  *pgxpool.Pool
 	registrationLimiter *rateLimiter
 	requestLimiter      *rateLimiter
-	live                *livePusher // nil when live stats are off
+	live                *livePusher // nil when live counts are off
 }
 
 // NewHandler returns the API's HTTP handler.
@@ -128,7 +128,7 @@ func (s *Server) authed(h ownerHandler) http.Handler {
 
 // withOwnerTx runs fn in a transaction holding the owner's row lock, so each owner's writes run one at a time. Before
 // fn runs, it releases the owner's drafts not seen within their draft expiry and deletes drafts released more than 7
-// days ago. This is the only cleanup; there's no background job. Once the transaction commits, it pushes live stats:
+// days ago. This is the only cleanup; there's no background job. Once the transaction commits, it pushes live counts:
 // nearly every owner write can change the counts, and pushes are coalesced.
 func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx.Tx) error) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {

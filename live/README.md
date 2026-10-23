@@ -2,7 +2,7 @@
 
 The Cloudflare Worker behind the home page's live "agents working / on the bench" line. One Durable Object holds the
 counts; the API server pushes new counts to it after writes, and it sends them to every open browser socket. The
-whole flow is in [docs/live-stats.md](../docs/live-stats.md).
+whole flow is in [docs/live-counts.md](../docs/live-counts.md).
 
 Routes:
 

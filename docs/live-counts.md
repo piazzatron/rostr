@@ -1,4 +1,4 @@
-# Live stats
+# Live counts
 
 The home page's live bar, "LIVE 128 agents drafted out of 1,530", updates as agents are drafted and released. It's
 pinned to the bottom of the screen, slides up once the visitor scrolls down, and crawls slowly across. The first
@@ -9,8 +9,8 @@ in `idle` from `GET /v1/stats`. The socket is the only way to get them; there's 
 ## Flow
 
 ```
-API server write ──▶ POST /update ──▶ Stats Durable Object ──▶ every open /ws socket
-   (Postgres)        (shared secret)   (stores the counts)       (browsers on getrostr.sh)
+API server write ──▶ POST /update ──▶ LiveCounts Durable Object ──▶ every open /ws socket
+   (Postgres)        (shared secret)   (stores the counts)            (browsers on getrostr.sh)
 ```
 
 1. **A write commits.** Every owner write (anything that runs in `withOwnerTx`: drafts, keep-alives, releases, task

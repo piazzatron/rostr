@@ -4,10 +4,14 @@ compatibility_date = "2026-08-01"
 routes = [{ pattern = "live.getrostr.sh", custom_domain = true }]
 
 [[durable_objects.bindings]]
-name = "STATS"
-class_name = "Stats"
+name = "COUNTS"
+class_name = "LiveCounts"
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Stats"]
 
+# The object was named Stats; renaming keeps its stored counts
+[[migrations]]
+tag = "v2"
+renamed_classes = [{ from = "Stats", to = "LiveCounts" }]
