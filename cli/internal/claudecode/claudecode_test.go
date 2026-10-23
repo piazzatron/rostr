@@ -161,6 +161,9 @@ func TestTitleInstruction(t *testing.T) {
 	if !strings.Contains(remote, "Make this call first, before you write anything") || strings.Contains(remote, "answer to the user first") {
 		t.Errorf("remote when: %s", remote)
 	}
+	if !(TitleWhere{ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{DesktopLocal: true, ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{}).TitlesFirst() {
+		t.Error("TitlesFirst")
+	}
 }
 
 func TestPlaceholderTask(t *testing.T) {

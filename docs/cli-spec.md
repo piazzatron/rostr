@@ -417,8 +417,8 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
    task. When Claude has written text and every tool call since that text was titling (any ToolSearch, a title
    tool, `rostr task`), the answer is finished, so the hook returns `continue: false` and the turn ends there:
    otherwise Claude would have to reply to the tool's result, and Claude Code doesn't let a turn end without visible
-   text, so it would repeat its answer. When the title call came first, the hook tells Claude to carry on and answer
-   the user without mentioning the rename.
+   text, so it would repeat its answer. When the title call came first, and always in Remote Control and cloud
+   sessions, the hook tells Claude to carry on and answer the user without mentioning the rename.
 
 On later prompts the prompt hook keeps the draft alive and retitles the session `🧙 Gandalf · <task>` whenever the task
 has changed. A session that already has a name is never treated as being on its first prompt.

@@ -220,6 +220,12 @@ func TitleInstruction(display, sessionID string, where TitleWhere) string {
 const TitleSetContext = "The session is titled; the user sees neither this call nor its result, so don't mention " +
 	"either. Carry on and answer the user."
 
+// TitlesFirst reports whether the agent makes its title call before its answer: in Remote Control and cloud sessions
+// (see TitleInstruction).
+func (w TitleWhere) TitlesFirst() bool {
+	return !w.DesktopLocal && w.ServerSessionID != ""
+}
+
 // IsTerminal reports whether the session has no title tool for its agent: it's neither a desktop Local session nor a
 // Remote Control or cloud one.
 func (w TitleWhere) IsTerminal() bool {
