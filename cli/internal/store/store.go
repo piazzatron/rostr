@@ -72,10 +72,10 @@ type Store interface {
 	SessionDraft(ctx context.Context, sessionID string) (*Draft, error)
 	// ActiveDrafts returns every active draft across all rosters.
 	ActiveDrafts(ctx context.Context) ([]Draft, error)
-	// Release frees the session's member, returning the released draft or nil if it had none.
-	Release(ctx context.Context, sessionID string) (*Draft, error)
-	// ReleaseAgent frees one drafted agent. The error wraps ErrNotFound if it isn't drafted.
-	ReleaseAgent(ctx context.Context, agent AgentKey) (Draft, error)
+	// Bench frees the session's member, returning the released draft or nil if it had none.
+	Bench(ctx context.Context, sessionID string) (*Draft, error)
+	// BenchAgent frees one drafted agent. The error wraps ErrNotFound if it isn't drafted.
+	BenchAgent(ctx context.Context, agent AgentKey) (Draft, error)
 	// SetTask sets a drafted agent's task and bumps its last-seen time.
 	SetTask(ctx context.Context, agent AgentKey, task string) (Draft, error)
 }

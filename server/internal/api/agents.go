@@ -237,7 +237,7 @@ func reclaimSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInpu
 	err := tx.QueryRow(ctx, `
 		update drafts d set last_seen_at = now(), task = coalesce($3, d.task)
 		from rosters r
-		where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.released_at is null
+		where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.benched_at is null
 		returning d.id`, ownerID, in.session, in.task).Scan(&id)
 	if err == nil {
 		resp, err := loadDraft(ctx, tx, id)
@@ -327,7 +327,7 @@ type slot struct {
 }
 
 func busySlots(ctx context.Context, tx pgx.Tx, rosterID string) (map[slot]bool, error) {
-	rows, err := tx.Query(ctx, `select member_name, copy from drafts where roster_id = $1 and released_at is null`, rosterID)
+	rows, err := tx.Query(ctx, `select member_name, copy from drafts where roster_id = $1 and benched_at is null`, rosterID)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +433,7 @@ func findTargetDraftID(ctx context.Context, tx pgx.Tx, ownerID string, target ag
 		var id int64
 		err := tx.QueryRow(ctx, `
 			select d.id from drafts d join rosters r on r.id = d.roster_id
-			where r.owner_id = $1 and d.session_id = $2 and d.released_at is null`, ownerID, *target.Session).Scan(&id)
+			where r.owner_id = $1 and d.session_id = $2 and d.benched_at is null`, ownerID, *target.Session).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, errNotDrafted
 		}
@@ -451,7 +451,7 @@ func findTargetDraftID(ctx context.Context, tx pgx.Tx, ownerID string, target ag
 	}
 	rows, err := tx.Query(ctx, `
 		select d.id, r.name, d.member_name, d.copy from drafts d join rosters r on r.id = d.roster_id
-		where r.owner_id = $1 and d.released_at is null and ($2::uuid is null or r.id = $2)
+		where r.owner_id = $1 and d.benched_at is null and ($2::uuid is null or r.id = $2)
 		order by r.created_at, r.name`, ownerID, rosterID)
 	if err != nil {
 		return 0, err
@@ -494,8 +494,8 @@ func findTargetDraftID(ctx context.Context, tx pgx.Tx, ownerID string, target ag
 	}
 }
 
-// handleRelease frees a session's member, or a member by name (the manual fix for a name stuck by a dead session).
-func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, ownerID string) error {
+// handleBench frees a session's member, or a member by name (the manual fix for a name stuck by a dead session).
+func (s *Server) handleBench(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var req agentTarget
 	if err := decodeJSON(w, r, &req); err != nil {
 		return err
@@ -510,7 +510,7 @@ func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, ownerID s
 		if err != nil {
 			return draftResponse{}, err
 		}
-		if _, err := tx.Exec(r.Context(), `update drafts set released_at = now() where id = $1`, id); err != nil {
+		if _, err := tx.Exec(r.Context(), `update drafts set benched_at = now() where id = $1`, id); err != nil {
 			return draftResponse{}, err
 		}
 		return loadDraft(r.Context(), tx, id)
@@ -566,7 +566,7 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request, ownerI
 	_, resp, err := scanDraft(s.db.QueryRow(r.Context(), `
 		select `+draftColumns+`
 		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
-		where r.owner_id = $1 and d.session_id = $2 and d.released_at is null
+		where r.owner_id = $1 and d.session_id = $2 and d.benched_at is null
 		  and d.last_seen_at >= now() - o.draft_expiry`, ownerID, r.PathValue("session")))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errNotDrafted

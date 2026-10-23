@@ -72,7 +72,7 @@ func (f *fakeRoster) respond(w http.ResponseWriter, r recordedRequest) {
 		}
 		f.busy["Gandalf"]++
 		json.NewEncoder(w).Encode(draft("Gandalf", f.busy["Gandalf"], session))
-	case "/v1/agents/release":
+	case "/v1/agents/bench":
 		json.NewEncoder(w).Encode(draft("Gandalf", 1, r.body["session"].(string)))
 	case "/v1/sessions/s-elsewhere":
 		json.NewEncoder(w).Encode(draft("Frodo", 1, "s-elsewhere"))
@@ -260,8 +260,8 @@ func TestSessionCacheFollowsTheServer(t *testing.T) {
 		t.Fatal("second read wasn't cached")
 	}
 
-	// Release forgets it, and an unknown session is asked for each time
-	if _, err := cloud.Release(ctx, "s-elsewhere"); err != nil {
+	// Bench forgets it, and an unknown session is asked for each time
+	if _, err := cloud.Bench(ctx, "s-elsewhere"); err != nil {
 		t.Fatal(err)
 	}
 	if d, err := cloud.SessionDraft(ctx, "s-elsewhere"); err != nil || api.count("/v1/sessions/s-elsewhere") != 2 || d == nil {

@@ -553,7 +553,7 @@ func TestTwoMachinesReserveDifferentNamesAndAStaleOneGetsACopy(t *testing.T) {
 		_, fr := d["Frodo"]
 		return ga && fr
 	})
-	b.with("ROSTR_SESSION=b0").ok("release")
+	b.with("ROSTR_SESSION=b0").ok("bench")
 
 	// A machine whose cache is stale (here: edited to still offer Gandalf, who a has since taken) announces a taken
 	// name; the server gives it Gandalf 2
@@ -677,17 +677,17 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 	m.fails("Gandalf is drafted in more than one roster (work, side); pass --roster", "task", "gandalf", "x")
 	m.ok("task", "GANDALF", "Review the PR", "--roster", "work")
-	if out := m.ok("release", "gandalf", "--roster", "side"); out != "Released 🧙 Gandalf from the side roster.\n" {
+	if out := m.ok("bench", "gandalf", "--roster", "side"); out != "Benched 🧙 Gandalf from the side roster.\n" {
 		t.Fatalf("release by name: %q", out)
 	}
-	m.fails(`no agent named "ada 2" is drafted`, "release", "ada 2")
+	m.fails(`no agent named "ada 2" is drafted`, "bench", "ada 2")
 	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "Review the PR" {
 		t.Fatalf("drafted: %v", drafted)
 	}
-	if out := m.with("ROSTR_SESSION=s2").ok("release"); out != "Released 🧙 Gandalf from the work roster.\n" {
+	if out := m.with("ROSTR_SESSION=s2").ok("bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
 		t.Fatalf("release by session: %q", out)
 	}
-	if out := m.with("ROSTR_SESSION=s2").ok("release"); out != "This session has no drafted agent.\n" {
+	if out := m.with("ROSTR_SESSION=s2").ok("bench"); out != "This session has no drafted agent.\n" {
 		t.Fatalf("release again: %q", out)
 	}
 
@@ -736,7 +736,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	if out := m.ok("disband", "play", "--yes"); out != "Disbanded the play roster. 🧮 Ada says bye.\nwork is your default roster now.\n" {
 		t.Fatalf("disband: %q", out)
 	}
-	if out := m.with("ROSTR_SESSION=s1").ok("release"); out != "This session has no drafted agent.\n" {
+	if out := m.with("ROSTR_SESSION=s1").ok("bench"); out != "This session has no drafted agent.\n" {
 		t.Fatalf("release after disband: %q", out)
 	}
 	m.ok("disband", "side", "--yes")

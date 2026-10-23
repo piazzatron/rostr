@@ -60,12 +60,11 @@ func newDraftCommand() *cobra.Command {
 	return cmd
 }
 
-func newReleaseCommand() *cobra.Command {
+func newBenchCommand() *cobra.Command {
 	var session, rosterFlag string
 	cmd := &cobra.Command{
-		Use:   "release [<name>]",
-		Short: "Send this session's agent, or a named one, back to the bench",
-		Args:  cobra.MaximumNArgs(1),
+		Use:   "bench [<name>... | all]",
+		Short: "Send this session's agent, named ones, or all of them back to the bench",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			out := cmd.OutOrStdout()
@@ -80,7 +79,7 @@ func newReleaseCommand() *cobra.Command {
 
 			// This session's agent
 			if len(args) == 0 {
-				d, err := st.Release(ctx, session)
+				d, err := st.Bench(ctx, session)
 				if err != nil {
 					return err
 				}
@@ -88,25 +87,42 @@ func newReleaseCommand() *cobra.Command {
 					fmt.Fprintln(out, "This session has no drafted agent.")
 					return nil
 				}
-				fmt.Fprintf(out, "Released %s from the %s roster.\n", d.Display(), d.Roster)
+				fmt.Fprintf(out, "Benched %s from the %s roster.\n", d.Display(), d.Roster)
 				return nil
 			}
 
-			// A named agent, searched across every roster
-			agent, err := findDraftedAgent(ctx, st, args[0], rosterFlag)
-			if err != nil {
-				return err
+			// Every drafted agent, or the named ones. Names are all looked up first, so a typo benches nobody.
+			var agents []store.Draft
+			if len(args) == 1 && args[0] == "all" {
+				if agents, err = draftedAgentsIn(ctx, st, rosterFlag); err != nil {
+					return err
+				}
+				if len(agents) == 0 {
+					fmt.Fprintln(out, "No agents are drafted.")
+					return nil
+				}
+			} else {
+				for _, name := range args {
+					agent, err := findDraftedAgent(ctx, st, name, rosterFlag)
+					if err != nil {
+						return err
+					}
+					agents = append(agents, agent)
+				}
 			}
-			d, err := st.ReleaseAgent(ctx, agent.Key())
-			if err != nil {
-				return err
+
+			for _, agent := range agents {
+				d, err := st.BenchAgent(ctx, agent.Key())
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(out, "Benched %s from the %s roster.\n", d.Display(), d.Roster)
 			}
-			fmt.Fprintf(out, "Released %s from the %s roster.\n", d.Display(), d.Roster)
 			return nil
 		},
 	}
 	sessionFlag(cmd, &session)
-	cmd.Flags().StringVar(&rosterFlag, "roster", "", "the roster the named agent is in, when more than one has them drafted")
+	cmd.Flags().StringVar(&rosterFlag, "roster", "", "only bench agents in this roster (needed when a name is drafted in more than one)")
 	return cmd
 }
 
@@ -199,4 +215,19 @@ func findDraftedAgent(ctx context.Context, st store.Store, name, rosterFlag stri
 		return store.Draft{}, err
 	}
 	return matches[picked], nil
+}
+
+// draftedAgentsIn returns every active draft, or only rosterFlag's.
+func draftedAgentsIn(ctx context.Context, st store.Store, rosterFlag string) ([]store.Draft, error) {
+	drafts, err := st.ActiveDrafts(ctx)
+	if err != nil || rosterFlag == "" {
+		return drafts, err
+	}
+	var inRoster []store.Draft
+	for _, d := range drafts {
+		if roster.NamesMatch(d.Roster, rosterFlag) {
+			inRoster = append(inRoster, d)
+		}
+	}
+	return inRoster, nil
 }

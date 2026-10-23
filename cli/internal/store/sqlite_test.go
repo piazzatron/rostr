@@ -75,9 +75,9 @@ func draft(t *testing.T, st Store, session, rosterName string) Draft {
 	return d
 }
 
-func release(t *testing.T, st Store, session string) {
+func bench(t *testing.T, st Store, session string) {
 	t.Helper()
-	if _, err := st.Release(ctx, session); err != nil {
+	if _, err := st.Bench(ctx, session); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -99,7 +99,7 @@ func TestDraftsATeamInOrderThenBTeam(t *testing.T) {
 	}
 
 	// A freed A-teamer is drafted before the next B-teamer
-	release(t, st, "s1")
+	bench(t, st, "s1")
 	if d := draft(t, st, "s-next", "work"); d.Name() != "Frodo" {
 		t.Errorf("got %s, want Frodo back before more of the B team", d.Name())
 	}
@@ -119,7 +119,7 @@ func TestDraftsNumberedCopiesWhenEveryoneIsBusy(t *testing.T) {
 	}
 
 	// The first free slot is reused, copies included
-	release(t, st, "s2")
+	bench(t, st, "s2")
 	if d := draft(t, st, "s-next", "small"); d.Name() != "Gandalf 2" || d.Copy != 2 {
 		t.Errorf("got %s, want Gandalf 2", d.Name())
 	}
@@ -158,8 +158,8 @@ func TestResumeGetsTheOldNameBackIfFree(t *testing.T) {
 	if _, err := st.Draft(ctx, DraftRequest{SessionID: "s2", Roster: "work", Repo: "acme/api", Task: "old task"}); err != nil {
 		t.Fatal(err)
 	}
-	release(t, st, "s1")
-	release(t, st, "s2")
+	bench(t, st, "s1")
+	bench(t, st, "s2")
 
 	// s2 had Frodo; Gandalf is the first free, but resume asks for Frodo back, with its repo and task
 	d := draft(t, st, "s2", "work")
@@ -174,9 +174,9 @@ func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.
 	createFellowship(t, st, "play")
 
 	draft(t, st, "s1", "work") // Gandalf
-	release(t, st, "s1")
+	bench(t, st, "s1")
 	draft(t, st, "s2", "work") // Frodo, never drafted
-	release(t, st, "s2")
+	bench(t, st, "s2")
 	draft(t, st, "s3", "work") // takes Gandalf, drafted longest ago
 
 	d := draft(t, st, "s1", "play")
@@ -201,13 +201,13 @@ func TestReclaimNeverDraftsANewMember(t *testing.T) {
 	}
 
 	// Released and free: reclaimed
-	release(t, st, "s1")
+	bench(t, st, "s1")
 	if d, _ := st.Reclaim(ctx, "s1"); d == nil || d.Name() != "Gandalf" {
 		t.Fatalf("got %v, want Gandalf reclaimed", d)
 	}
 
 	// Released and taken: nothing, rather than a different name
-	release(t, st, "s1")
+	bench(t, st, "s1")
 	draft(t, st, "s2", "work")
 	if d, _ := st.Reclaim(ctx, "s1"); d != nil {
 		t.Fatalf("got %s, want nothing", d.Name())
@@ -278,7 +278,7 @@ func TestExpiredSessionReclaimsItsNameIfFree(t *testing.T) {
 	}
 }
 
-func TestReleasedDraftsAreKeptForSevenDays(t *testing.T) {
+func TestBenchedDraftsAreKeptForSevenDays(t *testing.T) {
 	st, clock := openTestStore(t)
 	createFellowship(t, st, "work")
 	if err := st.SetExpiry(ctx, "4w"); err != nil {
@@ -286,12 +286,12 @@ func TestReleasedDraftsAreKeptForSevenDays(t *testing.T) {
 	}
 
 	draft(t, st, "s1", "work")
-	release(t, st, "s1")
+	bench(t, st, "s1")
 	clock.Advance(6 * 24 * time.Hour)
 	if d, _ := st.Reclaim(ctx, "s1"); d == nil {
 		t.Fatal("forgot the session's old name within 7 days")
 	}
-	release(t, st, "s1")
+	bench(t, st, "s1")
 	clock.Advance(8 * 24 * time.Hour)
 	if d, _ := st.Reclaim(ctx, "s1"); d != nil {
 		t.Fatalf("remembered %s past the 7-day retention", d.Name())
@@ -356,7 +356,7 @@ func TestReplaceCastWhileAgentsAreDrafted(t *testing.T) {
 	}
 
 	// Gandalf can still be released, and a resumed session doesn't get a member who's left the cast
-	if _, err := st.ReleaseAgent(ctx, active[0].Key()); err != nil {
+	if _, err := st.BenchAgent(ctx, active[0].Key()); err != nil {
 		t.Fatal(err)
 	}
 	if d, _ := st.Reclaim(ctx, "s1"); d != nil {
@@ -444,7 +444,7 @@ func TestDisband(t *testing.T) {
 	if d, _ := st.Reclaim(ctx, "s1"); d != nil {
 		t.Errorf("draft survived: %v", d)
 	}
-	if _, err := st.Release(ctx, "s2"); err != nil {
+	if _, err := st.Bench(ctx, "s2"); err != nil {
 		t.Errorf("release after disband: %v", err)
 	}
 
@@ -499,7 +499,7 @@ func TestLinks(t *testing.T) {
 	}
 }
 
-func TestSetTaskAndReleaseAgent(t *testing.T) {
+func TestSetTaskAndBenchAgent(t *testing.T) {
 	st, clock := openTestStore(t)
 	createFellowship(t, st, "work")
 	d := draft(t, st, "s1", "work")
@@ -513,10 +513,10 @@ func TestSetTaskAndReleaseAgent(t *testing.T) {
 		t.Errorf("task didn't bump last seen")
 	}
 
-	if _, err := st.ReleaseAgent(ctx, d.Key()); err != nil {
+	if _, err := st.BenchAgent(ctx, d.Key()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.ReleaseAgent(ctx, d.Key()); !errors.Is(err, ErrNotFound) {
+	if _, err := st.BenchAgent(ctx, d.Key()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("got %v, want ErrNotFound", err)
 	}
 }
@@ -633,5 +633,30 @@ func TestExportReadsTheWholeSetup(t *testing.T) {
 		setup.Settings.Expiry != "48h" || len(setup.Links) != 1 || setup.Links[0] != (ProjectLink{"acme/api", "play"}) ||
 		len(setup.Drafts) != 1 || setup.Drafts[0].Member != "Mario" || setup.Drafts[0].Task != "Fix auth" {
 		t.Fatalf("export: %+v", setup)
+	}
+}
+
+func TestMigratesReleasedAtToBenchedAt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rostr.db")
+	st, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createFellowship(t, st, "work")
+	draft(t, st, "s1", "work")
+
+	// Turn it back into a version 1 database
+	if _, err := st.db.Exec("alter table drafts rename column benched_at to released_at; pragma user_version = 1"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	st, err = OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if d, err := st.Bench(ctx, "s1"); err != nil || d == nil {
+		t.Fatalf("bench after migrating: %v, %v", d, err)
 	}
 }
