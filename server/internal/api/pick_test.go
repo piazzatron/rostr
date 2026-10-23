@@ -1,34 +1,37 @@
 package api
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
-func TestFreeMemberIsRandomWithinTheATeamFirst(t *testing.T) {
+func TestFreeMemberCyclesThroughTheATeamFirst(t *testing.T) {
 	roster := rosterRow{
 		ATeam: []member{{Name: "Gandalf"}, {Name: "Frodo"}, {Name: "Samwise"}},
 		BTeam: []member{{Name: "Boromir"}, {Name: "Merry"}},
 	}
 	busy := map[slot]bool{{nameKey("Frodo"), 1}: true}
+	day := func(n int) time.Time { return time.Date(2026, 10, n, 0, 0, 0, 0, time.UTC) }
 
-	// Any free A-teamer can come up; a busy one never does
-	seen := map[string]bool{}
-	for i := 0; i < 2; i++ {
-		m, copy := freeMember(roster, busy, func(n int) int { return i % n })
-		seen[m.Name] = true
-		if copy != 1 || m.Name == "Frodo" {
-			t.Fatalf("picked %s copy %d", m.Name, copy)
-		}
+	// Never drafted beats drafted; among the drafted, the longest ago; never a busy one
+	last := map[string]time.Time{nameKey("Gandalf"): day(3), nameKey("Samwise"): day(1)}
+	if m, copy := freeMember(roster, busy, last); m.Name != "Samwise" || copy != 1 {
+		t.Fatalf("least recent: %s copy %d", m.Name, copy)
 	}
-	if !seen["Gandalf"] || !seen["Samwise"] {
-		t.Fatalf("picked only %v", seen)
+	if m, _ := freeMember(roster, busy, map[string]time.Time{nameKey("Gandalf"): day(3)}); m.Name != "Samwise" {
+		t.Fatalf("never drafted: %s", m.Name)
+	}
+	if m, _ := freeMember(roster, busy, nil); m.Name != "Gandalf" {
+		t.Fatalf("ties keep roster order: %s", m.Name)
 	}
 
-	// The B team only once the A team is full, then copies
+	// The B team only once the A team is full, then copies, by the same rule
 	busy[slot{nameKey("Gandalf"), 1}], busy[slot{nameKey("Samwise"), 1}] = true, true
-	if m, copy := freeMember(roster, busy, func(n int) int { return n - 1 }); m.Name != "Merry" || copy != 1 {
+	if m, copy := freeMember(roster, busy, map[string]time.Time{nameKey("Boromir"): day(2)}); m.Name != "Merry" || copy != 1 {
 		t.Fatalf("B team: %s copy %d", m.Name, copy)
 	}
 	busy[slot{nameKey("Boromir"), 1}], busy[slot{nameKey("Merry"), 1}] = true, true
-	if m, copy := freeMember(roster, busy, func(int) int { return 0 }); m.Name != "Gandalf" || copy != 2 {
+	if m, copy := freeMember(roster, busy, last); m.Name != "Frodo" || copy != 2 {
 		t.Fatalf("copies: %s copy %d", m.Name, copy)
 	}
 }

@@ -26,9 +26,6 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	// Predictable drafts: always the first free member, in roster order
-	pickIndex = func(int) int { return 0 }
-
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		fmt.Fprintln(os.Stderr, "TEST_DATABASE_URL is not set. Start Postgres with `docker compose up -d postgres`; see server/README.md.")
@@ -58,6 +55,12 @@ type client struct {
 	t       *testing.T
 	handler http.Handler
 	token   string
+	machine string // sent as X-Rostr-Machine when set
+}
+
+// onMachine is the same owner calling from a machine, which holds reservations.
+func (c *client) onMachine(machine string) *client {
+	return &client{t: c.t, handler: c.handler, token: c.token, machine: machine}
 }
 
 func newToken() string {
@@ -91,6 +94,9 @@ func (c *client) do(method, path string, body any) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, reader)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if c.machine != "" {
+		req.Header.Set("X-Rostr-Machine", c.machine)
 	}
 	rec := httptest.NewRecorder()
 	c.handler.ServeHTTP(rec, req)

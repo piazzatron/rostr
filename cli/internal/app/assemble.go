@@ -205,11 +205,17 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	} else {
 		fmt.Fprintf(out, "Use it for a project with `rostr link %s`.\n", created.Name)
 	}
+	var tools []string
 	if len(installed) > 0 {
-		fmt.Fprintf(out, "Installed for Claude Code: %s.\n", strings.Join(installed, ", "))
+		tools = append(tools, "Claude Code")
 	}
 	if len(installedCodex) > 0 {
-		fmt.Fprintf(out, "Installed for Codex: %s.\n", strings.Join(installedCodex, ", "))
+		tools = append(tools, "Codex")
+	}
+	if len(tools) > 0 {
+		fmt.Fprintf(out, "Hooks installed for %s.\n", strings.Join(tools, " and "))
+	}
+	if len(installedCodex) > 0 {
 		fmt.Fprintln(out, "Codex only runs hooks you've approved: open /hooks in Codex and trust rostr's.")
 	}
 	return nil
@@ -281,12 +287,10 @@ const (
 	stepLink
 	stepWhere
 	stepAutoDraft
-	stepConfirm
 )
 
 var assembleSteps = []assembleStep{
 	stepAction, stepPickRoster, stepBuild, stepPreset, stepNames, stepName, stepEmoji, stepLink, stepWhere, stepAutoDraft,
-	stepConfirm,
 }
 
 // assembleSetup is what the wizard starts from: the rosters there are, and the flags and argument given.
@@ -318,7 +322,6 @@ type assembleFlow struct {
 	cloud       bool
 	autoDraft   bool
 	link        bool
-	confirmed   bool
 }
 
 func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
@@ -329,7 +332,6 @@ func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
 		emoji:         roster.EmojiOn,
 		autoDraft:     true,
 		link:          true,
-		confirmed:     true,
 	}
 	var err error
 	if !f.asks(stepBuild) {
@@ -378,7 +380,7 @@ func (f *assembleFlow) shows(step assembleStep) bool {
 	switch step {
 	case stepPickRoster:
 		return f.action != actionNew
-	case stepBuild, stepConfirm:
+	case stepBuild:
 		return f.action != actionEdit
 	case stepPreset:
 		return f.action != actionEdit && f.usePreset
@@ -401,19 +403,13 @@ func (f *assembleFlow) visibleSteps() []assembleStep {
 	return steps
 }
 
-// ask runs the wizard, if the flags leave anything to ask. Nothing is saved until its last step is confirmed.
+// ask runs the wizard, if the flags leave anything to ask. Nothing is saved until its last step is answered.
 func (f *assembleFlow) ask(ctx context.Context, st store.Store) error {
-	if !slices.ContainsFunc(assembleSteps, func(step assembleStep) bool { return step != stepConfirm && f.asks(step) }) {
+	if !slices.ContainsFunc(assembleSteps, f.asks) {
 		return nil
 	}
 	s, steps := f.screen(ctx, st)
-	if err := s.run(steps); err != nil {
-		return err
-	}
-	if !f.confirmed {
-		return errCancelled
-	}
-	return nil
+	return s.run(steps)
 }
 
 // screen builds the wizard: a field for each step it can ask, the preset preview beside the preset picker, and the
@@ -469,11 +465,10 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 	autoDraft := huh.NewConfirm().Title("Draft names automatically in new sessions, or manually assign with /draft?").
 		Affirmative("Automatically").Negative("Manually with /draft").Value(&f.autoDraft)
 	link := huh.NewConfirm().Affirmative("Yes, link it").Negative("No").Value(&f.link)
-	confirm := huh.NewConfirm().Value(&f.confirmed)
 
 	fields := map[assembleStep]huh.Field{
 		stepAction: action, stepPickRoster: pickRoster, stepBuild: build, stepPreset: preset, stepNames: names,
-		stepName: name, stepEmoji: emoji, stepLink: link, stepWhere: where, stepAutoDraft: autoDraft, stepConfirm: confirm,
+		stepName: name, stepEmoji: emoji, stepLink: link, stepWhere: where, stepAutoDraft: autoDraft,
 	}
 	var steps []screenStep
 	for _, step := range assembleSteps {
@@ -523,9 +518,6 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		case link:
 			link.Title(fmt.Sprintf("Use the %s roster for %s?", strings.TrimSpace(f.rosterName()), f.repo)).
 				Description("You're in this repo, so its sessions can draft from the new roster instead of your default.")
-		case confirm:
-			title, description := f.confirmation()
-			confirm.Title(title).Description(description)
 		}
 		return nil
 	}
@@ -559,45 +551,6 @@ func (f *assembleFlow) emojiOptions() []huh.Option[roster.EmojiMode] {
 		first = chosen.aTeam[0]
 	}
 	return emojiModeOptions(first)
-}
-
-// confirmation is the last step's question and its summary of the answers.
-func (f *assembleFlow) confirmation() (title, description string) {
-	castLabel := f.castLabel()
-	if f.action == actionReplace {
-		return fmt.Sprintf("Replace the %s roster's cast with %s?", f.roster, castLabel),
-			"Drafted agents keep their names until their sessions end."
-	}
-
-	parts := []string{castLabel, "emoji " + string(f.emoji)}
-	if len(f.existing) == 0 {
-		where := "this machine"
-		if f.inCloud || (f.asks(stepWhere) && f.cloud) {
-			where = "the cloud"
-		}
-		autoDraft := !f.opts.noAutoDraft
-		if f.asks(stepAutoDraft) {
-			autoDraft = f.autoDraft
-		}
-		parts = append(parts, where, "auto-draft "+onOff(autoDraft))
-	}
-	if f.repo != "" && ((f.asks(stepLink) && f.link) || (f.opts.link && len(f.existing) > 0)) {
-		parts = append(parts, "linked to "+f.repo)
-	}
-	return fmt.Sprintf("Assemble the %s roster?", strings.TrimSpace(f.rosterName())), strings.Join(parts, " · ")
-}
-
-// castLabel names the chosen cast: the preset, or the first few names.
-func (f *assembleFlow) castLabel() string {
-	chosen := f.chosenCast()
-	if p, ok := presets.ByID(chosen.presetID); ok {
-		return p.Emoji + " " + p.Name
-	}
-	members := append(append([]roster.Member{}, chosen.aTeam...), chosen.bTeam...)
-	if len(members) <= 3 {
-		return displayMembers(members, roster.EmojiOn)
-	}
-	return fmt.Sprintf("%s and %d more", displayMembers(members[:3], roster.EmojiOn), len(members)-3)
 }
 
 // presetPreview shows a preset's name and source, its A team, and its B team in grey.

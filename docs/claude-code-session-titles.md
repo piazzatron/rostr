@@ -204,6 +204,26 @@ and 2.1.304 for Local ones):
   Claude replying to the result and without anything visible. rostr does that only when every tool call in the turn
   was titling and Claude has written text. Claude Code writes an assistant message to the transcript once the message
   is complete, which can be after its first tool call ran, so the hook waits up to 0.5s for the call to appear.
+- **The name can't wait for the agent.** On a real first task, the title call comes after the agent's thinking, the
+  ToolSearch round trip, and its first tool calls, or after a whole plain answer: up to a minute or more. So Local
+  sessions get the first-prompt hook's `<name> · <start of the prompt>` title too (the app adopts it ~3s after the
+  prompt), at the cost of a third title: the app's summary, then that, then the agent's.
+- **Terminal sessions have no title tool,** and Claude Code skips its own summary once a hook has titled the
+  session (the generator runs only when there's no title yet), so asking the agent to run `rostr task` in its first
+  reply was the only summary route. In an interactive terminal that call races the transcript write: the message
+  holding the call is written only after the `PostToolUse` hook exits, so the end-turn check can't see the answer and
+  the agent answers twice (`claude -p` and the app write it before the hook). So the terminal summary now comes from
+  rostr: the first-prompt hook starts a background `claude -p --model haiku` run on the user's login (~5–8s, hooks
+  and settings off), saves the result as the task, and the next prompt's hook titles the session with it.
+- **The app's own summary can't be borrowed for the first-prompt title.** Measured on Oct 23 by a background probe
+  watching Claude Code's session registry (`~/.claude/sessions/<pid>.json`) and the app's session file every 100ms:
+  the hook's title was in the registry at +6ms (`nameSource: hook`); the app's summary never entered the registry
+  at all, and first became readable at +4.7s, when the app's session file was first written, with the hook's title
+  already adopted and the summary in `previousTitles`. Nothing a hook could wait for short of ~5s.
+- **The title call goes after the answer, always.** An earlier rule had tool-using replies title in their first
+  batch of calls, so the summary wouldn't wait on a long task; in practice the title changed before anything was
+  answered (Oct 23), which read wrong, and the name is instant from the hook anyway. The end-turn check accepts work
+  before the answer: it ends the turn when every tool call since the answer's text was titling.
 - **Measured:** a Local plain answer ("deepest lake") answered at +5.3s, the same as without titling, with the title
   at +11s and no second reply. With a tool-using first turn the title call went alongside `ls` and the turn carried
   on. A Remote Control session worked the same way.

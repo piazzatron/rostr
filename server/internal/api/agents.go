@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -51,22 +49,29 @@ var errNotDrafted = &apiError{http.StatusNotFound, "not_drafted", "No active dra
 
 var errNoRosters = &apiError{http.StatusNotFound, "no_rosters", "No rosters yet. Run `rostr assemble`.", nil}
 
-// draftInput is what drafting knows about a session. task and repo are ciphertext.
+// draftInput is what drafting knows about a session. task and repo are ciphertext. preferred is a member the
+// machine already announced to the session, drafted on its own from its copy of the idle list; avoid is the members
+// it has announced to other sessions but not confirmed yet.
 type draftInput struct {
-	session  string
-	roster   *string
-	repoHash *string
-	repo     []byte
-	task     []byte
+	session   string
+	roster    *string
+	repoHash  *string
+	repo      []byte
+	task      []byte
+	preferred *string
+	avoid     []string
+	machine   string
 }
 
 func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var req struct {
-		Session  string  `json:"session"`
-		Roster   *string `json:"roster"`
-		RepoHash *string `json:"repoHash"`
-		Repo     *string `json:"repo"`
-		Task     *string `json:"task"`
+		Session   string   `json:"session"`
+		Roster    *string  `json:"roster"`
+		RepoHash  *string  `json:"repoHash"`
+		Repo      *string  `json:"repo"`
+		Task      *string  `json:"task"`
+		Preferred *string  `json:"preferred"`
+		Avoid     []string `json:"avoid"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		return err
@@ -82,18 +87,46 @@ func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID str
 	if err != nil {
 		return err
 	}
+	if req.Preferred != nil {
+		if _, err := validateName("preferred", *req.Preferred); err != nil {
+			return err
+		}
+	}
+	if len(req.Avoid) > maxMembers {
+		return invalidRequest("avoid has too many names.")
+	}
 
-	var resp draftResponse
-	err = s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
-		var err error
-		resp, err = draftSession(r.Context(), tx, ownerID, draftInput{req.Session, req.Roster, repoHash, repo, task})
+	machine, err := machineID(r)
+	if err != nil {
 		return err
+	}
+	in := draftInput{req.Session, req.Roster, repoHash, repo, task, req.Preferred, req.Avoid, machine}
+	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
+		return draftSession(r.Context(), tx, ownerID, in)
 	})
 	if err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, resp)
 	return nil
+}
+
+// draftTx runs a draft-changing write in the owner's transaction, reserves the machine's next picks, and returns the
+// draft with the owner's next state.
+func (s *Server) draftTx(ctx context.Context, ownerID, machine string, fn func(tx pgx.Tx) (draftResponse, error)) (draftWithNext, error) {
+	var resp draftWithNext
+	err := s.withOwnerTx(ctx, ownerID, func(tx pgx.Tx) error {
+		var err error
+		if resp.draftResponse, err = fn(tx); err != nil {
+			return err
+		}
+		if err := reserveNext(ctx, tx, ownerID, machine); err != nil {
+			return err
+		}
+		resp.Next, err = loadNext(ctx, tx, ownerID, machine)
+		return err
+	})
+	return resp, err
 }
 
 // handleKeepAlive bumps the session's draft, or reclaims its last member if the draft expired and they're free. It
@@ -109,15 +142,16 @@ func (s *Server) handleKeepAlive(w http.ResponseWriter, r *http.Request, ownerID
 		return err
 	}
 
-	var resp draftResponse
-	err := s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
-		var found bool
-		var err error
-		resp, found, err = reclaimSession(r.Context(), tx, ownerID, draftInput{session: req.Session})
-		if err == nil && !found {
-			return errNotDrafted
-		}
+	machine, err := machineID(r)
+	if err != nil {
 		return err
+	}
+	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
+		resp, found, err := reclaimSession(r.Context(), tx, ownerID, draftInput{session: req.Session})
+		if err == nil && !found {
+			return resp, errNotDrafted
+		}
+		return resp, err
 	})
 	if err != nil {
 		return err
@@ -128,8 +162,13 @@ func (s *Server) handleKeepAlive(w http.ResponseWriter, r *http.Request, ownerID
 
 // draftSession gives the session a member. It runs inside withOwnerTx, which has already expired stale drafts:
 //  1. same session, same name, via reclaimSession;
-//  2. resume, also via reclaimSession;
-//  3. otherwise a random free member, A team first, then numbered copies.
+//  2. resume, also via reclaimSession, when the preferred member (if any) is who the session had;
+//  3. the preferred member if they're in the cast, or the member the machine holds a reservation on: their name if
+//     it's free, else their lowest free copy, so a session announced as Ginny becomes Ginny 2 rather than someone
+//     else;
+//  4. otherwise the free member drafted least recently, A team first, then numbered copies, skipping members other
+//     machines hold reservations on and the ones this machine has announced to other sessions (avoid), unless only
+//     copies are left.
 func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (draftResponse, error) {
 	resp, found, err := reclaimSession(ctx, tx, ownerID, in)
 	if err != nil || found {
@@ -144,8 +183,43 @@ func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput)
 	if err != nil {
 		return draftResponse{}, err
 	}
-	m, copy := freeMember(roster, busy, pickIndex)
-	return insertDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
+	last, err := lastDrafted(ctx, tx, roster.ID)
+	if err != nil {
+		return draftResponse{}, err
+	}
+	all, err := reservations(ctx, tx, ownerID)
+	if err != nil {
+		return draftResponse{}, err
+	}
+	reservedByOthers(all, roster.ID, in.machine, busy)
+	preferred := ownReservation(all, roster.ID, in.machine)
+	if in.preferred != nil {
+		preferred = *in.preferred
+	}
+	if preferred != "" {
+		if m, _, inCast := roster.findMember(preferred); inCast {
+			copy := 1
+			for busy[slot{nameKey(m.Name), copy}] {
+				copy++
+			}
+			return insertReservedDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
+		}
+	}
+	for _, name := range in.avoid {
+		busy[slot{nameKey(name), 1}] = true
+	}
+	m, copy := freeMember(roster, busy, last)
+	return insertReservedDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
+}
+
+// insertReservedDraft inserts a draft and drops the reservations on its member's name, now taken.
+func insertReservedDraft(ctx context.Context, tx pgx.Tx, d newDraft) (draftResponse, error) {
+	if d.copy == 1 {
+		if err := releaseReservations(ctx, tx, d.rosterID, d.member.Name); err != nil {
+			return draftResponse{}, err
+		}
+	}
+	return insertDraft(ctx, tx, d)
 }
 
 // reclaimSession returns the session's active draft in any of the owner's rosters, bumping its last-seen time (and
@@ -166,7 +240,6 @@ func reclaimSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInpu
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return draftResponse{}, false, err
 	}
-
 	// Resume: the session's most recent member, from the same roster
 	var prev struct {
 		rosterID, memberName string
@@ -185,6 +258,10 @@ func reclaimSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInpu
 	}
 	if err != nil {
 		return draftResponse{}, false, err
+	}
+	// A session told a preferred member resumes only if that's who it had; anyone else is drafted fresh
+	if in.preferred != nil && nameKey(*in.preferred) != nameKey(prev.memberName) {
+		return draftResponse{}, false, nil
 	}
 
 	roster, err := scanRoster(tx.QueryRow(ctx, `select `+rosterColumns+` from rosters r where r.id = $1`, prev.rosterID))
@@ -261,32 +338,53 @@ func busySlots(ctx context.Context, tx pgx.Tx, rosterID string) (map[slot]bool, 
 	return busy, err
 }
 
-// freeMember picks a random free copy-1 member, A team first, then the B team, then copy 2 the same way, and so on.
-// pick chooses an index among the free members; the cast is never empty.
-func freeMember(roster rosterRow, busy map[slot]bool, pick func(n int) int) (member, int) {
+// freeMember picks the free copy-1 member drafted least recently (never-drafted first, then roster order), A team
+// first, then the B team, then copy 2 the same way, and so on, so drafts cycle through the cast. The cast is never
+// empty.
+func freeMember(roster rosterRow, busy map[slot]bool, last map[string]time.Time) (member, int) {
 	for copy := 1; ; copy++ {
 		for _, team := range [][]member{roster.ATeam, roster.BTeam} {
-			var free []member
-			for _, m := range team {
-				if !busy[slot{nameKey(m.Name), copy}] {
-					free = append(free, m)
-				}
-			}
-			if len(free) > 0 {
-				return free[pick(len(free))], copy
+			if m, ok := leastRecentlyDrafted(team, func(m member) bool { return busy[slot{nameKey(m.Name), copy}] }, last); ok {
+				return m, copy
 			}
 		}
 	}
 }
 
-// pickIndex chooses which free member to draft: a random one, or always the first with ROSTR_DRAFT_PICK=first, which
-// tests set for predictable drafts.
-var pickIndex = func() func(int) int {
-	if os.Getenv("ROSTR_DRAFT_PICK") == "first" {
-		return func(int) int { return 0 }
+// leastRecentlyDrafted is the member not busy whose last draft is oldest; never drafted counts as oldest, and ties
+// keep roster order.
+func leastRecentlyDrafted(team []member, isBusy func(member) bool, last map[string]time.Time) (member, bool) {
+	best, found := member{}, false
+	var bestAt time.Time
+	for _, m := range team {
+		if isBusy(m) {
+			continue
+		}
+		at := last[nameKey(m.Name)]
+		if !found || at.Before(bestAt) {
+			best, bestAt, found = m, at, true
+		}
 	}
-	return rand.IntN
-}()
+	return best, found
+}
+
+// lastDrafted is when each of a roster's members was last drafted, by name key, for members drafted within the
+// 7-day retention of released drafts.
+func lastDrafted(ctx context.Context, q querier, rosterID string) (map[string]time.Time, error) {
+	rows, err := q.Query(ctx, `select member_name, max(drafted_at) from drafts where roster_id = $1 group by member_name`, rosterID)
+	if err != nil {
+		return nil, err
+	}
+	last := map[string]time.Time{}
+	_, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
+		var name string
+		var at time.Time
+		err := row.Scan(&name, &at)
+		last[nameKey(name)] = at
+		return struct{}{}, err
+	})
+	return last, err
+}
 
 type newDraft struct {
 	ownerID  string
@@ -397,17 +495,19 @@ func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, ownerID s
 		return err
 	}
 
-	var resp draftResponse
-	err := s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
+	machine, err := machineID(r)
+	if err != nil {
+		return err
+	}
+	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
 		id, err := findTargetDraftID(r.Context(), tx, ownerID, req)
 		if err != nil {
-			return err
+			return draftResponse{}, err
 		}
 		if _, err := tx.Exec(r.Context(), `update drafts set released_at = now() where id = $1`, id); err != nil {
-			return err
+			return draftResponse{}, err
 		}
-		resp, err = loadDraft(r.Context(), tx, id)
-		return err
+		return loadDraft(r.Context(), tx, id)
 	})
 	if err != nil {
 		return err
@@ -433,18 +533,20 @@ func (s *Server) handleSetTask(w http.ResponseWriter, r *http.Request, ownerID s
 		return err
 	}
 
-	var resp draftResponse
-	err = s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
+	machine, err := machineID(r)
+	if err != nil {
+		return err
+	}
+	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
 		id, err := findTargetDraftID(r.Context(), tx, ownerID, req.agentTarget)
 		if err != nil {
-			return err
+			return draftResponse{}, err
 		}
 		_, err = tx.Exec(r.Context(), `update drafts set task = $2, last_seen_at = now() where id = $1`, id, task)
 		if err != nil {
-			return err
+			return draftResponse{}, err
 		}
-		resp, err = loadDraft(r.Context(), tx, id)
-		return err
+		return loadDraft(r.Context(), tx, id)
 	})
 	if err != nil {
 		return err

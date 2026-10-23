@@ -363,16 +363,27 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatal("session start drafted")
 	}
 
-	// The first prompt drafts, tells the agent who it is and to record its task in its reply, and titles the session
+	// The first prompt drafts from the next state assemble cached, without waiting on the API, tells the agent who
+	// it is and to record its task in its reply, and titles the session; the server hears of the draft just after
+	if _, err := os.Stat(m.nextStatePath()); err != nil {
+		t.Fatalf("assemble didn't cache the next state: %v", err)
+	}
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
 	if r.code != 0 || !strings.Contains(r.stdout, `You're 🧙 Gandalf for this session`) || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
-		!strings.Contains(r.stdout, "run rostr task --session hs1") {
+		!strings.Contains(r.stdout, "rostr task --session hs1") {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
+	waitFor(t, "the draft to be confirmed", func() bool { return len(m.list().drafted()) == 1 })
 	l := m.list()
 	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Task != "Fix the flaky login test" || d[0].Repo != "acme/hooks" {
 		t.Fatalf("drafted: %+v", l)
+	}
+
+	// Later prompts answer from the session's cached draft; the title follows the task without a call
+	later := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"next","prompt_id":"p2","session_title":"🧙 Gandalf · Fix the flaky login test"}`, repo)
+	if r := hook("prompt", later); r.code != 0 || r.stdout != "" {
+		t.Fatalf("later prompt: %+v", r)
 	}
 
 	// The agent sets its task through ROSTR_SESSION; compaction re-tells the same name
@@ -389,9 +400,7 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatalf("still drafted after session end: %v", drafted)
 	}
 	expectIdentity("resume", hook("session-start", start("resume")))
-	if drafted := m.list().drafted(); drafted["Gandalf"] != "Deflake login test" {
-		t.Fatalf("resumed: %v", drafted)
-	}
+	waitFor(t, "the resumed draft to be confirmed", func() bool { return m.list().drafted()["Gandalf"] == "Deflake login test" })
 }
 
 func TestHooksWhenTheAPIIsDown(t *testing.T) {
@@ -435,16 +444,21 @@ func TestHooksWhenTheAPIIsDown(t *testing.T) {
 			return offline.with("CLAUDE_ENV_FILE="+envFile).run(repo, input, "hook", "claude-code", event)
 		}
 
-		// Every hook exits 0 quietly, within the 3-second timeout; session start still sets ROSTR_SESSION
-		for _, h := range []struct{ event, input string }{
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"startup"}`, session, repo)},
-			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo)},
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"resume"}`, session, repo)},
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"compact"}`, session, repo)},
-			{"session-end", fmt.Sprintf(`{"session_id":%q}`, session)},
+		// Every hook exits 0 within the 3-second timeout, and session start still sets ROSTR_SESSION. The first prompt
+		// names the session from the cached next state (its confirmation fails in the background), and resume re-tells
+		// that name from the session's cache; the hooks that need the server stay quiet
+		for _, h := range []struct {
+			event, input string
+			named        bool
+		}{
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"startup"}`, session, repo), false},
+			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo), true},
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"resume"}`, session, repo), true},
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"compact"}`, session, repo), false},
+			{"session-end", fmt.Sprintf(`{"session_id":%q}`, session), false},
 		} {
 			r := hook(h.event, h.input)
-			if r.code != 0 || r.stdout != "" || r.took > 5*time.Second {
+			if r.code != 0 || strings.Contains(r.stdout, "You're ") != h.named || r.took > 5*time.Second {
 				t.Fatalf("%s, %s: exit %d after %v, stdout %q, stderr %q", down.name, h.event, r.code, r.took, r.stdout, r.stderr)
 			}
 		}
@@ -509,6 +523,74 @@ func TestConcurrentDraftsNeverCollide(t *testing.T) {
 	}
 }
 
+func TestTwoMachinesReserveDifferentNamesAndAStaleOneGetsACopy(t *testing.T) {
+	t.Parallel()
+	a, b := newMachine(t), newMachine(t)
+	a.ok("assemble", "work", "--names", "🧙 Gandalf, 💍 Frodo, 🌱 Sam", "--cloud")
+	if out, code := b.joinWithKey(a.key()); code != 0 {
+		t.Fatalf("join: exit %d\n%s", code, out)
+	}
+	for _, m := range []*machine{a, b} {
+		if _, err := os.Stat(m.nextStatePath()); err != nil {
+			t.Fatalf("no cached next state: %v", err)
+		}
+	}
+	prompt := func(m *machine, session, id, title string) result {
+		return m.run(m.home, fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Hello there","prompt_id":%q,"session_title":%q}`,
+			session, m.home, id, title), "hook", "claude-code", "prompt")
+	}
+
+	// Each machine holds a different next pick, so their first sessions never announce the same name
+	if r := prompt(a, "a1", "p1", ""); !strings.Contains(r.stdout, "You're 🧙 Gandalf for this session") {
+		t.Fatalf("machine a: %+v", r)
+	}
+	if r := prompt(b, "b0", "p1", ""); !strings.Contains(r.stdout, "You're 💍 Frodo for this session") {
+		t.Fatalf("machine b: %+v", r)
+	}
+	waitFor(t, "both drafts", func() bool {
+		d := a.list().drafted()
+		_, ga := d["Gandalf"]
+		_, fr := d["Frodo"]
+		return ga && fr
+	})
+	b.with("ROSTR_SESSION=b0").ok("release")
+
+	// A machine whose cache is stale (here: edited to still offer Gandalf, who a has since taken) announces a taken
+	// name; the server gives it Gandalf 2
+	var stale map[string]any
+	data, _ := os.ReadFile(b.nextStatePath())
+	if err := json.Unmarshal(data, &stale); err != nil {
+		t.Fatal(err)
+	}
+	work := stale["rosters"].([]any)[0].(map[string]any)
+	work["reserved"] = "Gandalf"
+	work["idle"] = append([]any{map[string]any{"name": "Gandalf", "emoji": "🧙", "team": "A"}}, work["idle"].([]any)...)
+	data, _ = json.Marshal(stale)
+	if err := os.WriteFile(b.nextStatePath(), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := prompt(b, "b1", "p1", ""); !strings.Contains(r.stdout, "You're 🧙 Gandalf for this session") {
+		t.Fatalf("machine b, stale: %+v", r)
+	}
+	waitFor(t, "b's draft", func() bool { return b.list().drafted()["Gandalf 2"] != "" })
+
+	// On its next prompt, b's session is told its real name, once, and retitled
+	r := prompt(b, "b1", "p2", "🧙 Gandalf · Hello there")
+	if !strings.Contains(r.stdout, "you're 🧙 Gandalf 2 now, not 🧙 Gandalf") || !strings.Contains(r.stdout, `"sessionTitle":"🧙 Gandalf 2 · Hello there"`) {
+		t.Fatalf("rename: %+v", r)
+	}
+	if r := prompt(b, "b1", "p3", "🧙 Gandalf 2 · Hello there"); r.code != 0 || r.stdout != "" {
+		t.Fatalf("after the rename: %+v", r)
+	}
+	// Neither session has a second draft, and b's agent can set its task under the new name
+	if drafted := a.list().drafted(); len(drafted) != 2 {
+		t.Fatalf("drafted: %v", drafted)
+	}
+	if out := b.with("ROSTR_SESSION=b1").ok("task", "Greet"); out != "🧙 Gandalf 2 · Greet\n" {
+		t.Fatalf("task: %q", out)
+	}
+}
+
 func TestAssembleWizardCloudOption(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
@@ -522,7 +604,6 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"Where should rostr live?", keyDown},
 		{"The cloud", keyEnter},
 		{"Draft names automatically in new sessions", keyEnter},
-		{"Assemble the fellowship roster?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") {
 		t.Fatalf("wizard: exit %d\n%s", code, out)
@@ -546,7 +627,6 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", "hogwarts"},
 		{"hogwarts", keyEnter},
-		{"Replace the fellowship roster's cast with ⚡ Hogwarts?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Replaced the fellowship roster's cast") {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)

@@ -48,8 +48,8 @@ import Rostr from "../components/Rostr.astro";
         <dt><code>PostToolUse</code></dt>
         <dd>
           Runs after a title tool, or after the agent records its task in a terminal. Records the summary from the title as the agent's task, so <code>rostr list</code> shows
-          what everyone is doing. If the title call came with a plain answer, it ends the turn so Claude doesn't
-          have to reply to the tool's result.
+          what everyone is doing. Since the title call comes after the answer, it ends the turn there, so Claude
+          doesn't have to reply to the tool's result.
         </dd>
       </div>
       <div class="row">
@@ -107,8 +107,9 @@ import Rostr from "../components/Rostr.astro";
         <tr>
           <th scope="row">Terminal</th>
           <td>
-            The agent runs <code>rostr task "&lt;summary&gt;"</code>, and <Rostr />'s hook puts <span
-              class="session-title">&lt;name&gt; · &lt;summary&gt;</span> in the terminal title on the next prompt
+            There's no title tool, so the agent isn't asked. <Rostr /> summarizes your first prompt itself in the
+            background (a headless Claude Code run on your own login, with Haiku), and its hook puts <span
+              class="session-title">&lt;name&gt; · &lt;summary&gt;</span> in the terminal title on your next prompt
           </td>
         </tr>
       </tbody>
@@ -123,13 +124,13 @@ import Rostr from "../components/Rostr.astro";
     </p>
     <ul class="terse-list">
       <li>
-        <strong>Quick questions.</strong> The agent writes its answer and makes the title call in the same reply.{" "}
-        <Rostr />'s PostToolUse hook sees that the turn was a plain answer and ends it right there, so the answer stays
-        the last thing on screen.
+        <strong>The call comes after the answer.</strong> The agent writes its answer, then makes the title call at the
+        end of that same message, whether the answer took one sentence or a long stretch of work.
       </li>
       <li>
-        <strong>Real work.</strong> When Claude is running commands or reading files, it makes the title call alongside
-        its other tool calls, and the turn carries on as normal.
+        <strong>Then the turn ends.</strong> <Rostr />'s PostToolUse hook sees that the answer is already written and
+        nothing but the title call came after it, and ends the turn right there, so the answer stays the last thing
+        on screen.
       </li>
     </ul>
   </section>

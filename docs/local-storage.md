@@ -6,13 +6,22 @@ In local mode (the default, when there's no rostr key), everything lives in one 
 `~/.config/rostr/rostr.db`. SQLite is compiled into the CLI (the pure-Go `modernc.org/sqlite`), so there's nothing to
 install. The schema mirrors the [server schema](server-schema.md) minus owners and encryption: tasks and repo names
 are plaintext here, and `rostr cloud on` encrypts and fingerprints them as it uploads. In cloud mode everything
-lives on the API instead, and only `credentials` is kept on disk.
+lives on the API instead; `credentials` and a cache are kept on disk.
 
 ```
 ~/.config/rostr/
   rostr.db         rosters, project links, drafts, and settings
   credentials      your cloud key (only readable by you), in cloud mode
+  machine-id       a random ID for this machine, sent to the API so it reserves this machine's next picks
+~/.cache/rostr/
+  keepalive/<session>       the session's last keep-alive bump (the file's modification time)
+  cloud/next.json           cloud mode: the next state to draft from (which roster each project uses, who's idle,
+                            auto-draft), as the API last returned it, plus this machine's unconfirmed picks
+  cloud/sessions/<session>.json   cloud mode: the session's own draft, so later prompts make no call
 ```
+
+The cloud cache is how hooks draft without waiting on the API; see [drafting-latency.md](drafting-latency.md). It
+holds nothing that isn't on the server: delete it and the next write rebuilds it.
 
 ## Schema
 
@@ -75,8 +84,8 @@ The same steps as the server, in one transaction:
    released rows older than 7 days.
 2. **Same session, same name:** if the session has an active draft (in any roster), bump `last_seen_at` and return it.
 3. **Resume:** if the session had a member before and that member is free, draft them again, from that roster.
-4. **Otherwise** draft the first free member in roster order, A team first. If every member is busy, draft the first
-   free numbered copy (`copy` 2, then 3).
+4. **Otherwise** draft the free member drafted least recently (never drafted first, then roster order), A team
+   first. If every member is busy, draft a numbered copy (`copy` 2, then 3) by the same rule.
 
 ## Editing
 

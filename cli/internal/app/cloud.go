@@ -55,7 +55,7 @@ func newCloudInstallCommand() *cobra.Command {
 				return err
 			}
 			if len(installed) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "Installed for Claude Code: %s.\n", strings.Join(installed, ", "))
+				fmt.Fprintln(cmd.OutOrStdout(), "Hooks installed for Claude Code.")
 			}
 			return nil
 		},
@@ -171,7 +171,7 @@ func registerInCloud(ctx context.Context, setup store.Setup) error {
 	if err != nil {
 		return err
 	}
-	cloud, err := store.NewCloud(apiURL(), key)
+	cloud, err := newCloudStore(key) // registering warms its cache for this machine's first session
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func registerInCloud(ctx context.Context, setup store.Setup) error {
 
 // joinCloudWithKey checks an existing key with the API, and saves it.
 func joinCloudWithKey(ctx context.Context, out io.Writer, key crypto.Key) error {
-	cloud, err := store.NewCloud(apiURL(), key)
+	cloud, err := newCloudStore(key)
 	if err != nil {
 		return err
 	}
@@ -209,6 +209,7 @@ func joinCloudWithKey(ctx context.Context, out io.Writer, key crypto.Key) error 
 	if err := removeLocalDatabase(); err != nil {
 		return err
 	}
+	cloud.RefreshNext(ctx) // warms the cache, so this machine's first session drafts without waiting on the API
 	if settings.DefaultRoster == "" {
 		fmt.Fprintln(out, "This machine is in cloud mode now. Run `rostr assemble` to make your first roster.")
 	} else {
