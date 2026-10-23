@@ -595,17 +595,19 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 
-	// Fellowship, its default name, emoji on, the cloud, auto-draft on
+	// Fellowship as it comes, then the defaults on the last page: its name, emoji on, the cloud, auto-draft on
 	out, code := m.runTTY([]ttyStep{
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", keyEnter},
-		{"Name this roster", keyEnter},
-		{"How should agents show up?", keyEnter},
-		{"Where should rostr live?", keyDown},
-		{"The cloud", keyEnter},
-		{"Draft names automatically in new sessions", keyEnter},
+		{"Who's on the roster?", keyEnter},
+		{"Ready to assemble?", keyEnter}, // roster name
+		{"Agents show up as", keyEnter},
+		{"rostr lives on", keyEnter},
+		{"Name new sessions", keyEnter},
+		{"Assemble", keyEnter},
 	}, "assemble")
-	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") {
+	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") ||
+		!strings.Contains(out, "Your rostr key:") {
 		t.Fatalf("wizard: exit %d\n%s", code, out)
 	}
 	if _, err := os.Stat(m.credentialsPath()); err != nil {
@@ -627,6 +629,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", "hogwarts"},
 		{"hogwarts", keyEnter},
+		{"Who's on the roster?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Replaced the fellowship roster's cast") {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)
