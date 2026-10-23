@@ -43,10 +43,10 @@ var permissions = []string{
 	"Bash(rostr task:*)",
 }
 
-// Fingerprint identifies the hooks and permissions this version of rostr installs, so an upgrade that changes them
-// can be noticed and the hooks reinstalled.
+// Fingerprint identifies what this version of rostr installs (hooks, permissions, the skill, and /draft), so an
+// upgrade that changes any of it can be noticed and the install redone.
 func Fingerprint() string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%v %v", hookEvents, permissions))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%v %v %s %s", hookEvents, permissions, skillContent, draftCommandContent))
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -60,8 +60,8 @@ func Installed(claudeDir string) bool {
 	return hasAnyRostrHook(hooks)
 }
 
-// Install adds rostr's hooks and permissions to settings.json, and writes the skill and /draft command, skipping
-// whatever is already there. It returns a description of each piece it added.
+// Install adds rostr's hooks and permissions to settings.json, skipping the ones already there, and writes the skill
+// and /draft command unless they're current. It returns a description of each piece it added or updated.
 func Install(claudeDir string) ([]string, error) {
 	var installed []string
 
@@ -73,14 +73,19 @@ func Install(claudeDir string) ([]string, error) {
 		installed = append(installed, "hooks in "+filepath.Join(claudeDir, "settings.json"))
 	}
 
+	// The skill and /draft are rostr's, so an older version's text is replaced. The skill's folder is named for rostr,
+	// but draft.md could be someone's own /draft, so it's only replaced when it runs rostr's
 	files := []struct {
 		path, content, label string
+		ours                 func(existing string) bool
 	}{
-		{filepath.Join(claudeDir, "skills", "rostr", "SKILL.md"), skillContent, "the rostr skill"},
-		{filepath.Join(claudeDir, "commands", "draft.md"), draftCommandContent, "the /draft command"},
+		{filepath.Join(claudeDir, "skills", "rostr", "SKILL.md"), skillContent, "the rostr skill",
+			func(string) bool { return true }},
+		{filepath.Join(claudeDir, "commands", "draft.md"), draftCommandContent, "the /draft command",
+			func(existing string) bool { return strings.Contains(existing, "rostr hook claude-code draft") }},
 	}
 	for _, f := range files {
-		wrote, err := writeIfMissing(f.path, f.content)
+		wrote, err := writeRostrFile(f.path, f.content, f.ours)
 		if err != nil {
 			return nil, err
 		}
@@ -355,9 +360,15 @@ func containsString(list []any, s string) bool {
 	return false
 }
 
-func writeIfMissing(path, content string) (bool, error) {
-	if _, err := os.Stat(path); err == nil {
+// writeRostrFile writes content to path when the file is missing, or holds something else that ours says is rostr's
+// (an older version's), reporting whether it wrote.
+func writeRostrFile(path, content string, ours func(existing string) bool) (bool, error) {
+	existing, err := os.ReadFile(path)
+	switch {
+	case err == nil && (string(existing) == content || !ours(string(existing))):
 		return false, nil
+	case err != nil && !errors.Is(err, fs.ErrNotExist):
+		return false, err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return false, err

@@ -257,15 +257,29 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		t.Errorf("SessionStart: %+v", settings.Hooks["SessionStart"])
 	}
 
-	// An edited skill isn't overwritten; a deleted one comes back
+	// An older skill is replaced, and a deleted /draft comes back
 	skill := filepath.Join(claudeDir, "skills", "rostr", "SKILL.md")
-	write(t, skill, "my edits")
+	write(t, skill, "an older version's text")
 	os.Remove(filepath.Join(claudeDir, "commands", "draft.md"))
-	if installed, _ := Install(claudeDir); len(installed) != 1 || installed[0] != "the /draft command" {
+	if installed, _ := Install(claudeDir); strings.Join(installed, "; ") != "the rostr skill; the /draft command" {
 		t.Errorf("reinstalled %v", installed)
 	}
-	if got, _ := os.ReadFile(skill); string(got) != "my edits" {
-		t.Error("overwrote the edited skill")
+	if got, _ := os.ReadFile(skill); string(got) != skillContent {
+		t.Error("kept the older skill")
+	}
+
+	// An older rostr /draft is replaced; someone's own /draft isn't
+	draft := filepath.Join(claudeDir, "commands", "draft.md")
+	write(t, draft, "!`rostr hook claude-code draft` (an older version)")
+	if installed, _ := Install(claudeDir); len(installed) != 1 || installed[0] != "the /draft command" {
+		t.Errorf("older /draft: reinstalled %v", installed)
+	}
+	write(t, draft, "Draft an email to my team")
+	if installed, _ := Install(claudeDir); len(installed) != 0 {
+		t.Errorf("own /draft: reinstalled %v", installed)
+	}
+	if got, _ := os.ReadFile(draft); string(got) != "Draft an email to my team" {
+		t.Error("overwrote someone's own /draft")
 	}
 }
 

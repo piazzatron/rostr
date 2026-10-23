@@ -116,6 +116,16 @@ func TestInstallIsIdempotentAndKeepsOtherHooks(t *testing.T) {
 		t.Fatal("second install rewrote hooks.json")
 	}
 
+	// An older version's skill is replaced
+	skill := filepath.Join(skillsDir, "rostr", "SKILL.md")
+	write(t, skill, "an older version's text")
+	if installed, err := Install(codexDir, skillsDir); err != nil || strings.Join(installed, "; ") != "the rostr skill" {
+		t.Fatalf("older skill: %v, %v", installed, err)
+	}
+	if got, _ := os.ReadFile(skill); string(got) != skillContent {
+		t.Error("kept the older skill")
+	}
+
 	var config struct {
 		Description string
 		Hooks       map[string][]struct {

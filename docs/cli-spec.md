@@ -314,12 +314,13 @@ rostr hook sync                       # reinstalls the hooks after an upgrade (s
 Each reads the hook's JSON input from stdin, does the work, and prints the JSON reply the agent expects. The logic,
 and the exact text the agent is told, live in the CLI, so upgrading rostr changes them without reinstalling hooks.
 
-**Upgrading.** Only a change to which hooks rostr installs (a new event or matcher, a new permission) needs the
-agent's settings rewritten. Each install records a fingerprint of the hooks it wrote in
+**Upgrading.** Only a change to what rostr installs (a new hook event or matcher, a new permission, new skill or
+`/draft` text) needs anything rewritten. Each install records a fingerprint of what it wrote in
 `~/.cache/rostr/hooks/<agent>`. Every session start (Claude Code and Codex) compares the stamps with the binary's
 own fingerprints, which costs a file read, and when one differs it starts `rostr hook sync` in the background. That
-reinstalls the hooks for each agent that has rostr's hooks already, never adding them where there are none, and
-updates the stamps. Claude Code picks up the rewritten settings on its own, so after `brew upgrade` the first session
+reinstalls for each agent that has rostr's hooks already, never adding them where there are none, and updates the
+stamps. Installing replaces an older version's skill text, and `/draft` when it's rostr's (it runs
+`rostr hook claude-code draft`), so a `/draft` of your own is left alone. Claude Code picks up the rewritten settings on its own, so after `brew upgrade` the first session
 that starts brings everything up to date. The install script runs `rostr hook sync` too. New Codex hooks still need
 approving in Codex's `/hooks`.
 
