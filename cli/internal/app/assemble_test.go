@@ -11,7 +11,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/piazzatron/rostr/cli/internal/presets"
 	"github.com/piazzatron/rostr/cli/internal/roster"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
@@ -29,8 +28,6 @@ func TestAssembleWizardSteps(t *testing.T) {
 		{"first run, own names", assembleSetup{}, func(f *assembleFlow) { f.build = buildNames },
 			[]assembleStep{stepBuild, stepNames, stepTeams, stepSettings}},
 		{"first run, free agents", assembleSetup{}, func(f *assembleFlow) { f.build = buildFreeAgents },
-			[]assembleStep{stepBuild, stepTeams, stepSettings}},
-		{"first run, surprise", assembleSetup{}, func(f *assembleFlow) { f.build = buildRandom },
 			[]assembleStep{stepBuild, stepTeams, stepSettings}},
 		{"first run, every flag", assembleSetup{args: []string{"work"}, opts: assembleOptions{preset: "kanto", emoji: "off", noAutoDraft: true}, inCloud: true}, nil,
 			nil},
@@ -154,7 +151,7 @@ func TestAssembleWizardScreen(t *testing.T) {
 	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30})
-	expectView(t, s, "rostr · assemble", "Step 1 of 4", "How do you want to build your roster?", "Free Agents", "Surprise me", "esc quit")
+	expectView(t, s, "rostr · assemble", "Step 1 of 4", "How do you want to build your roster?", "Free Agents", "esc quit")
 
 	// The preset picker previews the highlighted roster, and searching moves it
 	drive(s, nil, key(tea.KeyEnter))
@@ -184,7 +181,7 @@ func TestAssembleWizardScreen(t *testing.T) {
 	for range 5 {
 		drive(s, nil, key(tea.KeyEnter))
 	}
-	if s.cancelled || f.presetID != "hogwarts" || f.name != "hogwarts" || f.cloud || !f.autoDraft || len(f.chosenCast().aTeam) != 5 {
+	if s.cancelled || f.presetID != "hogwarts" || f.name != "hogwarts" || !f.cloud || !f.autoDraft || len(f.chosenCast().aTeam) != 5 {
 		t.Fatalf("answers: %+v", f)
 	}
 
@@ -198,17 +195,32 @@ func TestAssembleWizardScreen(t *testing.T) {
 	}
 }
 
-func TestAssembleWizardSurprise(t *testing.T) {
+func TestAssembleWizardFreeAgents(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
 	f, err := newAssembleFlow(assembleSetup{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, steps := f.screen(context.Background(), nil)
+	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
-	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30}, key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 3", "Surprise: it's")
-	if f.rolledID == "" || f.rolledID == presets.FreeAgentsID {
-		t.Fatalf("rolled %q", f.rolledID)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30}, key(tea.KeyDown), key(tea.KeyEnter))
+	expectView(t, s, "Step 2 of 3", "Who's on the A team?", "A team · 6", "B team · 8")
+	drawn := f.chosenCast()
+
+	// The cast stays put on the way to the last page, and going back to the start draws a new one
+	drive(s, nil, key(tea.KeyEnter))
+	if !slices.Equal(f.chosenCast().aTeam, drawn.aTeam) {
+		t.Fatal("the cast changed on the last page")
+	}
+	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyEnter} {
+		drive(s, nil, key(k))
+	}
+	if f.draws != 2 {
+		t.Fatalf("%d draws", f.draws)
 	}
 }
 

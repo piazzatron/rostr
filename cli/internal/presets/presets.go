@@ -1,7 +1,12 @@
 // Package presets holds the pre-built rosters that ship with the CLI, generated from site/src/data/rosters.ts.
 package presets
 
-import "github.com/piazzatron/rostr/cli/internal/roster"
+import (
+	"math/rand/v2"
+	"strings"
+
+	"github.com/piazzatron/rostr/cli/internal/roster"
+)
 
 //go:generate go run ./gen ../../../site/src/data/rosters.ts presets_gen.go
 
@@ -18,50 +23,35 @@ type Preset struct {
 // FreeAgentsID is the preset that mixes everyone else's characters.
 const FreeAgentsID = "free-agents"
 
-// freeAgentsMax is how many members Free Agents has in all: the rostr API's limit for a roster.
-const freeAgentsMax = 200
-
-// FreeAgents is the Free Agents preset with everyone it has room for: its own A team, then a B team of its own B team
-// and every other preset's members, taken a member from each preset in turn so every preset is in it.
+// FreeAgents is the Free Agents preset with a new random cast, for the wizard: as many members as the site's Free Agents, drawn from
+// every other preset, no two sharing a name or an emoji, so every emoji mode works.
 func FreeAgents() Preset {
 	p, _ := ByID(FreeAgentsID)
-	p.ATeam = append([]roster.Member{}, p.ATeam...)
-	p.BTeam = combinedBench(p)
-	return p
-}
-
-func combinedBench(free Preset) []roster.Member {
-	seen := map[string]bool{}
-	for _, m := range free.ATeam {
-		seen[roster.NormalizeName(m.Name)] = true
-	}
-	var bench []roster.Member
-	add := func(m roster.Member) {
-		if key := roster.NormalizeName(m.Name); !seen[key] && len(free.ATeam)+len(bench) < freeAgentsMax {
-			seen[key] = true
-			bench = append(bench, m)
-		}
-	}
-	for _, m := range free.BTeam {
-		add(m)
-	}
-	var casts [][]roster.Member
-	longest := 0
+	var pool []roster.Member
 	for _, other := range all {
 		if other.ID != FreeAgentsID {
-			members := append(append([]roster.Member{}, other.ATeam...), other.BTeam...)
-			casts = append(casts, members)
-			longest = max(longest, len(members))
+			pool = append(append(pool, other.ATeam...), other.BTeam...)
 		}
 	}
-	for i := range longest {
-		for _, members := range casts {
-			if i < len(members) {
-				add(members[i])
-			}
+	rand.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+
+	size := len(p.ATeam) + len(p.BTeam)
+	names, emoji := map[string]bool{}, map[string]bool{}
+	var cast []roster.Member
+	for _, m := range pool {
+		if len(cast) == size {
+			break
 		}
+		name, mark := roster.NormalizeName(m.Name), strings.ReplaceAll(m.Emoji, "\ufe0f", "")
+		if names[name] || emoji[mark] {
+			continue
+		}
+		names[name], emoji[mark] = true, true
+		cast = append(cast, m)
 	}
-	return bench
+	split := min(len(p.ATeam), len(cast))
+	p.ATeam, p.BTeam = cast[:split], cast[split:]
+	return p
 }
 
 // All returns every preset, in the site's order.

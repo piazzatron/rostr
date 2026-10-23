@@ -26,8 +26,9 @@ A roster is a named list of members, each a name and an emoji. A person can have
   Drafting picks from the A team first, whoever was drafted longest ago, and only calls up the B team when every
   A-teamer is busy.
 - **Presets.** Pre-built rosters ship with the CLI. The list lives in `site/src/data/rosters.ts` (id, name, source,
-  emoji, A team, B team). Free Agents keeps its own A team and fills its B team from every other preset, one member from each in turn,
-  up to 200 members (the API's limit for a roster).
+  emoji, A team, B team). Picked in the wizard, Free Agents is a new random draw from the other
+  presets each time, the same size as the listed one, with no two members sharing a name or emoji. `--preset
+  free-agents` gives the listed cast.
 - **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr release eowyn`
   finds Éowyn. A roster can't have two members whose names match this way, and you can't have two rosters whose
   names do.
@@ -113,12 +114,12 @@ rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only]
 ```
 
 Interactive setup. The wizard runs full-screen: how to build the roster (a pre-built roster, with a preview of its
-cast; Free Agents, with everyone from every roster; a random pre-built roster; or your own names), then who's on the
-A team (everyone else is the B team), then one last page that shows the cast and confirms every setting with its
-default: roster name, emoji, and, on the first run, where rostr lives (this machine or the cloud) and whether to draft
-every session automatically. Nothing is saved until Assemble is pressed; shift+tab goes back, and esc cancels. Each
-question can be skipped with a flag, so an agent can run it non-interactively. Making a cloud setup at a terminal
-ends by printing the new rostr key and how to use it on other machines and in cloud environments.
+cast; Free Agents, a random mix from every roster; or your own names), then who's on the A team (everyone else is the
+B team), then one last page that shows the cast and confirms every setting with its default: roster name, emoji, and,
+on the first run, where rostr lives (the cloud by default, or this machine) and whether to draft every session
+automatically. Nothing is saved until Assemble is pressed; shift+tab goes back, and esc cancels. Each question can be
+skipped with a flag, so an agent can run it non-interactively. Making a cloud setup at a terminal ends by printing the
+new rostr key and how to use it on other machines and in cloud environments.
 
 - `--preset <id>`: use a pre-built roster.
 - `--names <list>`: comma-separated names, each optionally with an emoji (`"🧮 Ada, Grace"`). The first six are

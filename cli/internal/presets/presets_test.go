@@ -1,29 +1,25 @@
 package presets
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/piazzatron/rostr/cli/internal/roster"
 )
 
-func TestFreeAgentsHasEveryPreset(t *testing.T) {
+func TestFreeAgentsIsARandomMix(t *testing.T) {
+	site, _ := ByID(FreeAgentsID)
 	free := FreeAgents()
-	if n := len(free.ATeam) + len(free.BTeam); n != freeAgentsMax {
-		t.Fatalf("%d members", n)
+	if len(free.ATeam) != len(site.ATeam) || len(free.BTeam) != len(site.BTeam) {
+		t.Fatalf("teams of %d and %d", len(free.ATeam), len(free.BTeam))
 	}
-	if err := roster.ValidateCast(free.ATeam, free.BTeam, roster.EmojiOn); err != nil {
+	if err := roster.ValidateCast(free.ATeam, free.BTeam, roster.EmojiOnly); err != nil {
 		t.Fatal(err)
 	}
-	members := map[string]bool{}
-	for _, m := range append(free.ATeam, free.BTeam...) {
-		members[m.Name] = true
-	}
-	for _, p := range All() {
-		if !members[p.ATeam[0].Name] {
-			t.Errorf("no one from %s", p.ID)
+	for range 10 {
+		if !slices.Equal(FreeAgents().ATeam, free.ATeam) {
+			return
 		}
 	}
-	if site, _ := ByID(FreeAgentsID); len(site.BTeam) == len(free.BTeam) {
-		t.Fatal("changed the site's preset")
-	}
+	t.Fatal("the same A team every time")
 }

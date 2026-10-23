@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"slices"
 	"strings"
 
@@ -246,9 +245,6 @@ func presetCast(id string) (cast, error) {
 	if !ok {
 		return cast{}, fmt.Errorf("no preset with id %q; see `rostr presets`", id)
 	}
-	if id == presets.FreeAgentsID {
-		p = presets.FreeAgents()
-	}
 	return cast{
 		presetID: p.ID,
 		aTeam:    append([]roster.Member{}, p.ATeam...),
@@ -290,7 +286,6 @@ type buildChoice int
 const (
 	buildPreset buildChoice = iota
 	buildFreeAgents
-	buildRandom
 	buildNames
 )
 
@@ -341,13 +336,15 @@ type assembleFlow struct {
 	assembleSetup
 	flagCast cast
 
-	action    assembleAction
-	roster    string
-	build     buildChoice
-	presetID  string
-	rolledID  string
-	names     string
-	namesCast cast
+	action   assembleAction
+	roster   string
+	build    buildChoice
+	presetID string
+	// freeAgents is the Free Agents cast drawn for this visit, and draws counts them
+	freeAgents cast
+	draws      int
+	names      string
+	namesCast  cast
 	// aTeam is who's picked for the A team, by name, out of the cast teamsFor names
 	aTeam       []string
 	teamsFor    string
@@ -364,6 +361,7 @@ func newAssembleFlow(setup assembleSetup) (*assembleFlow, error) {
 		assembleSetup: setup,
 		presetID:      presets.All()[0].ID,
 		emoji:         roster.EmojiOn,
+		cloud:         true,
 		autoDraft:     true,
 		link:          true,
 	}
@@ -486,8 +484,7 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 	pickRoster := huh.NewSelect[string]().Title("Which roster?").Options(huh.NewOptions(rosterNames...)...).Value(&f.roster)
 	build := huh.NewSelect[buildChoice]().Title("How do you want to build your roster?").Options(
 		huh.NewOption("🎭 Pick a pre-built roster", buildPreset),
-		huh.NewOption("🎲 Free Agents · everyone from every roster", buildFreeAgents),
-		huh.NewOption("🔀 Surprise me · a random roster", buildRandom),
+		huh.NewOption("🎲 Free Agents · a random mix from every roster", buildFreeAgents),
 		huh.NewOption("✏️ Use your own names", buildNames),
 	).Value(&f.build)
 	preset := huh.NewSelect[string]().Title("Pick a roster").
@@ -533,8 +530,8 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		huh.NewOption("no", false),
 	).Value(&f.link)
 	where := huh.NewSelect[bool]().Title("rostr lives on").Inline(true).Options(
-		huh.NewOption("this machine", false),
 		huh.NewOption("the cloud (every machine and cloud environment)", true),
+		huh.NewOption("this machine", false),
 	).Value(&f.cloud)
 	autoDraft := huh.NewSelect[bool]().Title("Name new sessions").Inline(true).Options(
 		huh.NewOption("automatically", true),
@@ -602,8 +599,8 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 				actionEdit:    "Which roster do you want to edit?",
 			}[f.action])
 		case field == build:
-			// Coming back here rolls a new surprise
-			f.rolledID = ""
+			// Coming back here draws new free agents
+			f.freeAgents = cast{}
 		case field == preset:
 			// Coming back to the picker searches again
 			if !preset.GetFiltering() {
@@ -625,8 +622,10 @@ const teamsFormWidth = 46
 // prepareTeams fills in the team picker for the cast chosen so far: who's in it, and, for a cast it hasn't shown
 // before, the cast's own A team picked.
 func (f *assembleFlow) prepareTeams(teams *huh.MultiSelect[string], panel *sidePanel) {
-	if f.build == buildRandom && f.rolledID == "" {
-		f.rolledID = randomPresetID()
+	if f.build == buildFreeAgents && len(f.freeAgents.aTeam) == 0 {
+		p := presets.FreeAgents()
+		f.freeAgents = cast{presetID: p.ID, aTeam: p.ATeam, bTeam: p.BTeam}
+		f.draws++
 	}
 	base := f.baseCast()
 	if key := f.castKey(); key != f.teamsFor {
@@ -638,10 +637,6 @@ func (f *assembleFlow) prepareTeams(teams *huh.MultiSelect[string], panel *sideP
 	}
 
 	title := "Who's on the A team?"
-	if f.build == buildRandom {
-		p, _ := presets.ByID(f.rolledID)
-		title = fmt.Sprintf("Surprise: it's %s %s. Who's on the A team?", p.Emoji, p.Name)
-	}
 	members := append(append([]roster.Member{}, base.aTeam...), base.bTeam...)
 	options := make([]huh.Option[string], len(members))
 	widest := 0
@@ -682,9 +677,7 @@ func (f *assembleFlow) baseCast() cast {
 	case buildPreset:
 		chosen, _ = presetCast(f.presetID)
 	case buildFreeAgents:
-		chosen, _ = presetCast(presets.FreeAgentsID)
-	case buildRandom:
-		chosen, _ = presetCast(f.rolledID)
+		chosen = f.freeAgents
 	case buildNames:
 		chosen = f.namesCast
 	}
@@ -693,8 +686,11 @@ func (f *assembleFlow) baseCast() cast {
 
 // castKey names the base cast, so the team picker knows when it's a different one.
 func (f *assembleFlow) castKey() string {
-	if f.build == buildNames {
+	switch f.build {
+	case buildNames:
 		return "names:" + f.names
+	case buildFreeAgents:
+		return fmt.Sprintf("free-agents:%d", f.draws)
 	}
 	return "preset:" + f.baseCast().presetID
 }
@@ -731,17 +727,6 @@ func (f *assembleFlow) emojiOptions() []huh.Option[roster.EmojiMode] {
 		first = chosen.aTeam[0]
 	}
 	return emojiModeOptions(first)
-}
-
-// randomPresetID picks a preset for "Surprise me", leaving out Free Agents, which has its own choice.
-func randomPresetID() string {
-	var ids []string
-	for _, p := range presets.All() {
-		if p.ID != presets.FreeAgentsID {
-			ids = append(ids, p.ID)
-		}
-	}
-	return ids[rand.IntN(len(ids))]
 }
 
 // castSummary is the cast on the last page: where it's from, the A team, and how big the B team is.
