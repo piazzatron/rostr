@@ -184,14 +184,17 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 // "<name> · <summary>", it records the summary as the agent's task. When the title call (or the agent recording its
 // task) came after the answer, it ends the turn, so Claude doesn't have to reply to the tool's result: Claude Code
 // doesn't let a turn end without visible text, so that reply would repeat the answer. When a title call came before
-// the answer, it tells Claude to answer the user rather than report the rename.
+// the answer, it tells Claude to answer the user rather than report the rename. In Remote Control and cloud sessions
+// the title call always comes first, so it never ends the turn there: any text before it is a lead-in, not the answer.
 func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	isTaskCommand := claudecode.IsTaskCommand(input.ToolInput.Command)
 	if input.ToolName == "Bash" && !isTaskCommand {
 		return nil
 	}
-	// Every time the turn isn't ended, Claude replies to the tool's result, so the reason goes in the log
-	if ends, reason := claudecode.EndsPlainAnswer(input.TranscriptPath, input.ToolUseID); ends {
+	// Every time the turn isn't ended after the answer, Claude replies to the tool's result, so the reason goes in the log
+	if !isTaskCommand && titleWhere(input.SessionID).TitlesFirst() {
+		fmt.Fprintln(stdout, claudecode.AdditionalContext("PostToolUse", claudecode.TitleSetContext))
+	} else if ends, reason := claudecode.EndsPlainAnswer(input.TranscriptPath, input.ToolUseID); ends {
 		fmt.Fprintln(stdout, `{"continue": false, "suppressOutput": true}`)
 	} else {
 		logBackground("title-set for session %s didn't end the turn: %s", input.SessionID, reason)
