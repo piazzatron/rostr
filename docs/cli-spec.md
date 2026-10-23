@@ -404,8 +404,11 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
 2. The agent titles the session `🧙 Gandalf · <3-5 word summary>` with the session's title tool: the app's
    `mcp__ccd_session_mgmt__set_session_title` (session `"self"`, loaded with ToolSearch) in desktop Local sessions
    (`entrypoint: claude-desktop` in `~/.claude/sessions/<pid>.json`), and `mcp__claude-code-remote__set_session_title`
-   (the server session ID) in Remote Control and cloud sessions. It makes the call after it has written its answer,
-   at the end of that same message, never before the answer. Terminal sessions have no title tool, so the
+   (the server session ID) in Remote Control and cloud sessions. In Local sessions it makes the call after it has
+   written its answer, at the end of that same message, never before the answer. In Remote Control and cloud sessions
+   it makes the call first, before writing anything: those apps show the model's progress updates, and an answer
+   written just before a tool call can come back as one, so the user would see a summary of the answer and then the
+   answer again. Terminal sessions have no title tool, so the
    agent isn't asked: the hook starts `rostr hook summarize` in the background, which summarizes the prompt with a
    headless `claude -p --model haiku` run (the user's own login; hooks, settings, tools, and MCP servers off) and
    records the result as the task, unless the agent set one meanwhile. The next prompt's hook puts it in the title.
@@ -414,7 +417,8 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
    task. When Claude has written text and every tool call since that text was titling (any ToolSearch, a title
    tool, `rostr task`), the answer is finished, so the hook returns `continue: false` and the turn ends there:
    otherwise Claude would have to reply to the tool's result, and Claude Code doesn't let a turn end without visible
-   text, so it would repeat its answer.
+   text, so it would repeat its answer. When the title call came first, the hook tells Claude to carry on and answer
+   the user without mentioning the rename.
 
 On later prompts the prompt hook keeps the draft alive and retitles the session `🧙 Gandalf · <task>` whenever the task
 has changed. A session that already has a name is never treated as being on its first prompt.

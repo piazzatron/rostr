@@ -48,7 +48,7 @@ import Rostr from "../components/Rostr.astro";
         <dt><code>PostToolUse</code></dt>
         <dd>
           Runs after a title tool, or after the agent records its task in a terminal. Records the summary from the title as the agent's task, so <code>rostr list</code> shows
-          what everyone is doing. Since the title call comes after the answer, it ends the turn there, so Claude
+          what everyone is doing. When the title call comes after the answer, it ends the turn there, so Claude
           doesn't have to reply to the tool's result.
         </dd>
       </div>
@@ -131,6 +131,12 @@ import Rostr from "../components/Rostr.astro";
         <strong>Then the turn ends.</strong> <Rostr />'s PostToolUse hook sees that the answer is already written and
         nothing but the title call came after it, and ends the turn right there, so the answer stays the last thing
         on screen.
+      </li>
+      <li>
+        <strong>Remote Control and cloud sessions title first instead.</strong> Their apps show Claude's progress
+        updates, and an answer written just before a tool call can come back as one: a short summary of the answer,
+        followed by the answer again. So there the agent makes the title call before writing anything, and the answer
+        ends the turn as usual.
       </li>
     </ul>
   </section>

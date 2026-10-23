@@ -154,10 +154,12 @@ func TestTitleInstruction(t *testing.T) {
 	if terminal != "" || !(TitleWhere{}).IsTerminal() || (TitleWhere{DesktopLocal: true}).IsTerminal() || (TitleWhere{ServerSessionID: "x"}).IsTerminal() {
 		t.Fatalf("terminal: %q", terminal)
 	}
-	for _, text := range []string{local, remote} {
-		if !strings.Contains(text, "Write your complete answer to the user first") {
-			t.Errorf("when: %s", text)
-		}
+	// Local titles after the answer; Remote Control and cloud title first
+	if !strings.Contains(local, "Write your complete answer to the user first") {
+		t.Errorf("local when: %s", local)
+	}
+	if !strings.Contains(remote, "Make this call first, before you write anything") || strings.Contains(remote, "answer to the user first") {
+		t.Errorf("remote when: %s", remote)
 	}
 }
 
