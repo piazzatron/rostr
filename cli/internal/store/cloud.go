@@ -509,15 +509,15 @@ func (c *Cloud) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 	return out, nil
 }
 
-func (c *Cloud) Release(ctx context.Context, sessionID string) (*Draft, error) {
+func (c *Cloud) Bench(ctx context.Context, sessionID string) (*Draft, error) {
 	if c.cache != nil {
 		c.cache.releaseSession(sessionID, time.Now())
 	}
-	return c.optionalDraft(c.draftCall(ctx, "POST", "/v1/agents/release", map[string]any{"session": sessionID}))
+	return c.optionalDraft(c.draftCall(ctx, "POST", "/v1/agents/bench", map[string]any{"session": sessionID}))
 }
 
-func (c *Cloud) ReleaseAgent(ctx context.Context, agent AgentKey) (Draft, error) {
-	d, err := c.draftCall(ctx, "POST", "/v1/agents/release", agentBody(agent))
+func (c *Cloud) BenchAgent(ctx context.Context, agent AgentKey) (Draft, error) {
+	d, err := c.draftCall(ctx, "POST", "/v1/agents/bench", agentBody(agent))
 	if c.cache != nil && err == nil {
 		c.cache.releaseSession(d.SessionID, time.Now())
 	}

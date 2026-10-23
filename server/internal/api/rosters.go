@@ -121,7 +121,7 @@ func rosterDetails(ctx context.Context, q querier, ownerID string, r rosterRow) 
 		select
 		  coalesce((select default_roster_id = $2 from owners where id = $1), false),
 		  (select count(*) from drafts d join owners o on o.id = $1
-		   where d.roster_id = $2 and d.released_at is null and d.last_seen_at >= now() - o.draft_expiry),
+		   where d.roster_id = $2 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry),
 		  (select count(*) from project_links where roster_id = $2)`,
 		ownerID, r.ID).Scan(&resp.IsDefault, &resp.ActiveDrafts, &resp.LinkedProjects)
 	return resp, err
@@ -207,7 +207,7 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 		// An edit must keep every drafted member, under the same name
 		if keepDraftedMembers {
 			rows, err := tx.Query(r.Context(),
-				`select distinct member_name from drafts where roster_id = $1 and released_at is null order by 1`, roster.ID)
+				`select distinct member_name from drafts where roster_id = $1 and benched_at is null order by 1`, roster.ID)
 			if err != nil {
 				return err
 			}
@@ -251,7 +251,7 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var resp struct {
 		Name             string  `json:"name"`
-		ReleasedDrafts   int     `json:"releasedDrafts"`
+		BenchedDrafts    int     `json:"benchedDrafts"`
 		UnlinkedProjects int     `json:"unlinkedProjects"`
 		NewDefault       *string `json:"newDefault"`
 		OwnerDeleted     bool    `json:"ownerDeleted"`
@@ -265,7 +265,7 @@ func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, own
 		if err != nil {
 			return err
 		}
-		resp.Name, resp.ReleasedDrafts, resp.UnlinkedProjects = roster.Name, details.ActiveDrafts, details.LinkedProjects
+		resp.Name, resp.BenchedDrafts, resp.UnlinkedProjects = roster.Name, details.ActiveDrafts, details.LinkedProjects
 
 		// Deleting cascades to drafts and links, and clears the owner's default if it was this roster
 		if _, err := tx.Exec(r.Context(), `delete from rosters where id = $1`, roster.ID); err != nil {
@@ -350,7 +350,7 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 	rows, err = q.Query(ctx, `
 		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at
 		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
-		where r.owner_id = $1 and d.released_at is null and d.last_seen_at >= now() - o.draft_expiry
+		where r.owner_id = $1 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry
 		order by d.drafted_at, d.id`, ownerID)
 	if err != nil {
 		return nil, err

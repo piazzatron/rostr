@@ -61,8 +61,8 @@ func TestOwnersCantSeeOrChangeEachOthersData(t *testing.T) {
 	callError(b, "PUT", "/v1/rosters/work/cast", map[string]any{"aTeam": members("Mario")}, http.StatusNotFound, "roster_not_found")
 	callError(b, "DELETE", "/v1/rosters/work", nil, http.StatusNotFound, "roster_not_found")
 	callError(b, "DELETE", "/v1/links/"+repoHash, nil, http.StatusNotFound, "link_not_found")
-	callError(b, "POST", "/v1/agents/release", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
-	callError(b, "POST", "/v1/agents/release", map[string]any{"name": "Gandalf"}, http.StatusNotFound, "not_drafted")
+	callError(b, "POST", "/v1/agents/bench", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
+	callError(b, "POST", "/v1/agents/bench", map[string]any{"name": "Gandalf"}, http.StatusNotFound, "not_drafted")
 	callError(b, "POST", "/v1/agents/task", map[string]any{"session": session, "task": fakeCiphertext("x")}, http.StatusNotFound, "not_drafted")
 	callError(b, "POST", "/v1/agents/keepalive", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
 	callError(b, "PATCH", "/v1/settings", map[string]any{"defaultRoster": "work"}, http.StatusNotFound, "roster_not_found")
@@ -202,13 +202,13 @@ func TestDisbandCascadesAndPromotesOldestRoster(t *testing.T) {
 
 	type disbandResponse struct {
 		Name             string  `json:"name"`
-		ReleasedDrafts   int     `json:"releasedDrafts"`
+		BenchedDrafts    int     `json:"benchedDrafts"`
 		UnlinkedProjects int     `json:"unlinkedProjects"`
 		NewDefault       *string `json:"newDefault"`
 		OwnerDeleted     bool    `json:"ownerDeleted"`
 	}
 	resp := call[disbandResponse](c, "DELETE", "/v1/rosters/SECOND", nil, http.StatusOK)
-	if resp.Name != "second" || resp.ReleasedDrafts != 1 || resp.UnlinkedProjects != 1 || resp.NewDefault == nil || *resp.NewDefault != "first" || resp.OwnerDeleted {
+	if resp.Name != "second" || resp.BenchedDrafts != 1 || resp.UnlinkedProjects != 1 || resp.NewDefault == nil || *resp.NewDefault != "first" || resp.OwnerDeleted {
 		t.Fatalf("disband: %+v", resp)
 	}
 
@@ -218,7 +218,7 @@ func TestDisbandCascadesAndPromotesOldestRoster(t *testing.T) {
 	}
 	callError(c, "GET", "/v1/links/"+repoHash, nil, http.StatusNotFound, "link_not_found")
 	callError(c, "POST", "/v1/agents/keepalive", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
-	callError(c, "POST", "/v1/agents/release", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
+	callError(c, "POST", "/v1/agents/bench", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
 
 	// Disbanding a roster that isn't the default leaves the default alone
 	if resp := call[disbandResponse](c, "DELETE", "/v1/rosters/third", nil, http.StatusOK); resp.NewDefault != nil || resp.OwnerDeleted {
@@ -271,7 +271,7 @@ func TestReplaceCastKeepsNameLinksDefaultAndDraftEmoji(t *testing.T) {
 	if d := draft(c, map[string]any{"session": c.session("s2"), "repoHash": repoHash, "repo": fakeCiphertext("r")}); d.Name != "Mario" {
 		t.Fatalf("drafted %s, want Mario", d.Name)
 	}
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"session": session}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": session}, http.StatusOK)
 }
 
 func TestEditRefusesToRenameOrRemoveDraftedMembers(t *testing.T) {
@@ -293,7 +293,7 @@ func TestEditRefusesToRenameOrRemoveDraftedMembers(t *testing.T) {
 	}
 
 	// Once released, Gandalf can go
-	call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"name": "Gandalf"}, http.StatusOK)
+	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"name": "Gandalf"}, http.StatusOK)
 	call[rosterResponse](c, "PUT", "/v1/rosters/work", map[string]any{"aTeam": members("Sam")}, http.StatusOK)
 }
 
@@ -478,9 +478,9 @@ func TestErrorsAndStatusCodes(t *testing.T) {
 	callError(c, "POST", "/v1/agents/draft", map[string]any{"session": ""}, http.StatusBadRequest, "invalid_request")
 	callError(c, "GET", "/v1/links/not-a-hash", nil, http.StatusBadRequest, "invalid_request")
 
-	// Release and task targets
-	callError(c, "POST", "/v1/agents/release", map[string]any{}, http.StatusBadRequest, "invalid_request")
-	callError(c, "POST", "/v1/agents/release", map[string]any{"session": "a", "name": "b"}, http.StatusBadRequest, "invalid_request")
+	// Bench and task targets
+	callError(c, "POST", "/v1/agents/bench", map[string]any{}, http.StatusBadRequest, "invalid_request")
+	callError(c, "POST", "/v1/agents/bench", map[string]any{"session": "a", "name": "b"}, http.StatusBadRequest, "invalid_request")
 	callError(c, "POST", "/v1/agents/task", map[string]any{"session": c.session("s")}, http.StatusBadRequest, "invalid_request")
 
 	// Settings
@@ -513,20 +513,20 @@ func TestReleaseAndTaskByName(t *testing.T) {
 	if d := call[draftResponse](c, "POST", "/v1/agents/task", map[string]any{"name": "EOWYN 2", "task": fakeCiphertext("t")}, http.StatusOK); d.Copy != 2 || *d.Task != fakeCiphertext("t") {
 		t.Fatalf("task by name: %+v", d)
 	}
-	if d := call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"name": "eowyn"}, http.StatusOK); d.Copy != 1 || d.Session != c.session("s1") {
+	if d := call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"name": "eowyn"}, http.StatusOK); d.Copy != 1 || d.Session != c.session("s1") {
 		t.Fatalf("release by name: %+v", d)
 	}
 
 	// A name drafted in two rosters needs a roster
-	resp := callError(c, "POST", "/v1/agents/release", map[string]any{"name": "gandalf"}, http.StatusConflict, "ambiguous_name")
+	resp := callError(c, "POST", "/v1/agents/bench", map[string]any{"name": "gandalf"}, http.StatusConflict, "ambiguous_name")
 	if !slices.Equal(resp.Error.Rosters, []string{"work", "home"}) {
 		t.Fatalf("ambiguous rosters: %v", resp.Error.Rosters)
 	}
-	if d := call[draftResponse](c, "POST", "/v1/agents/release", map[string]any{"name": "gandalf", "roster": "home"}, http.StatusOK); d.Roster != "home" {
+	if d := call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"name": "gandalf", "roster": "home"}, http.StatusOK); d.Roster != "home" {
 		t.Fatalf("release with roster: %+v", d)
 	}
-	callError(c, "POST", "/v1/agents/release", map[string]any{"name": "gandalf", "roster": "home"}, http.StatusNotFound, "not_drafted")
-	callError(c, "POST", "/v1/agents/release", map[string]any{"name": "gandalf", "roster": "nope"}, http.StatusNotFound, "roster_not_found")
+	callError(c, "POST", "/v1/agents/bench", map[string]any{"name": "gandalf", "roster": "home"}, http.StatusNotFound, "not_drafted")
+	callError(c, "POST", "/v1/agents/bench", map[string]any{"name": "gandalf", "roster": "nope"}, http.StatusNotFound, "roster_not_found")
 }
 
 func TestTaskBySessionBumpsLastSeen(t *testing.T) {

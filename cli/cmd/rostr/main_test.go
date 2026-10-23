@@ -228,16 +228,16 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("list text:\n%s", text)
 	}
 
-	// release: by name, by session, and nothing to release
-	if out := s.ok(s.home, nil, "release", "ada"); out != "Released Ada from the play roster.\n" {
-		t.Fatalf("release by name: %q", out)
+	// bench: by name, by session, and nothing to bench
+	if out := s.ok(s.home, nil, "bench", "ada"); out != "Benched Ada from the play roster.\n" {
+		t.Fatalf("bench by name: %q", out)
 	}
-	s.fails(s.home, nil, `no agent named "ada" is drafted`, "release", "ada")
-	if out := s.ok(s.home, session("s2"), "release"); out != "Released 🧙 Gandalf from the work roster.\n" {
-		t.Fatalf("release by session: %q", out)
+	s.fails(s.home, nil, `no agent named "ada" is drafted`, "bench", "ada")
+	if out := s.ok(s.home, session("s2"), "bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
+		t.Fatalf("bench by session: %q", out)
 	}
-	if out := s.ok(s.home, session("s2"), "release"); out != "This session has no drafted agent.\n" {
-		t.Fatalf("release again: %q", out)
+	if out := s.ok(s.home, session("s2"), "bench"); out != "This session has no drafted agent.\n" {
+		t.Fatalf("bench again: %q", out)
 	}
 
 	// unlink and config
@@ -291,16 +291,47 @@ func TestSessionKeepsItsRosterWhenItChangesDirectory(t *testing.T) {
 	}
 }
 
-func TestReleaseByNameAsksWhichRosterWhenAmbiguous(t *testing.T) {
+func TestBenchByNameAsksWhichRosterWhenAmbiguous(t *testing.T) {
 	s := newSandbox(t)
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 	s.ok(s.home, nil, "assemble", "side", "--preset", "free-agents")
 	s.draft(s.home, "s1")
 	s.draft(s.home, "s2", "--roster", "side")
 
-	s.fails(s.home, nil, "Gandalf is drafted in more than one roster (work, side); pass --roster", "release", "gandalf")
-	if out := s.ok(s.home, nil, "release", "gandalf", "--roster", "side"); out != "Released 🧙 Gandalf from the side roster.\n" {
+	s.fails(s.home, nil, "Gandalf is drafted in more than one roster (work, side); pass --roster", "bench", "gandalf")
+	if out := s.ok(s.home, nil, "bench", "gandalf", "--roster", "side"); out != "Benched 🧙 Gandalf from the side roster.\n" {
 		t.Fatalf("got %q", out)
+	}
+}
+
+func TestBenchSeveralNamesAndAll(t *testing.T) {
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+	s.ok(s.home, nil, "assemble", "side", "--preset", "free-agents")
+	for _, session := range []string{"s1", "s2", "s3"} {
+		s.draft(s.home, session)
+	}
+	s.draft(s.home, "s4", "--roster", "side")
+	names := s.list("work").Rosters[0].Drafted
+
+	// A typo benches nobody
+	s.fails(s.home, nil, `no agent named "nobody" is drafted`, "bench", names[0].Name, "nobody", "--roster", "work")
+
+	// Several names at once
+	want := fmt.Sprintf("Benched %s from the work roster.\nBenched %s from the work roster.\n", names[0].Display, names[1].Display)
+	if out := s.ok(s.home, nil, "bench", names[0].Name, names[1].Name, "--roster", "work"); out != want {
+		t.Fatalf("bench several: %q", out)
+	}
+
+	// all, narrowed to a roster, then everyone
+	if out := s.ok(s.home, nil, "bench", "all", "--roster", "side"); out != "Benched 🧙 Gandalf from the side roster.\n" {
+		t.Fatalf("bench all --roster: %q", out)
+	}
+	if out := s.ok(s.home, nil, "bench", "all"); out != fmt.Sprintf("Benched %s from the work roster.\n", names[2].Display) {
+		t.Fatalf("bench all: %q", out)
+	}
+	if out := s.ok(s.home, nil, "bench", "all"); out != "No agents are drafted.\n" {
+		t.Fatalf("bench all again: %q", out)
 	}
 }
 
@@ -903,7 +934,7 @@ func TestCodexHooks(t *testing.T) {
 	if out := s.ok(repo, []string{"CODEX_THREAD_ID=t1", "ROSTR_SESSION=other"}, "draft"); out != "💍 Frodo\n" {
 		t.Fatalf("ROSTR_SESSION should win over CODEX_THREAD_ID: %q", out)
 	}
-	s.ok(repo, session("other"), "release")
+	s.ok(repo, session("other"), "bench")
 
 	// Later prompts (with an earlier prompt in the rollout) only keep the draft alive, at most once an hour
 	rollout := filepath.Join(t.TempDir(), "rollout.jsonl")

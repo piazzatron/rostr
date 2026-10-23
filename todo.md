@@ -80,7 +80,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       formula, and the `getrostr.sh/install` script.
 - [x] Roster commands: `assemble` (with the wizard and the hidden `create` alias), `link` / `unlink`, `list`, `edit`,
       `presets`, `disband`.
-- [x] Agent commands: `draft`, `release`, `task`.
+- [x] Agent commands: `draft`, `bench`, `task`.
 - [x] `config`, including the `cloud on` migration.
 - [x] Local storage ([`docs/local-storage.md`](docs/local-storage.md)).
 - [x] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,

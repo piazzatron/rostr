@@ -79,7 +79,7 @@ func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, std
 		return err
 	}
 	defer st.Close()
-	_, err = st.Release(ctx, input.SessionID)
+	_, err = st.Bench(ctx, input.SessionID)
 	return err
 }
 

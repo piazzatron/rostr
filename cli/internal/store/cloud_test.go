@@ -170,7 +170,7 @@ func TestCloudMapsAPIErrors(t *testing.T) {
 		t.Errorf("no_rosters: %v", err)
 	}
 	respond(404, "not_drafted")
-	if _, err := cloud.ReleaseAgent(ctx, AgentKey{Roster: "work", Member: "A", Copy: 1}); !errors.Is(err, ErrNotFound) {
+	if _, err := cloud.BenchAgent(ctx, AgentKey{Roster: "work", Member: "A", Copy: 1}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("not_drafted: %v", err)
 	}
 
@@ -178,7 +178,7 @@ func TestCloudMapsAPIErrors(t *testing.T) {
 	if d, err := cloud.Reclaim(ctx, "s1"); d != nil || err != nil {
 		t.Errorf("keep-alive not_drafted: %v, %v", d, err)
 	}
-	if d, err := cloud.Release(ctx, "s1"); d != nil || err != nil {
+	if d, err := cloud.Bench(ctx, "s1"); d != nil || err != nil {
 		t.Errorf("release not_drafted: %v, %v", d, err)
 	}
 	if d, err := cloud.SessionDraft(ctx, "s1"); d != nil || err != nil {

@@ -27,7 +27,7 @@ A roster is a named list of members, each a name and an emoji. A person can have
   A-teamer is busy.
 - **Presets.** Pre-built rosters ship with the CLI. The list lives in `site/src/data/rosters.ts` (id, name, source,
   emoji, A team, B team). Free Agents mixes characters from the other presets.
-- **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr release eowyn`
+- **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr bench eowyn`
   finds Éowyn. A roster can't have two members whose names match this way, and you can't have two rosters whose
   names do.
 
@@ -66,9 +66,9 @@ Outside a git repo, rostr uses the default.
 
 - **Arguments vs. `--roster`.** Commands that act on a roster take it as an argument: `assemble`, `link`, `list`,
   `edit`, `disband`, `config default`. Commands that pick whose agents to act on take `--roster`, which overrides
-  the lookup above: `draft`, `release`, `task`, `config emoji`.
+  the lookup above: `draft`, `bench`, `task`, `config emoji`.
 - **A session's roster is fixed at its first draft,** from the directory the session started in. After that,
-  everything for the session (resume, compaction, keep-alive, `task`, `release`, session end) finds its
+  everything for the session (resume, compaction, keep-alive, `task`, `bench`, session end) finds its
   draft by session ID, so an agent that `cd`s into another project keeps its name.
 
 ### Sessions
@@ -80,7 +80,7 @@ Every draft belongs to a session ID from Claude Code or Codex.
   runs know their session without flags. Codex hooks can't set env vars, but Codex gives every command its agent runs
   `CODEX_THREAD_ID`, its hooks' session ID. `--session` defaults to `ROSTR_SESSION`, then `CODEX_THREAD_ID`.
 - Drafting always happens inside a session (a hook, `/draft`, or `$rostr-draft`); nobody drafts from a bare terminal.
-  With no `--session`, `ROSTR_SESSION`, or `CODEX_THREAD_ID`, `draft` errors, and so do `release` and
+  With no `--session`, `ROSTR_SESSION`, or `CODEX_THREAD_ID`, `draft` errors, and so do `bench` and
   `task` without a name.
 
 ### Display
@@ -212,20 +212,21 @@ Code (only rostr's own entries, and a `/draft` the user wrote themselves is left
 
 These are run by the hooks, the skill, and `/draft`, not usually by people.
 
-#### `rostr draft` / `rostr release`
+#### `rostr draft` / `rostr bench`
 
 ```
 rostr draft [--task <description>] [--session <id>] [--roster <roster>] [--json]
-rostr release [<name>] [--session <id>] [--roster <roster>]
+rostr bench [<name>... | all] [--session <id>] [--roster <roster>]
 ```
 
 - **Draft** gives the session the next free member, A team first (see [Drafting](#drafting)). Drafting is
   idempotent per session: drafting again returns the same member.
 - `--json` prints `{"name", "emoji", "team", "roster", "display"}`, where `display` follows the emoji mode, so hooks
   don't rebuild it.
-- **Release** frees the session's member, or the named member. Releasing by name is the manual fix for a name left
-  stuck by a session that died, so it searches all your rosters, not just the current one. If more than one roster
-  has that member drafted, it asks which (or takes `--roster`).
+- **Bench** frees the session's member, the named members, or with `all` every drafted member (only `--roster`'s, if
+  given). Benching by name is the manual fix for names left stuck by sessions that died, so it searches all your
+  rosters, not just the current one. If more than one roster has a member drafted, it asks which (or takes
+  `--roster`). Every name is looked up before any is benched, so a typo benches nobody.
 
 #### `rostr task`
 
@@ -472,7 +473,7 @@ setting rostr up, editing rosters. Identity doesn't depend on it.
 
 For people who turn auto-draft off. Runs `rostr hook claude-code draft`, which drafts the session, tells the agent
 who it is with the same text as the hooks, and sets the title. In Codex it's the `$rostr-draft` skill, which runs
-`rostr hook codex draft` and names the thread. There is no `/release`.
+`rostr hook codex draft` and names the thread. There is no `/bench`.
 
 ## Drafting
 
@@ -480,7 +481,7 @@ The same steps run locally and on the server (storage specifics in the storage d
 
 1. **Expire stale drafts:** release any draft not seen within the expiry (`rostr config expiry`, 7 days by default).
    This is the backstop for sessions that die without the release hook, and it runs lazily here, so there's no
-   cleanup job. A dead session holding a name you want can be freed sooner with `rostr release <name>`.
+   cleanup job. A dead session holding a name you want can be freed sooner with `rostr bench <name>`.
    Released drafts are kept for 7 days, so a resumed session can ask for its old name back, then deleted.
 2. **Same session, same name:** if the session already has an active draft, in any roster, bump its last-seen time
    and return it.
@@ -558,7 +559,7 @@ Authorization: Bearer <auth token>
 - Windows.
 - Team rosters (would need a team key on top of per-person keys).
 - Key rotation and recovery.
-- `/release`.
+- `/bench`.
 - Moving from cloud back to local (`rostr cloud off`).
 - A configurable sign-off format.
 - A client package for the API (`@rostr/client`), read-only viewer keys, and write endpoints.

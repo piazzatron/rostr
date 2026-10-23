@@ -16,7 +16,7 @@ func queryStats(ctx context.Context, db querier) (statsResponse, error) {
 		with active as (
 		  select d.roster_id, d.member_name, d.copy
 		  from drafts d join owners o on o.id = d.owner_id
-		  where d.released_at is null and d.last_seen_at >= now() - o.draft_expiry
+		  where d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry
 		)
 		select
 		  (select count(*) from active),

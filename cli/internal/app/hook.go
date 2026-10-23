@@ -236,7 +236,7 @@ func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, std
 		return err
 	}
 	defer st.Close()
-	_, err = st.Release(ctx, input.SessionID)
+	_, err = st.Bench(ctx, input.SessionID)
 	return err
 }
 
