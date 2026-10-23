@@ -703,16 +703,29 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 
 	// edit: drafted Ada can't be removed; other changes save
-	editor := func(json string) *machine {
-		file := filepath.Join(t.TempDir(), "edited.json")
-		if err := os.WriteFile(file, []byte(json), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return m.with("EDITOR=cp " + file)
+	out, code := m.runTTY([]ttyStep{
+		{"Edit the play roster", "x"}, // Ada
+		{"Edit the play roster", keyEnter},
+		{"Save the play roster?", keyEnter},
+		{"Save the play roster?", keyEnter},
+	}, "edit", "play")
+	if code == 0 || !strings.Contains(out, "drafted members: Ada") {
+		t.Fatalf("edit removing Ada: exit %d\n%s", code, out)
 	}
-	editor(`{"emojiMode":"off","aTeam":[{"name":"Grace","emoji":"🏆"}],"bTeam":[]}`).fails("drafted members: Ada", "edit", "play")
-	if out := editor(`{"emojiMode":"on","aTeam":[{"name":"Ada","emoji":"🧮"},{"name":"Linus","emoji":"🐧"}],"bTeam":[{"name":"Grace","emoji":"🏆"}]}`).ok("edit", "play"); out != "Saved the play roster.\n" {
-		t.Fatalf("edit: %q", out)
+	out, code = m.runTTY([]ttyStep{
+		{"Edit the play roster", "a"},
+		{"Add someone", "🐧 Linus"},
+		{"Linus", keyEnter},
+		{"Linus", keyEsc},
+		{"Linus", keyUp},                   // Grace
+		{"Linus", " "},                     // to the B team
+		{"Linus", keyEnter},                // done
+		{"Save the play roster?", keyLeft}, // emoji off to on
+		{"Save the play roster?", keyEnter},
+		{"Save the play roster?", keyEnter},
+	}, "edit", "play")
+	if code != 0 || !strings.Contains(out, "Saved the play roster.") {
+		t.Fatalf("edit: exit %d\n%s", code, out)
 	}
 	if d := m.draft(repo, "s4", "--roster", "play"); d.Display != "🐧 Linus" {
 		t.Fatalf("after edit: %+v", d)
