@@ -1,7 +1,8 @@
 # Live stats
 
-The home page's line, "Right now, 128 agents are working and 1,402 are on the bench across rostr", updates as agents
-are drafted and released. `working` is the number of active drafts, copies included, leaving out drafts past their
+The home page's live bar, "LIVE 128 agents drafted out of 1,530", updates as agents are drafted and released. It's
+pinned to the bottom of the screen, slides up once the visitor scrolls down, and crawls slowly across. The first
+number is `working`; the second is `working` plus `benched`. `working` is the number of active drafts, copies included, leaving out drafts past their
 owner's expiry. `benched` is the number of idle members in every roster: cast members whose name (copy 1) is free, as
 in `idle` from `GET /v1/rosters`. The socket is the only way to get them; there's no polling endpoint.
 
@@ -24,7 +25,7 @@ API server write ──▶ POST /update ──▶ Stats Durable Object ──▶
    just two routes, `GET /ws` and `POST /update`.
 4. **Browsers update in place.** The home page opens `{PUBLIC_LIVE_URL}/ws`, gets the current counts on connect, and
    counts up or down to each new pair. If the socket fails or closes, it retries after 5s, 10s, 30s, then every 60s.
-   With no counts yet, the line stays hidden.
+   With no drafted agents (or no counts yet), the bar stays hidden.
 
 Counts can drift between writes: a draft that passes its owner's expiry stops counting without a write, so the
 sockets show it until the next write anywhere.
@@ -36,7 +37,7 @@ sockets show it until the next write anywhere.
 | Worker | `LIVE_SECRET` (secret, `wrangler secret put`) | The shared secret `POST /update` requires |
 | API server | `LIVE_URL` | The Worker's base URL, `https://live.getrostr.sh` |
 | API server | `LIVE_SECRET` | The same secret. With `LIVE_URL` or `LIVE_SECRET` unset, nothing is pushed |
-| Site (build time) | `PUBLIC_LIVE_URL` | The Worker's base URL. Unset, the page has no live line |
+| Site (build time) | `PUBLIC_LIVE_URL` | The Worker's base URL. Unset, the page has no live bar |
 
 ## Why one Durable Object
 

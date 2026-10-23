@@ -193,10 +193,6 @@ const LIST_JSON_EXAMPLE = `{
         </button>
       </div>
       <a class="cta-alt" href="#install">or run the install script ↓</a>
-      <p class="live-stats" hidden>
-        <span class="live-dot" aria-hidden="true"></span>Right now, <span class="live-working"></span> working and{" "}
-        <span class="live-benched"></span> on the bench across <Rostr />.
-      </p>
 
       <div class="hero-terminal">
         <Code code={HERO_LIST_EXAMPLE} lang="ansi" frame="terminal" />
@@ -594,38 +590,38 @@ const LIST_JSON_EXAMPLE = `{
       }, 2600);
     }
 
-    // The hero's live count of agents working and on the bench, across everyone (see docs/live-stats.md). A socket to
-    // the live Worker at PUBLIC_LIVE_URL pushes each change as it happens; a dropped socket retries after 5s, 10s, 30s,
-    // then every 60s. The line shows only once there are counts to show, and hides when either is zero.
-    const liveStats = document.querySelector<HTMLElement>(".live-stats");
-    if (liveStats) {
+    // The live bar: agents drafted out of all agents, across everyone (see docs/live-stats.md). A socket to the live
+    // Worker at PUBLIC_LIVE_URL pushes each change as it happens; a dropped socket retries after 5s, 10s, 30s, then
+    // every 60s. The bar shows once there's a drafted agent to count, and slides up once the visitor scrolls down.
+    const liveBar = document.querySelector<HTMLElement>(".live-bar");
+    if (liveBar) {
       type Stats = { working: number; benched: number };
       const LIVE_URL: string = import.meta.env.PUBLIC_LIVE_URL ?? "";
       const RETRY_DELAYS_MS = [5_000, 10_000, 30_000, 60_000];
       const COUNT_MS = 600;
       const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const working = liveStats.querySelector<HTMLElement>(".live-working")!;
-      const benched = liveStats.querySelector<HTMLElement>(".live-benched")!;
-      const count = (n: number) => n.toLocaleString("en-US");
       let onScreen: Stats = { working: 0, benched: 0 };
       let frame = 0;
 
       const render = (stats: Stats) => {
         onScreen = stats;
-        working.textContent = `${count(stats.working)} ${stats.working === 1 ? "agent is" : "agents are"}`;
-        benched.textContent = `${count(stats.benched)} ${stats.benched === 1 ? "is" : "are"}`;
+        const set = (selector: string, text: string) =>
+          liveBar.querySelectorAll(selector).forEach((el) => (el.textContent = text));
+        set(".live-drafted", stats.working.toLocaleString("en-US"));
+        set(".live-drafted-label", stats.working === 1 ? "agent drafted" : "agents drafted");
+        set(".live-total", (stats.working + stats.benched).toLocaleString("en-US"));
       };
 
       // Counts up or down from the numbers on screen; the first counts, and reduced motion, just appear
       const show = (stats: Stats) => {
         cancelAnimationFrame(frame);
-        if (!stats.working || !stats.benched) {
-          liveStats.hidden = true;
+        if (!stats.working) {
+          liveBar.hidden = true;
           return;
         }
-        if (liveStats.hidden || reduceMotion) {
+        if (liveBar.hidden || reduceMotion) {
           render(stats);
-          liveStats.hidden = false;
+          liveBar.hidden = false;
           return;
         }
         const from = onScreen;
@@ -650,8 +646,11 @@ const LIST_JSON_EXAMPLE = `{
           setTimeout(connect, RETRY_DELAYS_MS[Math.min(retries++, RETRY_DELAYS_MS.length - 1)]),
         );
       };
-
       if (LIVE_URL) connect();
+
+      const slideUpOnScroll = () => liveBar.classList.toggle("is-shown", window.scrollY > 240);
+      window.addEventListener("scroll", slideUpOnScroll, { passive: true });
+      slideUpOnScroll();
     }
 
     // The hero's Slack notification waits until the visitor scrolls a little
@@ -780,4 +779,16 @@ const LIST_JSON_EXAMPLE = `{
       setInterval(poll, POLL_MS);
     }
   </script>
+
+  <!-- Live: agents drafted across all of rostr, in a bar that slides up from the bottom once the visitor scrolls -->
+  <div class="live-bar" hidden>
+    <div class="live-bar-track">
+      {[0, 1, 2, 3, 4, 5].map(() => (
+        <span class="live-bar-item">
+          <span class="live-bar-badge">LIVE</span>
+          <span><b class="live-drafted"></b> <span class="live-drafted-label"></span> out of <b class="live-total"></b></span>
+        </span>
+      ))}
+    </div>
+  </div>
 </Layout>

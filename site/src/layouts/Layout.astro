@@ -431,30 +431,60 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     color: var(--text);
   }
 
-  /* The live count of agents working and on the bench, after a pulsing dot. It fades up like the rest of the hero once
-     it loads. */
-  .live-stats {
-    margin: 20px 0 0;
-    color: var(--muted);
-    font-size: 15px;
-    /* Digits keep their width while the counts tick, so the line doesn't jitter */
+  /* The live bar: pinned to the bottom of the screen and sliding up once the visitor scrolls down, with "LIVE · X agents
+     drafted out of Y" crawling slowly across it. Six copies, so the crawl never runs out; the track moves by half
+     (three copies) per loop. */
+  .live-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: #1c1b19;
+    color: #ece8df;
+    font-family: var(--mono);
+    font-size: 13px;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    animation: rise-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    transform: translateY(110%);
+    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
-  .live-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    margin: 0 8px 1px 0;
-    border-radius: 50%;
-    background: #2f9e44;
-    animation: live-pulse 2s ease-in-out infinite;
+  .live-bar.is-shown {
+    transform: none;
   }
 
-  @keyframes live-pulse {
-    50% {
-      opacity: 0.35;
+  .live-bar-track {
+    display: inline-flex;
+    padding: 10px 0;
+    animation: live-bar 75s linear infinite;
+  }
+
+  .live-bar-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: max(240px, 35vw);
+  }
+
+  .live-bar-badge {
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: #e03131;
+    color: #fff;
+    font-weight: 800;
+  }
+
+  .live-bar b {
+    color: #ff7a3d;
+    font-weight: 800;
+  }
+
+  @keyframes live-bar {
+    to {
+      transform: translateX(-50%);
     }
   }
 
@@ -572,8 +602,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     .hero-notification,
     .hero > :is(h1, .hero-subtitle, .lede, .cta-title, .cta, .cta-alt),
     .hero-terminal > .expressive-code,
-    .live-stats,
-    .live-dot {
+    .live-bar-track {
       animation: none !important;
     }
   }
