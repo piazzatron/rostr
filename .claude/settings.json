@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "mcp__github__merge_pull_request",
+      "mcp__github__create_pull_request"
+    ]
+  }
+}
