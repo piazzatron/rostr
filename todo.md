@@ -61,15 +61,15 @@ Decide once there's a working build to play with.
       It matters a lot.
 - [ ] Upgrade the home page's "Works out of the box with Claude Code and Codex" line to say where: the Claude Code and
       Codex desktop apps, the terminal, tmux, and herdr.
-- [ ] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
+- [x] Human pass on the "Give your poor human brain a rest" section copy. It's not doing the trick yet.
 - [x] Write the agent setup instructions (`site/public/setup.md`, linked from the home page and `llms.txt`).
 
 ## Legal
 
 - [x] Terms of service and a privacy policy before launching the cloud API (the /privacy page explains the design but
       isn't a formal policy).
-- [ ] Move rostr under Rosebud Labs: the `LICENSE` copyright, the getrostr.sh domain, and the Vercel, Railway, and
-      Cloudflare accounts.
+- [ ] Move rostr under Rosebud Labs: the getrostr.sh domain, and the Vercel, Railway, and Cloudflare accounts (the
+      `LICENSE` copyright is done).
 
 ## CLI build
 
@@ -97,7 +97,8 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 - [ ] Hook titles don't reach the app or claude.ai in any Remote Control session, even on Claude Code 2.1.308:
       anthropics/claude-code#104473 (the app and the `remote-control` host both ignore the engine's title report).
 - [ ] Archiving a desktop session doesn't seem to release its name (♟️ Ron stayed drafted); check that SessionEnd fires.
-- [ ] Detect headless `claude -p` runs in the hooks (and Codex's equivalent) and skip drafting for them.
+- [x] Detect headless `claude -p` runs in the hooks and skip drafting for them.
+- [ ] Do the same for Codex's `codex exec` (check what its hooks can see).
 - [x] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks
       and skill.
 - [ ] Test release and resume in local sessions and in cloud sessions.
@@ -125,8 +126,7 @@ Write the setup steps for Claude Code on the web and Codex cloud:
 - [x] Make the repo public so the site's "Submit your own" link works.
 - [x] Polish the README for launch.
 - [x] Add a contributing guide (`CONTRIBUTING.md`, linked from the README).
-- [ ] Add an issue template and a `roster-submission` label for submitted rosters. The site's "Submit your own" link
-      already asks for that label, which doesn't exist yet.
+- [x] Add an issue template and a `roster-submission` label for submitted rosters.
 
 ## Integrations
 
