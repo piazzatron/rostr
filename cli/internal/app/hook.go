@@ -82,8 +82,10 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 	}
 	defer st.Close()
 
-	// TODO(headless): headless `claude -p` runs shouldn't be drafted on resume, but hook input has no reliable way to
-	// tell them apart yet (see todo.md).
+	// Headless `claude -p` runs don't take a name, even resuming a session that had one
+	if claudecode.IsHeadless(paths.ClaudeDir(), input.SessionID) {
+		return nil
+	}
 	d, err := draftOrReclaim(ctx, st, input.SessionID, hookDir(input.Cwd), input.Source == "resume")
 	if err != nil || d == nil {
 		return err
@@ -117,8 +119,10 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		return laterPrompt(ctx, input, stdout)
 	}
 
-	// TODO(headless): headless `claude -p` runs shouldn't be drafted, but hook input has no reliable way to tell them
-	// apart yet (see todo.md).
+	// Headless `claude -p` runs fire the same hooks, but a script's one-off answer doesn't take a name
+	if claudecode.IsHeadless(paths.ClaudeDir(), input.SessionID) {
+		return nil
+	}
 	placeholder := claudecode.PlaceholderTask(input.Prompt)
 	d, drafted, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), placeholder)
 	if err != nil || !drafted {

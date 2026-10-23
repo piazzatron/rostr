@@ -376,3 +376,39 @@ func write(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestIsPrintRun(t *testing.T) {
+	for _, tc := range []struct {
+		args string
+		want bool
+	}{
+		{"claude", false},
+		{"/opt/claude-code/bin/claude --preload /home/claude/.claude/remote/spare.sock", false},
+		{"claude -p say hi", true},
+		{"node /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js --print --model haiku", true},
+		{"claude -p --input-format stream-json --output-format stream-json", false},
+		{"claude --print --input-format=stream-json", false},
+		{"claude -p --sdk-url wss://example.com", false},
+	} {
+		if got := isPrintRun(strings.Fields(tc.args)); got != tc.want {
+			t.Errorf("isPrintRun(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestIsShellCommand(t *testing.T) {
+	for _, tc := range []struct {
+		args string
+		want bool
+	}{
+		{"/bin/sh -c rostr hook claude-code prompt", true},
+		{"-bash -lc rostr", true},
+		{"/bin/sh /tmp/claude -p", false},
+		{"bash --norc", false},
+		{"claude -p", false},
+	} {
+		if got := isShellCommand(strings.Fields(tc.args)); got != tc.want {
+			t.Errorf("isShellCommand(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}

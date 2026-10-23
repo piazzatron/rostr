@@ -594,6 +594,57 @@ func TestClaudeCodeHooks(t *testing.T) {
 	expectQuiet("end, no API", hook("session-end", `{"session_id":"s7"}`, "ROSTR_KEY="+unregisteredKey), 0)
 }
 
+// Headless `claude -p` runs fire the same hooks but aren't drafted. Here a stand-in for claude runs the hook the way
+// Claude Code does, through sh -c, so the hook sees the stand-in's arguments.
+func TestClaudeCodeHooksSkipHeadlessRuns(t *testing.T) {
+	s := newSandbox(t)
+	repo := s.gitRepo("api", "git@github.com:acme/api.git")
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+	claude := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(claude, []byte("#!/bin/sh\n/bin/sh -c '\"$ROSTR_BIN\" hook claude-code \"$ROSTR_EVENT\"'\n"), 0o755)
+	runAsClaude := func(args []string, event, input string, env ...string) string {
+		t.Helper()
+		cmd := exec.Command(claude, args...)
+		cmd.Dir = repo
+		cmd.Env = append(append(s.baseEnv(), "ROSTR_BIN="+binary, "ROSTR_EVENT="+event), env...)
+		cmd.Stdin = strings.NewReader(input)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("%s: %v", event, err)
+		}
+		return string(out)
+	}
+	prompt := func(id string) string {
+		return fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Fix it","prompt_id":"p1"}`, id, repo)
+	}
+	resume := fmt.Sprintf(`{"session_id":"h1","cwd":%q,"source":"resume"}`, repo)
+
+	printRun := []string{"-p", "Fix it"}
+	if out := runAsClaude(printRun, "prompt", prompt("h1")); out != "" {
+		t.Fatalf("headless prompt: %q", out)
+	}
+	if out := runAsClaude(printRun, "session-start", resume); out != "" {
+		t.Fatalf("headless resume: %q", out)
+	}
+	if drafted := s.list().Rosters[0].Drafted; len(drafted) != 0 {
+		t.Fatalf("a headless run was drafted: %+v", drafted)
+	}
+
+	// Remote Control sessions are --print runs too, driven over --sdk-url and stream-json. Their arguments run long
+	// enough that ps would cut them at a terminal's width, so here a long one sits between --print and the flags that
+	// make it a driven session
+	remoteControl := []string{"--print", "--debug-file", "/tmp/" + strings.Repeat("x", 200) + ".log", "--sdk-url",
+		"wss://example.com/v1/sessions/h2", "--session-id", "h2", "--input-format", "stream-json"}
+	// (COLUMNS puts ps's cut inside the long argument, with room for the ppid column before the arguments)
+	columns := fmt.Sprintf("COLUMNS=%d", len("/bin/sh "+claude+" --print --debug-file /tmp/")+20)
+	if out := runAsClaude(remoteControl, "prompt", prompt("h2"), columns); !strings.Contains(out, "drafted by rostr") {
+		t.Fatalf("Remote Control prompt: %q", out)
+	}
+	if drafted := s.list().Rosters[0].Drafted; len(drafted) != 1 || drafted[0].Session != "h2" {
+		t.Fatalf("drafted: %+v", drafted)
+	}
+}
+
 func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	s := newSandbox(t)
 	settingsPath := filepath.Join(s.home, ".claude", "settings.json")
