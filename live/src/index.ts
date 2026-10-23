@@ -79,11 +79,13 @@ export class Stats extends DurableObject<Env> {
   }
 }
 
-function authorized(request: Request, secret: string): boolean {
+function authorized(request: Request, secret: string | undefined): boolean {
+  // Without a secret configured, nobody is authorized
+  if (!secret) return false;
   const encoder = new TextEncoder();
   const given = encoder.encode(request.headers.get("Authorization") ?? "");
   const expected = encoder.encode(`Bearer ${secret}`);
-  return secret !== "" && given.byteLength === expected.byteLength && crypto.subtle.timingSafeEqual(given, expected);
+  return given.byteLength === expected.byteLength && crypto.subtle.timingSafeEqual(given, expected);
 }
 
 function parseCounts(body: unknown): Counts | null {
