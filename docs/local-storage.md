@@ -96,16 +96,8 @@ The same steps as the server, in one transaction:
 
 ## Editing
 
-`rostr edit` writes the roster to a temporary JSON file, opens it in `$EDITOR`, and validates and saves it when the
-editor closes:
-
-```json
-{
-  "emojiMode": "on",
-  "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }],
-  "bTeam": [{ "name": "Boromir", "emoji": "🛡️" }]
-}
-```
+`rostr edit` opens the roster in the cast editor, then a page for its emoji mode, and saves the emoji mode, A team,
+and B team together when Save is pressed. Saving refuses to remove or rename a drafted member.
 
 ## Moving to the cloud
 

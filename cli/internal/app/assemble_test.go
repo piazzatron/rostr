@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/piazzatron/rostr/cli/internal/roster"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
@@ -23,29 +24,27 @@ func TestAssembleWizardSteps(t *testing.T) {
 		want   []assembleStep
 	}{
 		{"first run", assembleSetup{}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft}},
-		{"first run, own names", assembleSetup{}, func(f *assembleFlow) { f.usePreset = false },
-			[]assembleStep{stepBuild, stepNames, stepName, stepEmoji, stepWhere, stepAutoDraft}},
-		{"first run, in the cloud, no auto-draft", assembleSetup{inCloud: true, opts: assembleOptions{noAutoDraft: true}}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji}},
+			[]assembleStep{stepBuild, stepPreset, stepTeams, stepSettings}},
+		{"first run, own names", assembleSetup{}, func(f *assembleFlow) { f.build = buildNames },
+			[]assembleStep{stepBuild, stepTeams, stepSettings}},
+		{"first run, free agents", assembleSetup{}, func(f *assembleFlow) { f.build = buildFreeAgents },
+			[]assembleStep{stepBuild, stepTeams, stepSettings}},
 		{"first run, every flag", assembleSetup{args: []string{"work"}, opts: assembleOptions{preset: "kanto", emoji: "off", noAutoDraft: true}, inCloud: true}, nil,
 			nil},
+		{"first run, a preset and nothing else", assembleSetup{opts: assembleOptions{preset: "kanto"}}, nil,
+			[]assembleStep{stepSettings}},
 		{"later run, new roster", assembleSetup{existing: existing}, nil,
-			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji}},
+			[]assembleStep{stepAction, stepBuild, stepPreset, stepTeams, stepSettings}},
 		{"later run, replace a cast", assembleSetup{existing: existing}, func(f *assembleFlow) { f.action = actionReplace },
-			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset}},
+			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset, stepTeams}},
 		{"later run, edit", assembleSetup{existing: existing}, func(f *assembleFlow) { f.action = actionEdit },
-			[]assembleStep{stepAction, stepPickRoster}},
+			[]assembleStep{stepAction, stepPickRoster, stepTeams, stepEditReview}},
+		{"rostr edit", assembleSetup{existing: existing, edit: "work"}, nil,
+			[]assembleStep{stepTeams, stepEditReview}},
 		{"later run with a name", assembleSetup{existing: existing, args: []string{"play"}}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepEmoji}},
-		{"later run in a repo asks to link it", assembleSetup{existing: existing, repo: "acme/api"}, nil,
-			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepLink}},
-		{"later run in a repo with --link", assembleSetup{existing: existing, repo: "acme/api", opts: assembleOptions{link: true}}, nil,
-			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji}},
-		{"replacing a cast in a repo doesn't link", assembleSetup{existing: existing, repo: "acme/api"}, func(f *assembleFlow) { f.action = actionReplace },
-			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset}},
-		{"first run in a repo: the default needs no link", assembleSetup{repo: "acme/api"}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft}},
+			[]assembleStep{stepBuild, stepPreset, stepTeams, stepSettings}},
+		{"later run with a name and emoji mode", assembleSetup{existing: existing, args: []string{"play"}, opts: assembleOptions{emoji: "on"}}, nil,
+			[]assembleStep{stepBuild, stepPreset, stepTeams}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -61,6 +60,286 @@ func TestAssembleWizardSteps(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAssembleWizardSettings(t *testing.T) {
+	existing := []store.Roster{{Name: "work"}}
+	tests := []struct {
+		name  string
+		setup assembleSetup
+		want  []assembleSetting
+	}{
+		{"first run", assembleSetup{}, []assembleSetting{settingName, settingEmoji, settingWhere, settingAutoDraft}},
+		{"first run in the cloud, no auto-draft", assembleSetup{inCloud: true, opts: assembleOptions{noAutoDraft: true}},
+			[]assembleSetting{settingName, settingEmoji}},
+		{"first run in a repo: the default needs no link", assembleSetup{repo: "acme/api"},
+			[]assembleSetting{settingName, settingEmoji, settingWhere, settingAutoDraft}},
+		{"later run", assembleSetup{existing: existing}, []assembleSetting{settingName, settingEmoji}},
+		{"later run in a repo asks to link it", assembleSetup{existing: existing, repo: "acme/api"},
+			[]assembleSetting{settingName, settingEmoji, settingLink}},
+		{"later run in a repo with --link", assembleSetup{existing: existing, repo: "acme/api", opts: assembleOptions{link: true}},
+			[]assembleSetting{settingName, settingEmoji}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := newAssembleFlow(tt.setup)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []assembleSetting
+			for _, setting := range assembleSettings {
+				if f.asksSetting(setting) {
+					got = append(got, setting)
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("settings %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAssembleWizardTeams(t *testing.T) {
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	teams := newCastEditor()
+	f.presetID = "hogwarts"
+	f.prepareTeams(teams)
+	f.edited.aTeam = f.edited.aTeam[:2]
+	if names := memberNames(f.chosenCast().aTeam); !slices.Equal(names, []string{"Harry", "Hermione"}) {
+		t.Fatalf("A team %v", names)
+	}
+
+	// Another cast starts from its own teams, and the preset itself is untouched
+	f.presetID = "kanto"
+	if chosen := f.chosenCast(); !slices.Equal(memberNames(chosen.aTeam), memberNames(f.baseCast().aTeam)) {
+		t.Fatalf("A team %v", memberNames(chosen.aTeam))
+	}
+	if p, _ := presetCast("hogwarts"); len(p.aTeam) != 6 {
+		t.Fatal("editing changed the preset")
+	}
+}
+
+func TestCastEditor(t *testing.T) {
+	c := cast{}
+	e := newCastEditor()
+	e.WithTheme(promptTheme())
+	e.Focus()
+	e.reset(&c)
+	if e.mode != castAdding {
+		t.Fatal("an empty cast doesn't start adding")
+	}
+	typeIn := func(text string) {
+		for _, r := range text {
+			e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		}
+		e.Update(key(tea.KeyEnter))
+	}
+
+	// Adding, a few at once, fills the A team to six first; a name taken already is refused
+	typeIn("🧮 Ada, Grace, Linus, Margaret, Alan, Barbara, Ken")
+	if len(c.aTeam) != 6 || len(c.bTeam) != 1 || c.aTeam[0].Emoji != "🧮" || c.aTeam[1].Emoji == "" {
+		t.Fatalf("cast %+v", c)
+	}
+	typeIn("grace")
+	if e.err == nil || len(c.aTeam)+len(c.bTeam) != 7 {
+		t.Fatal("added Grace twice")
+	}
+	e.Update(key(tea.KeyEsc))
+	if e.mode != castBrowsing {
+		t.Fatal("esc didn't stop adding")
+	}
+
+	// Space moves the one under the cursor to the other team, r renames, x removes
+	e.cursor = 0
+	e.Update(key(tea.KeySpace))
+	if c.bTeam[len(c.bTeam)-1].Name != "Ada" || len(c.aTeam) != 5 {
+		t.Fatalf("cast %+v", c)
+	}
+	e.cursor = 0
+	e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	e.input.SetValue("🐚 Grace Hopper")
+	e.Update(key(tea.KeyEnter))
+	if c.aTeam[0] != (roster.Member{Name: "Grace Hopper", Emoji: "🐚"}) {
+		t.Fatalf("renamed to %+v", c.aTeam[0])
+	}
+	e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if len(c.aTeam) != 4 {
+		t.Fatalf("cast %+v", c)
+	}
+
+	// Done needs someone on the A team
+	c.bTeam = append(c.bTeam, c.aTeam...)
+	c.aTeam = nil
+	if _, cmd := e.Update(key(tea.KeyEnter)); cmd != nil || e.err == nil {
+		t.Fatal("finished with no A team")
+	}
+}
+
+func TestAssembleWizardEmptyBTeam(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(ctx, st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, key(tea.KeyDown), key(tea.KeyDown))
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("🧮 Ada, Grace")})
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, key(tea.KeyEsc))
+	expectView(t, s, "A team · 2", "B team · 0", "no one yet")
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "Ready to assemble?", "B team: no one")
+
+	// It saves, and comes back to edit, with no one on the B team
+	chosen := f.chosenCast()
+	if len(chosen.aTeam) != 2 || len(chosen.bTeam) != 0 {
+		t.Fatalf("cast %+v", chosen)
+	}
+	r, err := st.CreateRoster(ctx, store.Roster{Name: "work", EmojiMode: roster.EmojiOn, ATeam: chosen.aTeam, BTeam: chosen.bTeam})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}, edit: "work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps = edit.screen(ctx, st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34})
+	expectView(t, s, "Edit the work roster", "B team · 0")
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "B team: no one", "Save")
+	var out strings.Builder
+	if err := saveEdit(ctx, &out, st, edit); err != nil {
+		t.Fatal(err)
+	}
+	if saved, _ := st.Roster(ctx, "work"); len(saved.ATeam) != 2 || len(saved.BTeam) != 0 {
+		t.Fatalf("saved %+v", saved)
+	}
+}
+
+func TestAssembleWizardLeavesAnEmptyCast(t *testing.T) {
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(context.Background(), nil)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, key(tea.KeyDown), key(tea.KeyDown))
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "Who's on your roster?", "shift+tab back", "esc quit")
+
+	// Shift+tab goes back with no one added, and esc quits
+	drive(s, nil, key(tea.KeyShiftTab))
+	expectView(t, s, "How do you want to build your roster?")
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, key(tea.KeyEsc))
+	if !s.cancelled {
+		t.Fatal("esc didn't quit an empty cast")
+	}
+}
+
+func TestAssembleWizardNewRosterDoesntTakeAnEditedEmojiMode(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	p, _ := presetCast("hogwarts")
+	r := store.Roster{Name: "wizards", EmojiMode: roster.EmojiOff, ATeam: p.aTeam, BTeam: p.bTeam}
+	f, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(context.Background(), st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 40})
+	for _, k := range []tea.KeyType{tea.KeyDown, tea.KeyDown, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
+		drive(s, nil, key(k))
+	}
+	expectView(t, s, "Save the wizards roster?")
+	if f.emoji != roster.EmojiOff {
+		t.Fatalf("editing starts from %s", f.emoji)
+	}
+	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyUp, tea.KeyUp, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
+		drive(s, nil, key(k))
+	}
+	expectView(t, s, "Ready to assemble?")
+	if f.emoji != roster.EmojiOn {
+		t.Fatalf("a new roster starts from %s", f.emoji)
+	}
+}
+
+func TestAssembleWizardChecksAReplacedCast(t *testing.T) {
+	r := store.Roster{Name: "work", EmojiMode: roster.EmojiOnly, ATeam: []roster.Member{{Name: "Ada", Emoji: "🧮"}}}
+	f, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.action, f.roster, f.build = actionReplace, "work", buildNames
+	teams := newCastEditor()
+	f.prepareTeams(teams)
+	teams.Focus()
+	f.edited = cast{aTeam: []roster.Member{{Name: "Ada", Emoji: "🧮"}, {Name: "Grace", Emoji: "🧮"}}}
+	teams.cast, teams.mode = &f.edited, castBrowsing
+	if _, cmd := teams.Update(key(tea.KeyEnter)); cmd != nil || teams.err == nil {
+		t.Fatal("finished a cast its roster's emoji mode can't save")
+	}
+}
+
+func TestAssembleWizardEdits(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	p, _ := presetCast("hogwarts")
+	r, err := st.CreateRoster(ctx, store.Roster{Name: "wizards", EmojiMode: roster.EmojiOff, ATeam: p.aTeam, BTeam: p.bTeam})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}, edit: "wizards"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(ctx, st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 40})
+	expectView(t, s, "rostr · edit", "Step 1 of 2", "Edit the wizards roster", "Harry", "Neville", "switch team")
+
+	// Move Harry to the B team, then save, keeping the roster's emoji mode
+	drive(s, nil, key(tea.KeySpace))
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "Step 2 of 2", "Save the wizards roster?", "Save")
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, key(tea.KeyEnter))
+	var out strings.Builder
+	if err := saveEdit(ctx, &out, st, f); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := st.Roster(ctx, "wizards")
+	if saved.EmojiMode != roster.EmojiOff || len(saved.ATeam) != 5 || saved.BTeam[len(saved.BTeam)-1].Name != "Harry" {
+		t.Fatalf("saved %+v", saved)
+	}
+}
+
+func memberNames(members []roster.Member) []string {
+	names := make([]string, len(members))
+	for i, m := range members {
+		names[i] = m.Name
+	}
+	return names
 }
 
 func TestAssembleWizardRejectsBadFlags(t *testing.T) {
@@ -85,39 +364,76 @@ func TestAssembleWizardScreen(t *testing.T) {
 	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30})
-	expectView(t, s, "rostr · assemble", "Step 1 of 6", "How do you want to build your roster?", "esc quit")
+	expectView(t, s, "rostr · assemble", "Step 1 of 4", "How do you want to build your roster?", "Free Agents", "esc quit")
 
 	// The preset picker previews the highlighted roster, and searching moves it
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 6", "Pick a roster: type to search", "The Lord of the Rings", "Gandalf", "B team")
+	expectView(t, s, "Step 2 of 4", "Pick a roster: type to search", "The Lord of the Rings", "Gandalf", "B team")
+	if strings.Contains(s.View(), "Feeling chaotic") {
+		t.Fatal("the preset picker lists Free Agents")
+	}
 	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hogwarts")})
 	expectView(t, s, "Hermione", "Dumbledore")
 
 	// Shift+tab goes back; coming forward again searches again
 	drive(s, nil, key(tea.KeyShiftTab))
-	expectView(t, s, "Step 1 of 6", "How do you want to build your roster?")
+	expectView(t, s, "Step 1 of 4", "How do you want to build your roster?")
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 6", "/hogwarts", "Hermione")
+	expectView(t, s, "Step 2 of 4", "/hogwarts", "Hermione")
 
-	// The name defaults to the preset's id, and answering the last step finishes
+	// The team picker starts from the preset's A team, and space moves someone to the B team
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Name this roster", "hogwarts")
-	for range 3 {
+	expectView(t, s, "Step 3 of 4", "Who's on the roster?", "called up", "A team · 6", "space switch team")
+	drive(s, nil, key(tea.KeySpace))
+	expectView(t, s, "A team · 5")
+
+	// The last page confirms everything, with the name from the preset
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "Step 4 of 4", "Ready to assemble?", "A team:", "Roster name", "hogwarts", "Agents show up as",
+		"rostr lives on", "Name new sessions", "Assemble")
+	for range 5 {
 		drive(s, nil, key(tea.KeyEnter))
 	}
-	expectView(t, s, "Step 6 of 6", "Draft names automatically")
-	drive(s, nil, key(tea.KeyEnter))
-	if s.cancelled || f.presetID != "hogwarts" || f.name != "hogwarts" || f.cloud || !f.autoDraft {
+	if s.cancelled || f.presetID != "hogwarts" || f.name != "hogwarts" || !f.cloud || !f.autoDraft || len(f.chosenCast().aTeam) != 5 {
 		t.Fatalf("answers: %+v", f)
 	}
 
 	// A narrow terminal drops the preview
 	narrow := newScreen("assemble")
-	narrow.panel = s.panel
-	narrow.focused = s.panel.field
+	narrow.panels = s.panels
+	narrow.focused = s.panels[0].field
 	narrow.width, narrow.height = 60, 24
 	if _, panelWidth := narrow.layout(); panelWidth != 0 {
 		t.Fatalf("panel %d wide at 60 columns", panelWidth)
+	}
+}
+
+func TestAssembleWizardFreeAgents(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(context.Background(), st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30}, key(tea.KeyDown), key(tea.KeyEnter))
+	expectView(t, s, "Step 2 of 3", "Who's on the roster?", "A team · 6", "B team · 8")
+	drawn := f.chosenCast()
+
+	// The cast stays put on the way to the last page, and going back to the start draws a new one
+	drive(s, nil, key(tea.KeyEnter))
+	if !slices.Equal(f.chosenCast().aTeam, drawn.aTeam) {
+		t.Fatal("the cast changed on the last page")
+	}
+	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyEnter} {
+		drive(s, nil, key(k))
+	}
+	if f.draws != 2 {
+		t.Fatalf("%d draws", f.draws)
 	}
 }
 

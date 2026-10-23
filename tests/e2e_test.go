@@ -595,17 +595,19 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 
-	// Fellowship, its default name, emoji on, the cloud, auto-draft on
+	// Fellowship as it comes, then the defaults on the last page: its name, emoji on, the cloud, auto-draft on
 	out, code := m.runTTY([]ttyStep{
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", keyEnter},
-		{"Name this roster", keyEnter},
-		{"How should agents show up?", keyEnter},
-		{"Where should rostr live?", keyDown},
-		{"The cloud", keyEnter},
-		{"Draft names automatically in new sessions", keyEnter},
+		{"Who's on the roster?", keyEnter},
+		{"Ready to assemble?", keyEnter}, // roster name
+		{"Agents show up as", keyEnter},
+		{"rostr lives on", keyEnter},
+		{"Name new sessions", keyEnter},
+		{"Assemble", keyEnter},
 	}, "assemble")
-	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") {
+	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") ||
+		!strings.Contains(out, "Your rostr key:") {
 		t.Fatalf("wizard: exit %d\n%s", code, out)
 	}
 	if _, err := os.Stat(m.credentialsPath()); err != nil {
@@ -627,6 +629,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", "hogwarts"},
 		{"hogwarts", keyEnter},
+		{"Who's on the roster?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Replaced the fellowship roster's cast") {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)
@@ -646,7 +649,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	repo := m.gitRepo("git@github.com:Acme/API.git")
 	m.ok("assemble", "work", "--preset", "fellowship", "--cloud")
 	m.ok("assemble", "play", "--names", "🧮 Ada, Grace", "--emoji", "off")
-	m.ok("assemble", "side", "--preset", "free-agents")
+	m.ok("assemble", "side", "--names", "🧙 Gandalf, 🐸 Yoda")
 	m.fails("already exists", "assemble", "WORK", "--preset", "hogwarts")
 
 	// link: bare, named, and --repo
@@ -700,16 +703,29 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 
 	// edit: drafted Ada can't be removed; other changes save
-	editor := func(json string) *machine {
-		file := filepath.Join(t.TempDir(), "edited.json")
-		if err := os.WriteFile(file, []byte(json), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return m.with("EDITOR=cp " + file)
+	out, code := m.runTTY([]ttyStep{
+		{"Edit the play roster", "x"}, // Ada
+		{"Edit the play roster", keyEnter},
+		{"Save the play roster?", keyEnter},
+		{"Save the play roster?", keyEnter},
+	}, "edit", "play")
+	if code == 0 || !strings.Contains(out, "drafted members: Ada") {
+		t.Fatalf("edit removing Ada: exit %d\n%s", code, out)
 	}
-	editor(`{"emojiMode":"off","aTeam":[{"name":"Grace","emoji":"🏆"}],"bTeam":[]}`).fails("drafted members: Ada", "edit", "play")
-	if out := editor(`{"emojiMode":"on","aTeam":[{"name":"Ada","emoji":"🧮"},{"name":"Linus","emoji":"🐧"}],"bTeam":[{"name":"Grace","emoji":"🏆"}]}`).ok("edit", "play"); out != "Saved the play roster.\n" {
-		t.Fatalf("edit: %q", out)
+	out, code = m.runTTY([]ttyStep{
+		{"Edit the play roster", "a"},
+		{"Add someone", "🐧 Linus"},
+		{"Linus", keyEnter},
+		{"Linus", keyEsc},
+		{"Linus", keyUp},                   // Grace
+		{"Linus", " "},                     // to the B team
+		{"Linus", keyEnter},                // done
+		{"Save the play roster?", keyLeft}, // emoji off to on
+		{"Save the play roster?", keyEnter},
+		{"Save the play roster?", keyEnter},
+	}, "edit", "play")
+	if code != 0 || !strings.Contains(out, "Saved the play roster.") {
+		t.Fatalf("edit: exit %d\n%s", code, out)
 	}
 	if d := m.draft(repo, "s4", "--roster", "play"); d.Display != "🐧 Linus" {
 		t.Fatalf("after edit: %+v", d)

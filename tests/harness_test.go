@@ -165,8 +165,11 @@ type ttyStep struct {
 }
 
 const (
+	keyUp    = "\x1b[A"
 	keyDown  = "\x1b[B"
+	keyLeft  = "\x1b[D"
 	keyEnter = "\r"
+	keyEsc   = "\x1b"
 )
 
 // runTTY runs rostr in a pseudo-terminal, as a person at a terminal would, answering its prompts step by step. It

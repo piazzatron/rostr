@@ -15,22 +15,39 @@
         background-image: radial-gradient(circle, #d8d3c9 1.6px, transparent 1.8px);
         background-size: 24px 24px; background-position: 12px 12px;
       }
-      .tag { position: absolute; left: 50%; top: 50%; width: 660px; height: 660px; translate: -50% -48%; rotate: -7deg; }
+      /* The tag and its status line, centered together */
+      .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 72px; }
+      /* Sized to the tag itself; tag.png has transparent padding, so it's offset out to the edges */
+      .tag-box { position: relative; width: 487px; height: 330px; rotate: -7deg; flex: none; }
+      .tag { position: absolute; left: -37px; top: -107px; width: 560px; height: 560px; }
       .tag img { width: 100%; }
       /* Sits over the tag image's white name area */
       .name {
         position: absolute; left: 14.9%; width: 69.9%; top: 40.9%; height: 27.2%;
         display: flex; align-items: center; justify-content: center; white-space: nowrap;
-        font-family: "Permanent Marker"; font-size: 76px; color: #1c1b19;
+        font-family: "Permanent Marker"; font-size: 64px; color: #1c1b19;
       }
-      .name .emoji { font-family: "Apple Color Emoji"; font-size: 0.82em; margin-right: 16px; }
+      .name .emoji { font-family: "Apple Color Emoji"; font-size: 0.82em; margin-right: 14px; }
+      /* Lines up with the name, which sits below the tag's middle */
+      .status {
+        translate: 0 26px; white-space: nowrap;
+        font-family: "SF Mono", Menlo, monospace; font-size: 72px; font-weight: 700;
+        letter-spacing: -0.04em; word-spacing: -0.2em; color: #1c1b19;
+      }
+      /* The task stands out in the brand orange; the stroke makes it heavier than SF Mono's heaviest weight */
+      .status b { font-weight: 800; color: #d9480f; -webkit-text-stroke: 3px #d9480f; letter-spacing: -0.02em; }
     </style>
   </head>
   <body>
     <div class="dots"></div>
-    <div class="tag">
-      <img src="tag.png" />
-      <div class="name"><span class="emoji">🧙</span>Gandalf</div>
+    <div class="scene">
+      <div class="tag-box">
+        <div class="tag">
+          <img src="tag.png" />
+          <div class="name"><span class="emoji">🧙</span>Gandalf</div>
+        </div>
+      </div>
+      <div class="status">is fixing <b>CI</b>.</div>
     </div>
   </body>
 </html>

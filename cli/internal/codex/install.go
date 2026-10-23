@@ -45,10 +45,10 @@ func Detected(codexDir string) bool {
 	return err == nil
 }
 
-// Fingerprint identifies the hooks this version of rostr installs, so an upgrade that changes them can be noticed and
-// the hooks reinstalled.
+// Fingerprint identifies what this version of rostr installs (hooks and skills), so an upgrade that changes any of it
+// can be noticed and the install redone.
 func Fingerprint() string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%v", hookEvents))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%v %s %s", hookEvents, skillContent, draftSkillContent))
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -58,8 +58,9 @@ func Installed(codexDir string) bool {
 	return err == nil && strings.Contains(string(data), "rostr hook codex ")
 }
 
-// Install adds rostr's hooks to hooks.json in codexDir, and writes the rostr and rostr-draft skills to skillsDir
-// (~/.agents/skills), skipping whatever is already there. It returns a description of each piece it added.
+// Install adds rostr's hooks to hooks.json in codexDir, skipping the ones already there, and writes the rostr and
+// rostr-draft skills to skillsDir (~/.agents/skills) unless they're current. It returns a description of each piece it
+// added or updated.
 func Install(codexDir, skillsDir string) ([]string, error) {
 	var installed []string
 
@@ -72,8 +73,9 @@ func Install(codexDir, skillsDir string) ([]string, error) {
 		installed = append(installed, "hooks in "+hooksPath)
 	}
 
+	// The skills' folders are named for rostr, so an older version's text is replaced
 	for _, f := range skillFiles(skillsDir) {
-		if _, err := os.Stat(f.path); err == nil {
+		if existing, err := os.ReadFile(f.path); err == nil && string(existing) == f.content {
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {

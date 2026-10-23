@@ -37,7 +37,7 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
   back to the default. `--repo owner/repo` targets another repo. Bare `rostr link` says which roster the repo uses.
 - `rostr config`: every setting. `rostr config default <roster>`, `rostr config emoji on|off|only`,
   `rostr config auto-draft on|off`, `rostr config expiry 7d`.
-- `rostr edit <roster>` opens the user's editor: ask them to run it.
+- `rostr edit <roster>` opens a full-screen editor in the terminal: ask the user to run it.
 - `rostr disband <roster> --yes` deletes a roster. Only run it when the user explicitly asks.
 - `rostr bench <name>, ...` frees names held by sessions that died (`rostr bench all` frees every name).
 
