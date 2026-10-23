@@ -734,16 +734,18 @@ func (f *assembleFlow) emojiOptions() []huh.Option[roster.EmojiMode] {
 	return emojiModeOptions(first)
 }
 
-// castSummary is the cast on the last page: where it's from, the A team, and how big the B team is.
+// castSummary is the cast on the last page: where it's from, the A team, and the B team.
 func castSummary(c cast) string {
 	var lines []string
 	if p, ok := presets.ByID(c.presetID); ok {
 		lines = append(lines, p.Emoji+" "+p.Name)
 	}
 	lines = append(lines, "A team: "+displayMembers(c.aTeam, roster.EmojiOn))
-	if len(c.bTeam) > 0 {
-		lines = append(lines, fmt.Sprintf("B team: %d more", len(c.bTeam)))
+	bTeam := displayMembers(c.bTeam, roster.EmojiOn)
+	if len(c.bTeam) == 0 {
+		bTeam = "no one"
 	}
+	lines = append(lines, "B team: "+bTeam)
 	return strings.Join(lines, "\n")
 }
 

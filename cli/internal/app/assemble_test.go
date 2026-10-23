@@ -178,6 +178,56 @@ func TestCastEditor(t *testing.T) {
 	}
 }
 
+func TestAssembleWizardEmptyBTeam(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(ctx, st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, key(tea.KeyDown), key(tea.KeyDown))
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("🧮 Ada, Grace")})
+	drive(s, nil, key(tea.KeyEnter))
+	drive(s, nil, key(tea.KeyEsc))
+	expectView(t, s, "A team · 2", "B team · 0", "no one yet")
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "Ready to assemble?", "B team: no one")
+
+	// It saves, and comes back to edit, with no one on the B team
+	chosen := f.chosenCast()
+	if len(chosen.aTeam) != 2 || len(chosen.bTeam) != 0 {
+		t.Fatalf("cast %+v", chosen)
+	}
+	r, err := st.CreateRoster(ctx, store.Roster{Name: "work", EmojiMode: roster.EmojiOn, ATeam: chosen.aTeam, BTeam: chosen.bTeam})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit, err := newAssembleFlow(assembleSetup{existing: []store.Roster{r}, edit: "work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps = edit.screen(ctx, st)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34})
+	expectView(t, s, "Edit the work roster", "B team · 0")
+	drive(s, nil, key(tea.KeyEnter))
+	expectView(t, s, "B team: no one", "Save")
+	var out strings.Builder
+	if err := saveEdit(ctx, &out, st, edit); err != nil {
+		t.Fatal(err)
+	}
+	if saved, _ := st.Roster(ctx, "work"); len(saved.ATeam) != 2 || len(saved.BTeam) != 0 {
+		t.Fatalf("saved %+v", saved)
+	}
+}
+
 func TestAssembleWizardEdits(t *testing.T) {
 	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "rostr.db"))
 	if err != nil {
