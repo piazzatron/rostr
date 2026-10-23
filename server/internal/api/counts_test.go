@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// The stats cover the whole database, so the count tests aren't parallel: they compare before and after with no other
-// test in this package writing in between.
+// The live counts cover the whole database, so these tests aren't parallel: they compare before and after with no
+// other test in this package writing in between.
 
-func TestStatsCountEveryOwner(t *testing.T) {
-	before := stats(t)
+func TestLiveCountsCoverEveryOwner(t *testing.T) {
+	before := countsNow(t)
 	a, b := newOwner(t), newOwner(t)
 	createRoster(a, "work", members("Gandalf", "Frodo", "Sam"), members("Boromir"))
 	createRoster(a, "games", members("Mario"), nil)
@@ -25,14 +25,14 @@ func TestStatsCountEveryOwner(t *testing.T) {
 	draftSessionNamed(b, b.session("s2"))
 	call[draftResponse](b, "POST", "/v1/agents/bench", map[string]any{"session": b.session("s2")}, http.StatusOK)
 
-	after := stats(t)
+	after := countsNow(t)
 	if working, benched := after.Working-before.Working, after.Benched-before.Benched; working != 3 || benched != 5 {
 		t.Fatalf("working +%d, benched +%d; want +3, +5", working, benched)
 	}
 }
 
-func TestStatsLeaveOutExpiredDrafts(t *testing.T) {
-	before := stats(t)
+func TestLiveCountsLeaveOutExpiredDrafts(t *testing.T) {
+	before := countsNow(t)
 	a, b := newOwner(t), newOwner(t)
 	createRoster(a, "work", members("Gandalf", "Frodo"), nil)
 	createRoster(b, "work", members("Mario"), nil)
@@ -45,18 +45,18 @@ func TestStatsLeaveOutExpiredDrafts(t *testing.T) {
 	// Each owner's own expiry applies: A's 1h drops Gandalf, B's 7d keeps Mario
 	execSQL(t, `update drafts set last_seen_at = now() - interval '2 hours' where session_id = any($1)`, []string{stale, other})
 
-	after := stats(t)
+	after := countsNow(t)
 	if working, benched := after.Working-before.Working, after.Benched-before.Benched; working != 2 || benched != 1 {
 		t.Fatalf("working +%d, benched +%d; want +2, +1", working, benched)
 	}
 }
 
-// stats counts the whole database, as a live push would.
-func stats(t *testing.T) statsResponse {
+// countsNow counts the whole database, as a live push would.
+func countsNow(t *testing.T) liveCounts {
 	t.Helper()
-	stats, err := queryStats(context.Background(), testDB)
+	counts, err := queryLiveCounts(context.Background(), testDB)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return stats
+	return counts
 }

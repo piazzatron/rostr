@@ -33,7 +33,7 @@ func TestLivePushCoalescesWrites(t *testing.T) {
 	pushes.next(t)
 }
 
-func TestWritesPushLiveStats(t *testing.T) {
+func TestWritesPushLiveCounts(t *testing.T) {
 	t.Parallel()
 	pushes := fakeWorker(t)
 	c := &client{t: t, token: newToken(), handler: NewHandler(testDB, Config{
@@ -51,7 +51,7 @@ func TestWritesPushLiveStats(t *testing.T) {
 	list(c)
 	pushes.none(t)
 
-	// Live stats are off without both settings
+	// Live counts are off without both settings
 	var off *livePusher
 	off.notify()
 }

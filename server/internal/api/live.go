@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// livePusher sends fresh stats to the live Worker after writes (see docs/live-stats.md). Writes within delay of the
+// livePusher sends fresh counts to the live Worker after writes (see docs/live-counts.md). Writes within delay of the
 // first share one push, and pushes go out one at a time, so the Worker never gets an older count after a newer one.
 type livePusher struct {
 	url    string
@@ -49,13 +49,13 @@ func (p *livePusher) push() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	stats, err := queryStats(ctx, p.db)
+	counts, err := queryLiveCounts(ctx, p.db)
 	if err != nil {
 		log.Printf("live push: %v", err)
 		return
 	}
 
-	body, _ := json.Marshal(stats)
+	body, _ := json.Marshal(counts)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url+"/update", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("live push: %v", err)
