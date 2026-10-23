@@ -131,7 +131,7 @@ func codexThreadName(d store.Draft) string {
 // codexLaterPrompt records that the thread's turn started and keeps its draft alive. When the thread lost its name
 // while resting, it renames the thread and tells the agent.
 func codexLaterPrompt(ctx context.Context, input codex.HookInput, stdout io.Writer) error {
-	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd))
+	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil {
 		return err
 	}
@@ -147,13 +147,9 @@ func hookCodexTurnEnd(ctx context.Context, input codex.HookInput, stdout, stderr
 	return recordTurnEnd(ctx, input.SessionID)
 }
 
-// hookCodexWorking is Codex's PostToolUse hook: a tool call reports the turn's start, if nothing has since the last
-// turn ended (see hookWorking).
+// hookCodexWorking is Codex's PostToolUse hook: a tool call reports the turn's start in the background, if nothing
+// has since the last turn ended (see hookWorking).
 func hookCodexWorking(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
-	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd))
-	if err == nil && d != nil {
-		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
-		fmt.Fprintln(stdout, codex.AdditionalContext("PostToolUse", claudecode.RenamedAfterRest(d.Display(), from)))
-	}
+	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }

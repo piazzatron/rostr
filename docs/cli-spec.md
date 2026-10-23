@@ -533,10 +533,12 @@ archived cloud session, a terminal left open) rest instead of holding a name unt
   run in the background, so they add no wait, and each time only moves forward, so reports that arrive out of order
   can't mark a working session as resting. A session whose `Stop` hook never fires never rests.
 - **Coming back.** The `Stop` hook also saves the turn's end and the session's name to
-  `~/.cache/rostr/turns/<session-id>`, which stays until a start has been reported, so a failed report is tried again.
-  The next prompt or tool call reads it: within 10 minutes nothing can have happened (15, less a margin for a clock
-  behind the server's), so it only reports the start. After that it reports the start and waits for the answer; if
-  the name was taken, the session gets its old name back if it's free again, or else a new one, with its task. The agent is told
+  `~/.cache/rostr/turns/<session-id>`, which stays until a start has been reported, so a failed report is tried again
+  on the next prompt or tool call. Tool calls only report in the background, so they never wait on the API. So does a
+  prompt within 10 minutes of the turn's end (15, less a margin for a clock behind the server's), since nothing can have
+  happened. After that the prompt reports the start and waits for the answer; if the name was taken, the session gets
+  its old name back if it's free again, or else a new one, with its task. The title tool calls are left to the title
+  hook, which may end the turn at them. The agent is told
   (`rostr renamed this session: you're … now, not …`), and the session is retitled: by the hook where the app shows a
   hook's title, by the agent in Remote Control and cloud sessions.
 - A cloud session that resumes after its VM was paused or rebuilt runs `SessionStart` with source `resume`, which

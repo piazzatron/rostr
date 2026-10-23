@@ -18,8 +18,8 @@ lives on the API instead; `credentials` and a cache are kept on disk.
   hooks/<agent>             the fingerprint of the hooks rostr last installed for claude-code or codex, so a
                             session start can tell when an upgrade changed them (see cli-spec.md, Upgrading)
   turns/<session>           when the session's last turn ended, and its name and task then, from the Stop hook;
-                            the next prompt or tool call reads it to tell whether the session rested, and deletes
-                            it once the turn's start is reported
+                            the next prompt or tool call reads it to tell whether the session rested; it's deleted
+                            once the next turn's start is recorded
   cloud/next.json           cloud mode: the next state to draft from (which roster each project uses, who's idle,
                             auto-draft), as the API last returned it, plus this machine's unconfirmed picks
   cloud/sessions/<session>.json   cloud mode: the session's own draft, so later prompts make no call

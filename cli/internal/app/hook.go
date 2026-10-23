@@ -168,7 +168,7 @@ func laterPrompt(ctx context.Context, input claudecode.HookInput, stdout io.Writ
 // wakeSession is wakeAfterRest for Claude Code: note tells the agent its new name, if it has one, and in Remote
 // Control and cloud sessions, whose apps don't show a hook's title, asks it to retitle the session.
 func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, err error) {
-	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd))
+	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil || d == nil {
 		return "", err
 	}
@@ -180,13 +180,19 @@ func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, 
 }
 
 // hookWorking is the PostToolUse hook on every tool. A turn can start without a prompt (another Stop hook continues
-// it, or a background task wakes the agent), so a tool call reports the start too, if nothing has since the last turn
-// ended. When the session lost its name while resting, it tells the agent; the next prompt retitles the session.
+// it, or a background task wakes the agent), so a tool call reports the start too, in the background, if nothing has
+// since the last turn ended. A session that lost its name while resting hears about it on its next prompt. The title
+// calls are left to hookTitleSet, which may end the turn at them.
 func hookWorking(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
-	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd))
-	if err == nil && d != nil {
-		fmt.Fprintln(stdout, claudecode.AdditionalContext("PostToolUse", claudecode.RenamedAfterRest(d.Display(), from)))
+	switch input.ToolName {
+	case claudecode.LocalTitleTool, claudecode.RemoteTitleTool:
+		return nil
+	case "Bash":
+		if claudecode.IsTaskCommand(input.ToolInput.Command) {
+			return nil
+		}
 	}
+	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }
 
@@ -195,22 +201,21 @@ func hookWorking(ctx context.Context, input claudecode.HookInput, stdout, stderr
 const wakeCheckAfter = store.RestAfter - 5*time.Minute
 
 // wakeAfterRest records that the session's turn started, when the Stop hook recorded that its last one ended and no
-// start has been recorded since. A session that rested may have lost its name to another session meanwhile: then it
-// gets its old name back if that's free, or a new one, which it returns with the name it had (from). A turn that ended
-// recently only reports the start, in the background. The record of the turn's end is kept until the start is
-// reported, so a failed report is tried again on the next tool call or prompt.
-func wakeAfterRest(ctx context.Context, sessionID, dir string) (renamed *store.Draft, from string, err error) {
+// start has been recorded since. The record of the turn's end is kept until the start is reported, so a failed report
+// is tried again on the next tool call or prompt.
+//
+// With check (a prompt), a session that rested may have lost its name to another session meanwhile, so the start is
+// reported before going on: if the name was taken, the session gets its old one back if that's free, or a new one,
+// which wakeAfterRest returns with the name it had (from). Otherwise, and for a turn that ended recently, the start is
+// reported in the background.
+func wakeAfterRest(ctx context.Context, sessionID, dir string, check bool) (renamed *store.Draft, from string, err error) {
 	end, ok := keepalive.LoadTurnEnd(paths.TurnDir(), sessionID)
 	if !ok {
 		return nil, "", nil
 	}
 	now := time.Now()
-	if now.Sub(end.At) < wakeCheckAfter {
-		if err := spawnHook(turnInput{SessionID: sessionID, At: now}, "hook", "turn"); err != nil {
-			return nil, "", err
-		}
-		keepalive.Forget(paths.TurnDir(), sessionID)
-		return nil, "", nil
+	if !check || now.Sub(end.At) < wakeCheckAfter {
+		return nil, "", spawnHook(turnInput{SessionID: sessionID, At: now, TurnEnd: end.At}, "hook", "turn")
 	}
 
 	st, err := openStore()
@@ -496,6 +501,8 @@ type turnInput struct {
 	SessionID string    `json:"session"`
 	Ended     bool      `json:"ended"`
 	At        time.Time `json:"at"`
+	// TurnEnd is, for a start, the end of the turn before it, whose record is removed once the start is recorded
+	TurnEnd time.Time `json:"turnEnd,omitzero"`
 }
 
 // newHookTurnCommand is `rostr hook turn`, which the hooks start in the background to record that a session's turn
@@ -515,7 +522,12 @@ func newHookTurnCommand() *cobra.Command {
 				return nil
 			}
 			defer st.Close()
-			if err := st.RecordTurn(cmd.Context(), in.SessionID, in.Ended, in.At); err != nil && !errors.Is(err, store.ErrNotFound) {
+			err = st.RecordTurn(cmd.Context(), in.SessionID, in.Ended, in.At)
+			switch {
+			case err == nil && !in.TurnEnd.IsZero():
+				keepalive.ForgetTurnEnd(paths.TurnDir(), in.SessionID, in.TurnEnd)
+			case err != nil && !errors.Is(err, store.ErrNotFound):
+				// A start that wasn't recorded keeps the turn's end, so it's tried again
 				logBackground("recording a turn for session %s: %v", in.SessionID, err)
 			}
 			return nil

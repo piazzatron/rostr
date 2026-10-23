@@ -70,6 +70,14 @@ func LoadTurnEnd(dir, sessionID string) (TurnEnd, bool) {
 	return end, true
 }
 
+// ForgetTurnEnd removes the session's record of its last turn end, if it's still the one that ended at at, so a report
+// that finishes late can't remove a newer turn's end.
+func ForgetTurnEnd(dir, sessionID string, at time.Time) {
+	if end, ok := LoadTurnEnd(dir, sessionID); ok && end.At.Equal(at) {
+		Forget(dir, sessionID)
+	}
+}
+
 var unsafeChars = regexp.MustCompile(`[^A-Za-z0-9_.-]`)
 
 func file(dir, sessionID string) string {
