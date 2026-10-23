@@ -3,7 +3,7 @@
 The HTTP API behind cloud mode, at `https://api.getrostr.sh`. Behavior is in [cli-spec.md](cli-spec.md) and storage
 in [server-schema.md](server-schema.md). The server lives in [`server/`](../server/).
 
-**Stability.** `GET /v1/rosters` is **public and stable**: dashboards and integrations can rely on it. Every other
+**Stability.** `GET /v1/stats` is **public and stable**: dashboards and integrations can rely on it. Every other
 endpoint is **internal**: only the CLI calls it, and it can change with the CLI.
 
 ## Conventions
@@ -70,8 +70,8 @@ Over the limit, the response is `429 rate_limited` with `Retry-After`.
 
 ## CORS
 
-`GET /v1/rosters` allows any origin: its responses, including errors, carry `Access-Control-Allow-Origin: *`, and
-`OPTIONS /v1/rosters` answers preflights with `204`, `Access-Control-Allow-Methods: GET, OPTIONS`,
+`GET /v1/stats` allows any origin: its responses, including errors, carry `Access-Control-Allow-Origin: *`, and
+`OPTIONS /v1/stats` answers preflights with `204`, `Access-Control-Allow-Methods: GET, OPTIONS`,
 `Access-Control-Allow-Headers: Authorization, Content-Type`, and `Access-Control-Max-Age: 86400`. No other endpoint
 sends CORS headers, so browsers can't call them.
 
@@ -156,7 +156,7 @@ carries it as `next`, and `GET /v1/next` returns it alone.
 }
 ```
 
-`rosters` and their `idle` lists are as in `GET /v1/rosters`, except that members other machines hold reservations
+`rosters` and their `idle` lists are as in `GET /v1/stats`, except that members other machines hold reservations
 on are left out of `idle`; `reserved` is the member this machine holds, or `null`. `links` carry no ciphertext.
 
 ### Reservations
@@ -175,7 +175,7 @@ A draft from the holding machine without `preferred` takes its reserved member.
 |---|---|---|
 | `GET /health` | none | Deploy and compose healthchecks |
 | `POST /v1/register` | none | `cloud on` (new setup), `assemble --cloud` |
-| `GET /v1/rosters` | bearer, **public** | `stats`, finding an agent by name (`bench`, `task`), dashboards |
+| `GET /v1/stats` | bearer, **public** | `stats`, finding an agent by name (`bench`, `task`), dashboards |
 | `POST /v1/rosters` | bearer | `assemble` (new roster) |
 | `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `stats`, `edit`, `disband` confirmation, `config emoji` |
 | `PUT /v1/rosters/{name}` | bearer | `edit`, `config emoji` |
@@ -253,7 +253,7 @@ Rate-limited per client IP.
 **`201`** with the Settings object. Errors: `400 invalid_request`, `409 already_registered`, `409 roster_exists`,
 `409 conflict` (for example, two drafts of the same member and copy), `429 rate_limited`.
 
-### `GET /v1/rosters` (public, stable)
+### `GET /v1/stats` (public, stable)
 
 Every roster with its drafted agents and idle members, in the shape of `rostr stats --json`.
 
@@ -456,7 +456,7 @@ Sets the task and bumps last-seen. **`200`** with the Draft plus `next`. Errors:
 Records that the session's turn ended (`ended: true`, from the `Stop` hook) or started (`false`, from the next
 prompt's hook) at `at`, the client's time, never later than now, and bumps last-seen. Each time only moves forward,
 so a report that arrives late can't undo a newer one. A draft whose turn ended at least 15 minutes ago, with no turn
-started since, is resting (`restingSince` in `GET /v1/rosters`). **`204`**, or **`404 not_drafted`** when the session
+started since, is resting (`restingSince` in `GET /v1/stats`). **`204`**, or **`404 not_drafted`** when the session
 has no active draft, as when another session took its name while it rested.
 
 ### `GET /v1/sessions/{session}`

@@ -282,8 +282,8 @@ func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
 	}
 
 	var body map[string]any
-	if status := apiGet(t, "/v1/rosters", token, &body); status != 200 {
-		t.Fatalf("GET /v1/rosters: %d %v", status, body)
+	if status := apiGet(t, "/v1/stats", token, &body); status != 200 {
+		t.Fatalf("GET /v1/stats: %d %v", status, body)
 	}
 	raw, _ := json.Marshal(body)
 	var listed struct {

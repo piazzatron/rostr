@@ -13,7 +13,7 @@ import (
 func TestAuth(t *testing.T) {
 	t.Parallel()
 	anon := &client{t: t, handler: testHandler}
-	callError(anon, "GET", "/v1/rosters", nil, http.StatusUnauthorized, "unauthorized")
+	callError(anon, "GET", "/v1/stats", nil, http.StatusUnauthorized, "unauthorized")
 
 	malformed := &client{t: t, handler: testHandler, token: "not-a-token"}
 	callError(malformed, "GET", "/v1/settings", nil, http.StatusUnauthorized, "unauthorized")
@@ -305,7 +305,7 @@ func TestPublicListShape(t *testing.T) {
 	draft(c, map[string]any{"session": c.session("s1"), "task": fakeCiphertext("t"),
 		"repoHash": fakeRepoHash("a/b"), "repo": fakeCiphertext("a/b")})
 
-	rec := c.do("GET", "/v1/rosters", nil)
+	rec := c.do("GET", "/v1/stats", nil)
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("status %d, content type %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
@@ -362,7 +362,7 @@ func TestPublicListCORS(t *testing.T) {
 	c := newOwner(t)
 
 	// Preflight
-	req := httptest.NewRequest("OPTIONS", "/v1/rosters", nil)
+	req := httptest.NewRequest("OPTIONS", "/v1/stats", nil)
 	req.Header.Set("Origin", "https://dashboard.example")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "authorization")
@@ -376,11 +376,11 @@ func TestPublicListCORS(t *testing.T) {
 	}
 
 	// The response itself, and its errors, so browsers can read them
-	if rec := c.do("GET", "/v1/rosters", nil); rec.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Fatal("GET /v1/rosters has no CORS header")
+	if rec := c.do("GET", "/v1/stats", nil); rec.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatal("GET /v1/stats has no CORS header")
 	}
 	anon := &client{t: t, handler: testHandler}
-	if rec := anon.do("GET", "/v1/rosters", nil); rec.Code != http.StatusUnauthorized || rec.Header().Get("Access-Control-Allow-Origin") != "*" {
+	if rec := anon.do("GET", "/v1/stats", nil); rec.Code != http.StatusUnauthorized || rec.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatalf("401 has no CORS header: %v", rec.Header())
 	}
 

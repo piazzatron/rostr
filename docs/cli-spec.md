@@ -584,7 +584,7 @@ One public endpoint, for web dashboards and integrations in cloud mode. Everythi
 can change.
 
 ```
-GET https://api.getrostr.sh/v1/rosters
+GET https://api.getrostr.sh/v1/stats
 Authorization: Bearer <auth token>
 ```
 

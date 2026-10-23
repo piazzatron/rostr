@@ -326,9 +326,9 @@ type listedRoster struct {
 	Idle      []idleMember  `json:"idle"`
 }
 
-// handleListRosters is the public GET /v1/rosters: every roster with its drafted agents and idle members, in the
+// handleStats is the public GET /v1/stats: every roster with its drafted agents and idle members, in the
 // shape of `rostr stats --json`. Tasks and repos are ciphertext.
-func (s *Server) handleListRosters(w http.ResponseWriter, r *http.Request, ownerID string) error {
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	listed, err := listRosters(r.Context(), s.db, ownerID)
 	if err != nil {
 		return err

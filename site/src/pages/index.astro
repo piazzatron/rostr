@@ -84,7 +84,7 @@ const COMMAND_GROUP_CARDS = [
 
 // The "Build on it" dashboard example uses the Smash Bros roster
 const DASHBOARD_ROSTER = PRESET_ROSTERS.find((roster) => roster.id === "smash-bros")!;
-// What GET /v1/rosters gives a dashboard: each drafted agent's name, emoji, team, task, repo, and when it was drafted
+// What GET /v1/stats gives a dashboard: each drafted agent's name, emoji, team, task, repo, and when it was drafted
 // (here, minutes ago), and everyone idle
 const DASHBOARD_MEMBERS = [
   { emoji: "🍄", name: "Mario", team: "A", task: "Ship the onboarding redesign", repo: "acme/web", minutes: 25 },
@@ -131,10 +131,10 @@ const HERO_LIST_EXAMPLE = toTerminalText(
 const INSTALL_EXAMPLE = `curl -fsSL https://getrostr.sh/install | sh
 rostr assemble`;
 const INSTALL_SCRIPT_SOURCE = "https://github.com/piazzatron/rostr/blob/main/site/public/install";
-const API_EXAMPLE = `curl https://api.getrostr.sh/v1/rosters \\
+const API_EXAMPLE = `curl https://api.getrostr.sh/v1/stats \\
   -H "Authorization: Bearer $ROSTR_TOKEN"`;
 // Pasted to an agent so it can write the ~15 lines that derive the auth token and decrypt tasks and repos
-const DECRYPT_PROMPT = `Build me a dashboard of my rostr agents using the rostr API. My rostr key is in ROSTR_KEY: "rostr_sk_" followed by 32 bytes as base64url. Derive two 32-byte keys from those bytes with HKDF-SHA256 (no salt): info "auth" is the bearer token (send it base64url-encoded), and info "encrypt" is an AES-256-GCM key. Fetch GET https://api.getrostr.sh/v1/rosters with that token. Each drafted agent's task and repo are base64: the first 12 bytes are the nonce, and the rest is the ciphertext and tag.`;
+const DECRYPT_PROMPT = `Build me a dashboard of my rostr agents using the rostr API. My rostr key is in ROSTR_KEY: "rostr_sk_" followed by 32 bytes as base64url. Derive two 32-byte keys from those bytes with HKDF-SHA256 (no salt): info "auth" is the bearer token (send it base64url-encoded), and info "encrypt" is an AES-256-GCM key. Fetch GET https://api.getrostr.sh/v1/stats with that token. Each drafted agent's task and repo are base64: the first 12 bytes are the nonce, and the rest is the ciphertext and tag.`;
 
 const LIST_JSON_EXAMPLE = `{
   "rosters": [
@@ -688,7 +688,7 @@ const LIST_JSON_EXAMPLE = `{
       if (openTile.contains(event.target as Node)) event.preventDefault();
       openTile.blur();
     });
-    // The "Build on it" dashboard behaves like one polling GET /v1/rosters every few seconds, so it only animates what
+    // The "Build on it" dashboard behaves like one polling GET /v1/stats every few seconds, so it only animates what
     // the API gives it: time since each agent was drafted ticks up, and some polls bring news: an agent's task changes,
     // or an agent goes back to the bench and someone from the bench is drafted in their place.
     const dashboard = document.querySelector<HTMLElement>(".dashboard");

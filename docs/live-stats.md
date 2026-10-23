@@ -4,7 +4,7 @@ The home page's live bar, "LIVE 128 agents drafted out of 1,530", updates as age
 pinned to the bottom of the screen, slides up once the visitor scrolls down, and crawls slowly across. The first
 number is `working`; the second is `working` plus `benched`. `working` is the number of active drafts, copies included, leaving out drafts past their
 owner's expiry. `benched` is the number of idle members in every roster: cast members whose name (copy 1) is free, as
-in `idle` from `GET /v1/rosters`. The socket is the only way to get them; there's no polling endpoint.
+in `idle` from `GET /v1/stats`. The socket is the only way to get them; there's no polling endpoint.
 
 ## Flow
 

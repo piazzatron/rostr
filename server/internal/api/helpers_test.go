@@ -198,7 +198,7 @@ type listResponse struct {
 
 func list(c *client) listResponse {
 	c.t.Helper()
-	return call[listResponse](c, "GET", "/v1/rosters", nil, http.StatusOK)
+	return call[listResponse](c, "GET", "/v1/stats", nil, http.StatusOK)
 }
 
 func draftedNames(l listResponse, roster string) []string {
