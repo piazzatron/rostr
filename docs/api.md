@@ -175,9 +175,9 @@ A draft from the holding machine without `preferred` takes its reserved member.
 |---|---|---|
 | `GET /health` | none | Deploy and compose healthchecks |
 | `POST /v1/register` | none | `cloud on` (new setup), `assemble --cloud` |
-| `GET /v1/rosters` | bearer, **public** | `list`, finding an agent by name (`bench`, `task`), dashboards |
+| `GET /v1/rosters` | bearer, **public** | `stats`, finding an agent by name (`bench`, `task`), dashboards |
 | `POST /v1/rosters` | bearer | `assemble` (new roster) |
-| `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `list`, `edit`, `disband` confirmation, `config emoji` |
+| `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `stats`, `edit`, `disband` confirmation, `config emoji` |
 | `PUT /v1/rosters/{name}` | bearer | `edit`, `config emoji` |
 | `PUT /v1/rosters/{name}/cast` | bearer | `assemble` (replace a cast) |
 | `DELETE /v1/rosters/{name}` | bearer | `disband` |
