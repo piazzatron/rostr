@@ -23,29 +23,29 @@ func TestAssembleWizardSteps(t *testing.T) {
 		want   []assembleStep
 	}{
 		{"first run", assembleSetup{}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft, stepConfirm}},
+			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft}},
 		{"first run, own names", assembleSetup{}, func(f *assembleFlow) { f.usePreset = false },
-			[]assembleStep{stepBuild, stepNames, stepName, stepEmoji, stepWhere, stepAutoDraft, stepConfirm}},
+			[]assembleStep{stepBuild, stepNames, stepName, stepEmoji, stepWhere, stepAutoDraft}},
 		{"first run, in the cloud, no auto-draft", assembleSetup{inCloud: true, opts: assembleOptions{noAutoDraft: true}}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepConfirm}},
+			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji}},
 		{"first run, every flag", assembleSetup{args: []string{"work"}, opts: assembleOptions{preset: "kanto", emoji: "off", noAutoDraft: true}, inCloud: true}, nil,
-			[]assembleStep{stepConfirm}},
+			nil},
 		{"later run, new roster", assembleSetup{existing: existing}, nil,
-			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepConfirm}},
+			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji}},
 		{"later run, replace a cast", assembleSetup{existing: existing}, func(f *assembleFlow) { f.action = actionReplace },
-			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset, stepConfirm}},
+			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset}},
 		{"later run, edit", assembleSetup{existing: existing}, func(f *assembleFlow) { f.action = actionEdit },
 			[]assembleStep{stepAction, stepPickRoster}},
 		{"later run with a name", assembleSetup{existing: existing, args: []string{"play"}}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepEmoji, stepConfirm}},
+			[]assembleStep{stepBuild, stepPreset, stepEmoji}},
 		{"later run in a repo asks to link it", assembleSetup{existing: existing, repo: "acme/api"}, nil,
-			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepLink, stepConfirm}},
+			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepLink}},
 		{"later run in a repo with --link", assembleSetup{existing: existing, repo: "acme/api", opts: assembleOptions{link: true}}, nil,
-			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji, stepConfirm}},
+			[]assembleStep{stepAction, stepBuild, stepPreset, stepName, stepEmoji}},
 		{"replacing a cast in a repo doesn't link", assembleSetup{existing: existing, repo: "acme/api"}, func(f *assembleFlow) { f.action = actionReplace },
-			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset, stepConfirm}},
+			[]assembleStep{stepAction, stepPickRoster, stepBuild, stepPreset}},
 		{"first run in a repo: the default needs no link", assembleSetup{repo: "acme/api"}, nil,
-			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft, stepConfirm}},
+			[]assembleStep{stepBuild, stepPreset, stepName, stepEmoji, stepWhere, stepAutoDraft}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -85,29 +85,29 @@ func TestAssembleWizardScreen(t *testing.T) {
 	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30})
-	expectView(t, s, "rostr · assemble", "Step 1 of 7", "How do you want to build your roster?", "esc quit")
+	expectView(t, s, "rostr · assemble", "Step 1 of 6", "How do you want to build your roster?", "esc quit")
 
 	// The preset picker previews the highlighted roster, and searching moves it
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 7", "Pick a roster: type to search", "The Lord of the Rings", "Gandalf", "B team")
+	expectView(t, s, "Step 2 of 6", "Pick a roster: type to search", "The Lord of the Rings", "Gandalf", "B team")
 	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hogwarts")})
 	expectView(t, s, "Hermione", "Dumbledore")
 
 	// Shift+tab goes back; coming forward again searches again
 	drive(s, nil, key(tea.KeyShiftTab))
-	expectView(t, s, "Step 1 of 7", "How do you want to build your roster?")
+	expectView(t, s, "Step 1 of 6", "How do you want to build your roster?")
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 7", "/hogwarts", "Hermione")
+	expectView(t, s, "Step 2 of 6", "/hogwarts", "Hermione")
 
-	// The name defaults to the preset's id, and the last step sums it all up
+	// The name defaults to the preset's id, and answering the last step finishes
 	drive(s, nil, key(tea.KeyEnter))
 	expectView(t, s, "Name this roster", "hogwarts")
-	for range 4 {
+	for range 3 {
 		drive(s, nil, key(tea.KeyEnter))
 	}
-	expectView(t, s, "Step 7 of 7", "Assemble the hogwarts roster?", "⚡ Hogwarts · emoji on · this machine · auto-draft on")
+	expectView(t, s, "Step 6 of 6", "Draft names automatically")
 	drive(s, nil, key(tea.KeyEnter))
-	if s.cancelled || f.presetID != "hogwarts" || f.name != "hogwarts" || !f.confirmed || f.cloud || !f.autoDraft {
+	if s.cancelled || f.presetID != "hogwarts" || f.name != "hogwarts" || f.cloud || !f.autoDraft {
 		t.Fatalf("answers: %+v", f)
 	}
 

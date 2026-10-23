@@ -51,24 +51,38 @@ func TestEndsPlainAnswer(t *testing.T) {
 		{"title call alongside real work", []string{"prompt:List the newest files", "tool:t1:ToolSearch:" + search, "result",
 			"tool:t2:" + LocalTitleTool + ":" + title, `tool:t3:Bash:{"command":"ls -lt"}`}, false},
 		{"title call before any answer", []string{"prompt:How deep is Baikal?", "tool:t2:" + RemoteTitleTool + ":" + title}, false},
-		{"work earlier in the turn", []string{"prompt:Check the logs", `tool:t0:Bash:{"command":"tail log"}`, "result",
-			"text:The logs are clean.", "tool:t2:" + RemoteTitleTool + ":" + title}, false},
+		{"work, then the answer, then the title call", []string{"prompt:Check the logs", `tool:t0:Bash:{"command":"tail log"}`, "result",
+			"text:The logs are clean.", "tool:t2:" + RemoteTitleTool + ":" + title}, true},
+		{"text, then more work, then the title call", []string{"prompt:Check the logs", "text:Let me look.",
+			`tool:t0:Bash:{"command":"tail log"}`, "result", "tool:t2:" + RemoteTitleTool + ":" + title}, false},
 		{"an earlier turn's work doesn't count", []string{"prompt:Check the logs", `tool:t0:Bash:{"command":"tail log"}`, "result",
 			"text:Clean.", "prompt:How deep is Baikal?", "text:About 1,642 m.", "tool:t2:" + RemoteTitleTool + ":" + title}, true},
-		{"a ToolSearch for something else is work", []string{"prompt:Search the web", `tool:t1:ToolSearch:{"query":"web"}`, "result",
-			"text:Found it.", "tool:t2:" + RemoteTitleTool + ":" + title}, false},
+		{"a keyword ToolSearch after the answer is titling", []string{"prompt:How deep is Baikal?", "text:About 1,642 m.",
+			`tool:t1:ToolSearch:{"query":"session title"}`, "result", "tool:t2:" + RemoteTitleTool + ":" + title}, true},
 	} {
 		path := filepath.Join(t.TempDir(), "transcript.jsonl")
 		write(t, path, transcriptLines(t, c.lines...))
-		if got := EndsPlainAnswer(path, "t2"); got != c.want {
-			t.Errorf("%s: got %v", c.name, got)
+		if got, reason := EndsPlainAnswer(path, "t2"); got != c.want || (!got && reason == "") {
+			t.Errorf("%s: got %v (%q)", c.name, got, reason)
 		}
 	}
 
-	// A call that isn't in the transcript (yet) never ends the turn
+	// A call that isn't in the transcript (yet) never ends the turn, and says so
 	path := filepath.Join(t.TempDir(), "transcript.jsonl")
 	write(t, path, transcriptLines(t, "prompt:How deep is Baikal?", "text:About 1,642 m."))
-	if EndsPlainAnswer(path, "t2") || EndsPlainAnswer(filepath.Join(t.TempDir(), "missing"), "t2") || EndsPlainAnswer(path, "") {
-		t.Error("ended the turn without the call")
+	if ends, reason := EndsPlainAnswer(path, "t2"); ends || !strings.Contains(reason, "isn't in the transcript") {
+		t.Errorf("without the call: %v, %q", ends, reason)
+	}
+	if ends, _ := EndsPlainAnswer(filepath.Join(t.TempDir(), "missing"), "t2"); ends {
+		t.Error("ended the turn without a transcript")
+	}
+	if ends, _ := EndsPlainAnswer(path, ""); ends {
+		t.Error("ended the turn without a tool_use_id")
+	}
+	// The reason names the work that followed the answer
+	write(t, path, transcriptLines(t, "prompt:Check the logs", "text:Let me look.", `tool:t0:Bash:{"command":"tail log"}`, "result",
+		"tool:t2:"+RemoteTitleTool+":"+title))
+	if _, reason := EndsPlainAnswer(path, "t2"); !strings.Contains(reason, "Bash") {
+		t.Errorf("reason: %q", reason)
 	}
 }

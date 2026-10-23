@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -404,6 +403,15 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			out = reclaimed.Draft
 			return nil
 		}
+		if req.IfAutoDraft {
+			settings, err := readSettings(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if !settings.AutoDraft {
+				return ErrAutoDraftOff
+			}
+		}
 
 		// A session's roster and project are pinned at its first draft
 		var r rosterRow
@@ -688,36 +696,54 @@ func firstFreeMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Membe
 		return roster.Member{}, 0, err
 	}
 
-	m, copy := pickFreeMember(r.ATeam, r.BTeam, func(name string, copy int) bool { return busy[slot{name, copy}] }, pickIndex)
+	last, err := lastDrafted(ctx, tx, r.id)
+	if err != nil {
+		return roster.Member{}, 0, err
+	}
+	m, copy := pickFreeMember(r.ATeam, r.BTeam, func(name string, copy int) bool { return busy[slot{name, copy}] }, last)
 	return m, copy, nil
 }
 
 // pickFreeMember picks a random free member, A team first, then the B team, then numbered copies the same way. pick
 // chooses an index among the free members; the cast is never empty.
-func pickFreeMember(aTeam, bTeam []roster.Member, busy func(name string, copy int) bool, pick func(n int) int) (roster.Member, int) {
+func pickFreeMember(aTeam, bTeam []roster.Member, busy func(name string, copy int) bool, last map[string]time.Time) (roster.Member, int) {
 	for copy := 1; ; copy++ {
 		for _, team := range [][]roster.Member{aTeam, bTeam} {
-			var free []roster.Member
+			var best roster.Member
+			var bestAt time.Time
+			found := false
 			for _, m := range team {
-				if !busy(m.Name, copy) {
-					free = append(free, m)
+				if busy(m.Name, copy) {
+					continue
+				}
+				if at := last[m.Name]; !found || at.Before(bestAt) {
+					best, bestAt, found = m, at, true
 				}
 			}
-			if len(free) > 0 {
-				return free[pick(len(free))], copy
+			if found {
+				return best, copy
 			}
 		}
 	}
 }
 
-// pickIndex chooses which free member to draft: a random one, or always the first with ROSTR_DRAFT_PICK=first, which
-// tests set for predictable drafts.
-var pickIndex = func() func(int) int {
-	if os.Getenv("ROSTR_DRAFT_PICK") == "first" {
-		return func(int) int { return 0 }
+// lastDrafted is when each of a roster's members was last drafted, within the retention of released drafts.
+func lastDrafted(ctx context.Context, tx *sql.Tx, rosterID int64) (map[string]time.Time, error) {
+	rows, err := tx.QueryContext(ctx, "select member_name, max(drafted_at) from drafts where roster_id = ? group by member_name", rosterID)
+	if err != nil {
+		return nil, err
 	}
-	return rand.IntN
-}()
+	defer rows.Close()
+	last := map[string]time.Time{}
+	for rows.Next() {
+		var name, at string
+		if err := rows.Scan(&name, &at); err != nil {
+			return nil, err
+		}
+		last[name] = parseTime(at)
+	}
+	return last, rows.Err()
+}
 
 func memberNamed(members []roster.Member, name string) (roster.Member, bool) {
 	for _, m := range members {

@@ -100,7 +100,8 @@ func ServerSessionID(claudeDir, sessionID string) string {
 // IsDesktopLocal reports whether the session is one the desktop app runs as a Local session. Those have the app's own
 // title tool, and the app shows a hook's title for them; Remote Control sessions run by Claude Code itself don't.
 func IsDesktopLocal(claudeDir, sessionID string) bool {
-	return readSessionFile(claudeDir, sessionID).Entrypoint == "claude-desktop"
+	// The app has more than one entrypoint ("claude-desktop", and "claude-desktop-3p" with a third-party provider)
+	return strings.HasPrefix(readSessionFile(claudeDir, sessionID).Entrypoint, "claude-desktop")
 }
 
 // sessionFile is what rostr reads from the per-process session files Claude Code writes to ~/.claude/sessions/.
@@ -160,6 +161,13 @@ func Title(display, task string) string {
 
 // Identity is what the agent is told whenever it's drafted or re-told its name. The task command names the session
 // explicitly, so it works even where ROSTR_SESSION isn't set (a session started before the hooks were installed).
+// Renamed tells the agent that the server confirmed a different name than it was told: the member it announced was
+// taken by a session that started at the same time.
+func Renamed(display, from string) string {
+	return fmt.Sprintf("rostr renamed this session: you're %s now, not %s (another session that started at the same "+
+		"time got that name first). Sign as %s from now on.", display, from, display)
+}
+
 func Identity(display, rosterName, sessionID string) string {
 	return strings.Join([]string{
 		fmt.Sprintf("You're %s for this session (drafted by rostr from the %q roster).", display, rosterName),
@@ -177,24 +185,50 @@ type TitleWhere struct {
 	ServerSessionID string // a Remote Control or cloud session, titled with Claude Code's remote tool
 }
 
-// TitleInstruction asks the agent to title the session "<display> · <summary>" during its reply, in the same
-// message as its answer or alongside its other tool calls, so titling costs no round trip of its own. rostr's
-// PostToolUse hook then records the summary as the task, and ends the turn if the reply was a plain answer. Terminal
-// sessions have no title tool, so the agent records the task and the next prompt's hook retitles the session.
+// TitleInstruction asks the agent to title the session "<display> · <summary>" at the end of the message with its
+// answer, after the text, so the title never comes before the answer and costs no round trip of its own. rostr's
+// PostToolUse hook then records the summary as the task and ends the turn, so Claude doesn't reply to the tool's
+// result. Terminal sessions have no title tool, so the agent isn't asked: rostr summarizes the prompt itself
+// (Summarize) and the next prompt's hook retitles the session.
 func TitleInstruction(display, sessionID string, where TitleWhere) string {
-	const when = "If your reply needs other tool calls, make this call in your first batch of them. Otherwise write " +
-		"your answer first, then make this call at the end of that same message. Don't mention it."
+	const when = "Write your complete answer to the user first; then, as the very last thing in that same message, " +
+		"after all of your answer text, make this call. Never make it before your answer or alongside other tool " +
+		"calls, and never mention it or the tool's result."
 	title := fmt.Sprintf("%q", display+" · <3-5 word summary of what the user wants>")
 	switch {
 	case where.DesktopLocal:
-		return fmt.Sprintf("Title this session with %s (load it with ToolSearch first, before anything else), "+
-			"with session_id \"self\" and title %s. %s", LocalTitleTool, title, when)
+		return fmt.Sprintf("Title this session with %s, with session_id \"self\" and title %s (load it with "+
+			"ToolSearch right before calling it). %s", LocalTitleTool, title, when)
 	case where.ServerSessionID != "":
-		return fmt.Sprintf("Title this session: call %s with session_id %q and title %s. %s",
-			RemoteTitleTool, where.ServerSessionID, title, when)
+		// A Remote Control host's own first session doesn't get the tool; only sessions started from the app do
+		return fmt.Sprintf("Title this session: call %s with session_id %q and title %s. %s If you don't have "+
+			"that tool, skip this step.", RemoteTitleTool, where.ServerSessionID, title, when)
 	}
-	return fmt.Sprintf("Record what you're working on: run %s \"<3-5 word summary of what the user wants>\". %s",
-		taskCommand(sessionID), when)
+	return ""
+}
+
+// TitleSetContext is what the PostToolUse hook tells the agent when its title call came before its answer, so it
+// answers the user rather than reporting the rename.
+const TitleSetContext = "The session is titled; the user sees neither this call nor its result, so don't mention " +
+	"either. Carry on and answer the user."
+
+// IsTerminal reports whether the session has no title tool for its agent: it's neither a desktop Local session nor a
+// Remote Control or cloud one.
+func (w TitleWhere) IsTerminal() bool {
+	return !w.DesktopLocal && w.ServerSessionID == ""
+}
+
+// UserPrompt is what the user typed: the desktop app puts <system-reminder> blocks ahead of it.
+func UserPrompt(prompt string) string {
+	prompt = strings.TrimSpace(prompt)
+	for strings.HasPrefix(prompt, "<system-reminder>") {
+		_, rest, found := strings.Cut(prompt, "</system-reminder>")
+		if !found {
+			return ""
+		}
+		prompt = strings.TrimSpace(rest)
+	}
+	return prompt
 }
 
 // IsTaskCommand reports whether a shell command is the agent recording its task.
@@ -217,17 +251,7 @@ func taskCommand(sessionID string) string {
 // PlaceholderTask is the start of the first prompt, used as the task until the agent sets its own.
 func PlaceholderTask(prompt string) string {
 	const maxRunes = 50
-
-	// The desktop app puts <system-reminder> blocks ahead of what the user typed
-	prompt = strings.TrimSpace(prompt)
-	for strings.HasPrefix(prompt, "<system-reminder>") {
-		_, rest, found := strings.Cut(prompt, "</system-reminder>")
-		if !found {
-			return ""
-		}
-		prompt = strings.TrimSpace(rest)
-	}
-	line, _, _ := strings.Cut(prompt, "\n")
+	line, _, _ := strings.Cut(UserPrompt(prompt), "\n")
 	line = strings.TrimSpace(line)
 
 	// A slash command ("/rostr") or a message Claude Code injected ("<task-notification>") says nothing about the work

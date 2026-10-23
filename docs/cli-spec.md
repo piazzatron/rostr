@@ -23,7 +23,8 @@ when the session ends.
 A roster is a named list of members, each a name and an emoji. A person can have many rosters.
 
 - **A team and B team.** Each roster has an A team (six by default) and a B team, stored as two separate lists.
-  Drafting picks from the A team first, in order, and only calls up the B team when every A-teamer is busy.
+  Drafting picks from the A team first, whoever was drafted longest ago, and only calls up the B team when every
+  A-teamer is busy.
 - **Presets.** Pre-built rosters ship with the CLI. The list lives in `site/src/data/rosters.ts` (id, name, source,
   emoji, A team, B team). Free Agents mixes characters from the other presets.
 - **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr release eowyn`
@@ -112,8 +113,8 @@ rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only]
 
 Interactive setup. The wizard runs full-screen, one question per step: a pre-built roster (with a preview of its
 cast) or your own names, roster name, emoji, where rostr lives (this machine or the cloud), and whether to draft every
-session automatically, then a summary to confirm. Nothing is saved until it's confirmed; shift+tab goes back a step,
-and esc cancels. Each question can be skipped with a flag, so an agent can run it non-interactively.
+session automatically. Nothing is saved until the last question is answered; shift+tab goes back a step, and esc
+cancels. Each question can be skipped with a flag, so an agent can run it non-interactively.
 
 - `--preset <id>`: use a pre-built roster.
 - `--names <list>`: comma-separated names, each optionally with an emoji (`"🧮 Ada, Grace"`). The first six are
@@ -312,8 +313,8 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
 | `SessionStart`, source `startup` or `clear` | Writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE` |
 | `SessionStart`, source `resume` | Writes `ROSTR_SESSION`, drafts (asking for the session's old name back, see [Drafting](#drafting)), and tells the agent who it is |
 | `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member (see below) |
-| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on) |
-| `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)) |
+| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on). In cloud mode it drafts from the local cache and confirms with the API in the background, so Claude isn't kept waiting (see [drafting-latency.md](drafting-latency.md)) |
+| `UserPromptSubmit`, every prompt | Keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)); in cloud mode, tells the agent if the API confirmed a different name than it was told |
 | `PostToolUse`, a title tool or `Bash` | Records the summary in a `<name> · <summary>` title as the agent's task, and ends a turn that was a plain answer (below) |
 | `SessionEnd` | Releases the session's member |
 
@@ -398,17 +399,22 @@ Two hooks, for a session drafted on its first prompt (when auto-draft is on):
 1. **`rostr hook claude-code prompt`** (`UserPromptSubmit`) runs before Claude sees the prompt. It drafts the session
    with the start of the prompt as a placeholder task, and through `additionalContext` tells the agent who it is (see
    [Identity](#identity)) and to title the session during its reply. It also sets the title to
-   `🧙 Gandalf · <start of the prompt>`, except in desktop Local sessions, which the app titles itself straight away.
+   `🧙 Gandalf · <start of the prompt>`, so the name shows before the agent's title call, which on a long first task
+   can take a minute.
 2. The agent titles the session `🧙 Gandalf · <3-5 word summary>` with the session's title tool: the app's
    `mcp__ccd_session_mgmt__set_session_title` (session `"self"`, loaded with ToolSearch) in desktop Local sessions
    (`entrypoint: claude-desktop` in `~/.claude/sessions/<pid>.json`), and `mcp__claude-code-remote__set_session_title`
-   (the server session ID) in Remote Control and cloud sessions. In terminal sessions it runs `rostr task`. It
-   makes the call alongside its first tool calls, or, for a plain answer, at the end of the message with the answer.
+   (the server session ID) in Remote Control and cloud sessions. It makes the call after it has written its answer,
+   at the end of that same message, never before the answer. Terminal sessions have no title tool, so the
+   agent isn't asked: the hook starts `rostr hook summarize` in the background, which summarizes the prompt with a
+   headless `claude -p --model haiku` run (the user's own login; hooks, settings, tools, and MCP servers off) and
+   records the result as the task, unless the agent set one meanwhile. The next prompt's hook puts it in the title.
+   If the run fails (not logged in, the plan's usage used up, anything), the title keeps the start of the prompt.
    **`rostr hook claude-code title-set`** (`PostToolUse` on both title tools and `Bash`) records the summary as the
-   task. When every tool call in the turn so far was titling (the ToolSearch, a title tool, `rostr task`) and
-   Claude has written text, the turn was a plain answer, so the hook returns `continue: false` and the turn ends
-   there: otherwise Claude would have to reply to the tool's result, and Claude Code doesn't let a turn end without
-   visible text, so it would repeat its answer.
+   task. When Claude has written text and every tool call since that text was titling (any ToolSearch, a title
+   tool, `rostr task`), the answer is finished, so the hook returns `continue: false` and the turn ends there:
+   otherwise Claude would have to reply to the tool's result, and Claude Code doesn't let a turn end without visible
+   text, so it would repeat its answer.
 
 On later prompts the prompt hook keeps the draft alive and retitles the session `🧙 Gandalf · <task>` whenever the task
 has changed. A session that already has a name is never treated as being on its first prompt.
@@ -470,12 +476,15 @@ The same steps run locally and on the server (storage specifics in the storage d
    and return it.
 3. **Resume:** if the session had a member before and that member is free, draft them again, from the same roster. A
    resumed session only gets its old name back if it's still free.
-4. **Otherwise** draft the first free member, A team first.
+4. **Otherwise** draft the free member who was drafted least recently (never drafted first, then roster order), A
+   team first, so drafts cycle through the cast instead of repeating a favorite.
 5. **Everyone's busy:** draft a numbered copy, walking the roster again in the same order: `🧙 Gandalf 2`, then
    `💍 Frodo 2`, and so on (then `3`s). A session always gets a name.
 
 Drafts are serialized per roster (a row lock on the server, a write transaction locally), so two sessions starting at
-once can't get the same member.
+once can't get the same member. In cloud mode the hooks pick from a cached idle list first and confirm with the
+server afterwards; two machines announcing the same member within the same moment is resolved by the second becoming
+`Ginny 2` on its next prompt. See [drafting-latency.md](drafting-latency.md).
 
 
 ### Keep-alive
@@ -485,7 +494,8 @@ A draft's last-seen time is bumped by drafting the same session again (resume, c
 
 - The prompt hook bumps at most once an hour per session, so cloud mode costs at most one API call an hour per
   session rather than one per prompt. It tracks the last bump in `~/.cache/rostr/keepalive/<session-id>` (the file's
-  modification time), in both local and cloud mode.
+  modification time), in both local and cloud mode. Everything else a later prompt needs comes from the session's
+  cached draft (`~/.cache/rostr/cloud/sessions/`), so it makes no call.
 - If the session's draft has already expired, the bump follows the compaction rule: reclaim the same member if
   they're free, otherwise leave the session unnamed. It never drafts a different member.
 

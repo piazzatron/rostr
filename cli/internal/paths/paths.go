@@ -17,6 +17,11 @@ func Database() string {
 	return filepath.Join(ConfigDir(), "rostr.db")
 }
 
+// MachineID holds this machine's random ID, which the rostr API uses to reserve its next picks in cloud mode.
+func MachineID() string {
+	return filepath.Join(ConfigDir(), "machine-id")
+}
+
 // Credentials holds the rostr key in cloud mode.
 func Credentials() string {
 	return filepath.Join(ConfigDir(), "credentials")
@@ -25,6 +30,16 @@ func Credentials() string {
 // KeepAliveDir holds one file per session, whose modification time is the session's last keep-alive bump.
 func KeepAliveDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "keepalive")
+}
+
+// CloudCacheDir holds cloud mode's local cache: the next state to draft from, and each session's own draft.
+func CloudCacheDir() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "cloud")
+}
+
+// BackgroundLog collects what rostr's background work (draft confirmations, prompt summaries) writes to stderr.
+func BackgroundLog() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "background.log")
 }
 
 // ClaudeDir is Claude Code's config directory: ~/.claude, or $CLAUDE_CONFIG_DIR.
