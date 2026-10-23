@@ -71,8 +71,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	err := pgx.BeginFunc(r.Context(), s.db, func(tx pgx.Tx) error {
 		var ownerID string
 		err := tx.QueryRow(r.Context(), `
-			insert into owners (auth_token_hash) values ($1)
-			on conflict (auth_token_hash) do nothing
+			insert into owners (id) values ($1)
+			on conflict (id) do nothing
 			returning id`, hashAuthToken(token)).Scan(&ownerID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &apiError{http.StatusConflict, "already_registered", "This auth token is already registered.", nil}
@@ -93,8 +93,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	// The token may have belonged to an owner that was deleted, whose ID this instance still has cached
-	s.owners.forgetHash(hashAuthToken(token))
 	s.live.notify()
 	writeJSON(w, http.StatusCreated, resp)
 }

@@ -55,12 +55,6 @@ type client struct {
 	t       *testing.T
 	handler http.Handler
 	token   string
-	machine string // sent as X-Rostr-Machine when set
-}
-
-// onMachine is the same owner calling from a machine, which holds reservations.
-func (c *client) onMachine(machine string) *client {
-	return &client{t: c.t, handler: c.handler, token: c.token, machine: machine}
 }
 
 func newToken() string {
@@ -94,9 +88,6 @@ func (c *client) do(method, path string, body any) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, reader)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-	if c.machine != "" {
-		req.Header.Set("X-Rostr-Machine", c.machine)
 	}
 	rec := httptest.NewRecorder()
 	c.handler.ServeHTTP(rec, req)

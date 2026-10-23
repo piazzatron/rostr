@@ -28,10 +28,10 @@ func TestAuth(t *testing.T) {
 	callError(anon, "POST", "/v1/register", map[string]any{"authToken": "short"}, http.StatusBadRequest, "invalid_request")
 
 	// Only a hash of the token is stored
-	if n := queryInt(t, `select count(*) from owners where auth_token_hash = $1`, owner.token); n != 0 {
+	if n := queryInt(t, `select count(*) from owners where id = $1`, owner.token); n != 0 {
 		t.Fatal("auth token stored in plaintext")
 	}
-	if got := call[settingsResponse](owner, "GET", "/v1/settings", nil, http.StatusOK); got.DraftExpiry != "7d" || !got.AutoDraft || got.DefaultRoster != nil {
+	if got := call[settingsResponse](owner, "GET", "/v1/settings", nil, http.StatusOK); got.DraftExpiry != "7d" || got.DefaultRoster != nil {
 		t.Fatalf("new owner settings: %+v", got)
 	}
 }
@@ -95,7 +95,7 @@ func importBody(token string) map[string]any {
 					"createdAt": "2026-01-01T00:00:00Z"},
 				{"name": "games", "aTeam": members("Mario", "Luigi"), "createdAt": "2026-02-01T00:00:00Z"},
 			},
-			"settings": map[string]any{"defaultRoster": "games", "draftExpiry": "48h", "autoDraft": false},
+			"settings": map[string]any{"defaultRoster": "games", "draftExpiry": "48h"},
 			"links": []map[string]any{
 				{"repoHash": fakeRepoHash("piazzatron/rostr"), "repo": fakeCiphertext("piazzatron/rostr"), "roster": "work"},
 			},
@@ -118,7 +118,7 @@ func TestImportUploadsAWholeSetup(t *testing.T) {
 	drafts[0]["session"], drafts[1]["session"] = c.session("s1"), c.session("s2")
 
 	settings := call[settingsResponse](c, "POST", "/v1/register", body, http.StatusCreated)
-	if *settings.DefaultRoster != "games" || settings.DraftExpiry != "2d" || settings.AutoDraft {
+	if *settings.DefaultRoster != "games" || settings.DraftExpiry != "2d" {
 		t.Fatalf("settings: %+v", settings)
 	}
 
@@ -230,7 +230,7 @@ func TestDisbandCascadesAndPromotesOldestRoster(t *testing.T) {
 		t.Fatalf("disband last: %+v", resp)
 	}
 	token, _ := decodeAuthToken(c.token)
-	if n := queryInt(t, `select count(*) from owners where auth_token_hash = $1`, hashAuthToken(token)); n != 0 {
+	if n := queryInt(t, `select count(*) from owners where id = $1`, hashAuthToken(token)); n != 0 {
 		t.Fatalf("%d owner rows left", n)
 	}
 	callError(c, "GET", "/v1/settings", nil, http.StatusUnauthorized, "unauthorized")
@@ -604,14 +604,14 @@ func TestSettings(t *testing.T) {
 	createRoster(c, "work", members("Gandalf"), nil)
 	createRoster(c, "games", members("Mario"), nil)
 
-	s := call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"defaultRoster": "Games", "draftExpiry": "48h", "autoDraft": false}, http.StatusOK)
-	if *s.DefaultRoster != "games" || s.DraftExpiry != "2d" || s.AutoDraft {
+	s := call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"defaultRoster": "Games", "draftExpiry": "48h"}, http.StatusOK)
+	if *s.DefaultRoster != "games" || s.DraftExpiry != "2d" {
 		t.Fatalf("patched: %+v", s)
 	}
 
 	// Fields left out stay as they were
 	s = call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"draftExpiry": "2w"}, http.StatusOK)
-	if *s.DefaultRoster != "games" || s.DraftExpiry != "14d" || s.AutoDraft {
+	if *s.DefaultRoster != "games" || s.DraftExpiry != "14d" {
 		t.Fatalf("second patch: %+v", s)
 	}
 	s = call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"draftExpiry": "36h"}, http.StatusOK)

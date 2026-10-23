@@ -16,6 +16,7 @@ go generate ./...   # after site/src/data/rosters.ts changes (a test fails until
 | `ROSTR_KEY` | A rostr key. Puts the machine in cloud mode, ahead of `~/.config/rostr/credentials` |
 | `ROSTR_API_URL` | The API cloud mode calls. Defaults to `https://api.getrostr.sh`; point it at a local server (`http://localhost:8080` from `docker compose up`) for development and tests |
 | `ROSTR_SESSION` | The default for `--session`; the session-start hook writes it to `CLAUDE_ENV_FILE` |
+| `ROSTR_AUTO_DRAFT` | `on` or `off`: this machine's auto-draft setting, ahead of `rostr config auto-draft`. Set it in a cloud environment, whose containers start without rostr's local files |
 | `ROSTR_DRAFT_PICK` | `first` drafts the first free member in roster order instead of a random one; tests set it |
 | `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR` | Move `~/.config/rostr`, `~/.cache/rostr`, and `~/.claude` |
 

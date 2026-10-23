@@ -31,7 +31,7 @@ func TestStatsCountEveryOwner(t *testing.T) {
 	}
 }
 
-func TestStatsLeaveOutExpiredDrafts(t *testing.T) {
+func TestStatsLeaveOutSweptDrafts(t *testing.T) {
 	before := stats(t)
 	a, b := newOwner(t), newOwner(t)
 	createRoster(a, "work", members("Gandalf", "Frodo"), nil)
@@ -44,6 +44,7 @@ func TestStatsLeaveOutExpiredDrafts(t *testing.T) {
 
 	// Each owner's own expiry applies: A's 1h drops Gandalf, B's 7d keeps Mario
 	execSQL(t, `update drafts set last_seen_at = now() - interval '2 hours' where session_id = any($1)`, []string{stale, other})
+	sweep(t)
 
 	after := stats(t)
 	if working, benched := after.Working-before.Working, after.Benched-before.Benched; working != 2 || benched != 1 {

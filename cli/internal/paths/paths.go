@@ -17,9 +17,9 @@ func Database() string {
 	return filepath.Join(ConfigDir(), "rostr.db")
 }
 
-// MachineID holds this machine's random ID, which the rostr API uses to reserve its next picks in cloud mode.
-func MachineID() string {
-	return filepath.Join(ConfigDir(), "machine-id")
+// AutoDraft holds this machine's auto-draft setting in cloud mode ("on" or "off"). Local mode keeps it in Database.
+func AutoDraft() string {
+	return filepath.Join(ConfigDir(), "auto-draft")
 }
 
 // Credentials holds the rostr key in cloud mode.
@@ -42,12 +42,12 @@ func TurnDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "turns")
 }
 
-// CloudCacheDir holds cloud mode's local cache: the next state to draft from, and each session's own draft.
+// CloudCacheDir holds cloud mode's local cache of each session's own draft.
 func CloudCacheDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "cloud")
 }
 
-// BackgroundLog collects what rostr's background work (draft confirmations, prompt summaries) writes to stderr.
+// BackgroundLog collects what rostr's background work (drafts ahead of a first prompt, prompt summaries) writes to stderr.
 func BackgroundLog() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "background.log")
 }

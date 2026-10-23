@@ -11,14 +11,13 @@ server), a task encryption key, and a repo fingerprint key. Only the auth token 
 the site's /privacy page.
 
 ```sql
--- One row per rostr key. Only a SHA-256 hash of the derived auth token is stored. Deleted (with everything under it)
--- when the owner disbands their last roster.
+-- One row per rostr key. id is the hex SHA-256 of the derived auth token, the only trace of the token the server keeps,
+-- so a request knows its owner without a lookup. Deleted (with everything under it) when the owner disbands their last
+-- roster. Auto-draft isn't here: it's a setting of each machine.
 create table owners (
-  id                uuid primary key default gen_random_uuid(),
-  auth_token_hash   text not null unique,
+  id                text primary key,
   default_roster_id uuid,  -- set after the first roster is created
   draft_expiry      interval not null default '7 days',  -- `rostr config expiry`
-  auto_draft        boolean not null default true,       -- `rostr config auto-draft`
   created_at        timestamptz not null default now()
 );
 
@@ -27,7 +26,7 @@ create table owners (
 -- a_team, b_team: [{"name": "Gandalf", "emoji": "🧙"}, ...]
 create table rosters (
   id            uuid primary key default gen_random_uuid(),
-  owner_id      uuid not null references owners on delete cascade,
+  owner_id      text not null references owners on delete cascade,
   name          text not null,
   name_key      text not null,  -- name lowercased with accents stripped (by the API), so names are unique loosely
   emoji_mode    text not null default 'on' check (emoji_mode in ('on', 'off', 'only')),
@@ -39,13 +38,14 @@ create table rosters (
 
 alter table owners
   add foreign key (default_roster_id) references rosters on delete set null;
+create index owners_default_roster on owners (default_roster_id);  -- for the set null when a roster is disbanded
 
 -- Which roster a project uses (`rostr link`). Projects without a link use the owner's default roster.
 -- The server never sees repo names. The CLI sends two values, both computed with keys that never leave the user's
 -- machine: repo_hash, HMAC-SHA256 of the lowercased "owner/repo" with the fingerprint key, for lookups; and repo,
 -- AES-256-GCM ciphertext of "owner/repo", so any machine with the key can show and restore the name.
 create table project_links (
-  owner_id  uuid not null references owners on delete cascade,
+  owner_id  text not null references owners on delete cascade,
   repo_hash text not null,
   repo      bytea not null,
   roster_id uuid not null references rosters on delete cascade,
@@ -57,7 +57,7 @@ create index project_links_roster on project_links (roster_id);  -- for the casc
 -- One row per draft. Rows are kept for 7 days after release so a resumed session can ask for its old name back.
 create table drafts (
   id           bigint generated always as identity primary key,
-  owner_id     uuid not null references owners on delete cascade,  -- the roster's owner, for the session index
+  owner_id     text not null references owners on delete cascade,  -- the roster's owner, for the session index
   roster_id    uuid not null references rosters on delete cascade,
   member_name  text not null,
   member_emoji text not null,  -- kept on the draft so it still shows after the cast is replaced
@@ -75,52 +75,47 @@ create table drafts (
   turn_ended_at   timestamptz
 );
 
--- A machine's next pick in a roster, held so no other machine drafts that member first (docs/api.md, Reservations).
--- Made and extended by every response carrying the next state, for 24 hours; deleted when its member is drafted.
-create table reservations (
-  roster_id   uuid not null references rosters on delete cascade,
-  machine_id  text not null,
-  member_name text not null,  -- the cast's spelling
-  expires_at  timestamptz not null,
-  primary key (roster_id, machine_id)
-);
-
 -- A member can only be drafted once at a time, and a session can only hold one member at a time, across all of
 -- the owner's rosters.
 create unique index drafts_active_member on drafts (roster_id, member_name, copy) where benched_at is null;
 create unique index drafts_active_session on drafts (owner_id, session_id) where benched_at is null;
 
--- For resuming: find the member a session had before.
-create index drafts_session on drafts (session_id, drafted_at desc);
+-- A session's drafts, newest first (resuming), which also serves the cascade when an owner is deleted.
+create index drafts_owner_session on drafts (owner_id, session_id, drafted_at desc);
 
--- For the cascade when a roster is disbanded, and pruning released drafts.
-create index drafts_roster on drafts (roster_id, benched_at);
+-- The cascade when a roster is disbanded, and the background sweep's two passes.
+create index drafts_roster on drafts (roster_id);
+create index drafts_active_last_seen on drafts (last_seen_at) where benched_at is null;
+create index drafts_benched on drafts (benched_at) where benched_at is not null;
 ```
 
 ## Drafting
 
-`rostr draft` runs in one transaction:
+A draft makes two round trips to the database (see [api.md](api.md#post-v1agentsdraft)):
 
-1. **Lock the owner row** (`select ... from owners where id = $1 for update`). This serializes an owner's drafts, so
-   two sessions starting at once can't both pick Gandalf. It's the owner rather than the roster because a draft can
-   touch more than one roster: "same session" looks across all of them, and a resume drafts into the session's old
-   roster, which may not be the one asked for. Contention is still one person's own sessions, so the lock is never
-   busy for long. Every other write (edits, links, releases, settings) takes the same lock.
-2. **Expire stale drafts:** release any of the owner's active drafts whose `last_seen_at` is older than their
-   `draft_expiry`. This is the backstop for sessions that die without running the release hook. Also delete released
-   rows older than 7 days, and expired reservations. It runs here, lazily, at the start of every write, so there's
-   no cleanup job. Reads leave out drafts past the expiry that haven't been released yet.
-3. **Same session, same name:** if the session already has an active draft in any of the owner's rosters (found by
-   `session_id`), bump `last_seen_at` and return it.
-4. **Resume:** if the session had a member before and that member is free, draft them again, from that roster.
-5. **Otherwise** draft the free member drafted least recently (`max(drafted_at)` per member over the retained
-   drafts; never drafted first, then roster order), A team before the B team, skipping members other machines hold
-   reservations on, or the `preferred` member the CLI already
-   announced (their lowest free copy if their name is taken), leaving out the members in `avoid`. If every member
-   is busy, take the name of the member who has rested longest, benching their draft; with no one resting, draft
-   a free numbered copy (`copy` 2, then 3). See [api.md](api.md#post-v1agentsdraft).
+1. **One batch of reads:** it bumps the session's active draft if it has one (which is all a draft of a drafted
+   session does), and reads the owner's default roster, their rosters, the project's link, the session's previous
+   draft, the owner's active drafts (with which are resting), and when each member was last drafted
+   (`max(drafted_at)` per member over the retained drafts).
+2. **The pick, in Go:** resume the session's previous member if they're free; else the free member drafted least
+   recently (never drafted first, then roster order), A team before the B team; if every member is busy, the name of
+   the member who has rested longest; else a free numbered copy (`copy` 2, then 3).
+3. **One batch of writes,** run as one implicit transaction: bench the resting draft whose name it takes, if any
+   (only if it's still resting), and insert the new draft.
 
-The unique indexes back this up: if the logic ever gets it wrong, the insert fails instead of drafting a duplicate.
+There's no database lock. The unique indexes are what keep two drafts from taking the same name or session: when two
+race, one insert fails, and that draft starts over and sees the other's. That also covers a resting session that
+woke meanwhile: its draft isn't benched, so the insert of its name fails. Drafts for one owner on one server instance
+take turns, so a burst of sessions starting at once doesn't keep colliding; the indexes catch races between instances.
+
+Every other write (edits, links, settings, benches) runs in a transaction holding the owner's row lock.
+
+## Expiry
+
+A background sweep in each server instance runs every minute: it benches drafts whose `last_seen_at` is older than
+their owner's `draft_expiry` (the backstop for sessions that die without running the release hook), and deletes drafts
+benched more than 7 days ago, past the window a resumed session can ask for its old name back. Running on several
+instances at once is harmless. Until the sweep benches an expired draft, it still counts as active.
 
 ## Releasing
 

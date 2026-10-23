@@ -274,8 +274,10 @@ On its own, prints every setting.
   `ROSTR_KEY`. Refuses when it isn't running in a terminal (which is how agents run commands), so the key doesn't
   land in an agent's transcript by accident.
   `--token` prints the derived auth token instead, for calling the [public API](#public-read-api) with `curl`.
-- `auto-draft` and `expiry` are stored with your setup (the local settings table, or your account in cloud mode), so
-  they apply on every machine.
+- `expiry` is stored with your setup (the local settings table, or your account in cloud mode), so it applies on
+  every machine. `auto-draft` is a setting of each machine: in local mode it's in the settings table, and in cloud
+  mode in `~/.config/rostr/auto-draft`, so a session start checks it without a call. `ROSTR_AUTO_DRAFT=on` or `off`
+  overrides it, which is how a cloud environment, whose containers start without that file, turns it off.
 - **Open (N10):** emoji is per roster, but `rostr config` shows one value.
 
 
@@ -339,11 +341,11 @@ sync` too. New Codex hooks still need approving in Codex's `/hooks`.
 
 | Event | What `rostr hook` does |
 |---|---|
-| `SessionStart`, source `startup` or `clear` | Writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE` |
+| `SessionStart`, source `startup` or `clear` | Writes `export ROSTR_SESSION=<id>` to `CLAUDE_ENV_FILE`. In cloud mode (when auto-draft is on, and not for a headless `claude -p` run), drafts the session in the background, so its name is waiting by its first prompt (see [Drafting ahead](#drafting-ahead)) |
 | `SessionStart`, source `resume` | Writes `ROSTR_SESSION`, drafts (asking for the session's old name back, see [Drafting](#drafting)), and tells the agent who it is |
 | `SessionStart`, source `compact` | Re-tells the agent who it is, without drafting a new member (see below) |
-| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on). In cloud mode it drafts from the local cache and confirms with the API in the background, so Claude isn't kept waiting (see [drafting-latency.md](drafting-latency.md)) |
-| `UserPromptSubmit`, every prompt | Records that the turn started, renaming the session if it lost its name while resting (see [Resting](#resting)); keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)); in cloud mode, tells the agent if the API confirmed a different name than it was told |
+| `UserPromptSubmit`, first prompt | The draft step, below (when auto-draft is on). In cloud mode it uses the draft made when the session started, if it's there, and drafts otherwise |
+| `UserPromptSubmit`, every prompt | Records that the turn started, renaming the session if it lost its name while resting (see [Resting](#resting)); keeps the draft alive, at most once an hour (see [Keep-alive](#keep-alive)) |
 | `PostToolUse`, any tool | Records that the turn started, if nothing has since the last turn ended: a turn can start without a prompt, when another `Stop` hook continues it or a background task wakes the agent (see [Resting](#resting)) |
 | `PostToolUse`, a title tool or `Bash` | Records the summary in a `<name> · <summary>` title as the agent's task, and ends a turn that was a plain answer (below), recording that the turn ended, since the `Stop` hook may not run after that |
 | `Stop` | Records that the turn ended (see [Resting](#resting)) |
@@ -525,10 +527,28 @@ The same steps run locally and on the server (storage specifics in the storage d
 6. **No one's resting:** draft a numbered copy, walking the roster again in the same order: `🧙 Gandalf 2`, then
    `💍 Frodo 2`, and so on (then `3`s). A session always gets a name.
 
-Drafts are serialized per roster (a row lock on the server, a write transaction locally), so two sessions starting at
-once can't get the same member. In cloud mode the hooks pick from a cached idle list first and confirm with the
-server afterwards; two machines announcing the same member within the same moment is resolved by the second becoming
-`Ginny 2` on its next prompt. See [drafting-latency.md](drafting-latency.md).
+Two sessions starting at once can't get the same member: locally, drafts run in a write transaction; on the server,
+unique indexes on active drafts refuse a second draft of the same name, and the losing draft starts over (see
+[server-schema.md](server-schema.md#drafting)). The server always decides, so a session never has to be renamed.
+
+### Drafting ahead
+
+In cloud mode a session is drafted when it starts, in the background, rather than on its first prompt, so the first
+prompt doesn't wait on the API (see [drafting-latency.md](drafting-latency.md)). `SessionStart` (sources `startup` and
+`clear`) starts `rostr hook draft-ahead`, which drafts the session and caches the draft; the agent is told its name on
+its first prompt, which reads it from the cache.
+
+- **Idle until the first prompt.** The draft is marked idle: it counts as a turn that ended at the draft, so a session
+  opened and never prompted rests after 15 minutes and its name can be taken, and the first prompt records the turn
+  starting, like any prompt after a rest. A session idle long enough to lose its name gets a new one on its first
+  prompt.
+- **Task.** The first prompt sends the start of the prompt as the task in the background.
+- **Not there yet.** If the first prompt comes before the draft finishes (a session started with a prompt, say), the
+  prompt hook drafts itself, and the server returns the same draft to both.
+- **Where it helps.** A terminal session has seconds between starting and its first prompt. A cloud session's prompt
+  is already typed when its container starts, so it gets less of a head start. Codex drafts on the first prompt, as
+  before: whether its `SessionStart` fires early enough to help is still open.
+- Local mode drafts without a network call, so it drafts on the first prompt.
 
 
 ### Resting

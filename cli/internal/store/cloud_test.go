@@ -21,9 +21,9 @@ type fakeAPI struct {
 }
 
 type recordedRequest struct {
-	method, path, auth, machine string
-	body                        map[string]any
-	raw                         string
+	method, path, auth string
+	body               map[string]any
+	raw                string
 }
 
 func newFakeAPI(t *testing.T, respond func(w http.ResponseWriter, r recordedRequest)) (*fakeAPI, *Cloud, crypto.DerivedKeys) {
@@ -32,7 +32,7 @@ func newFakeAPI(t *testing.T, respond func(w http.ResponseWriter, r recordedRequ
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		rec := recordedRequest{method: r.Method, path: r.URL.EscapedPath(), auth: r.Header.Get("Authorization"),
-			machine: r.Header.Get("X-Rostr-Machine"), raw: string(raw)}
+			raw: string(raw)}
 		_ = json.Unmarshal(raw, &rec.body)
 		api.mu.Lock()
 		api.requests = append(api.requests, rec)

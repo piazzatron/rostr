@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -157,9 +158,9 @@ type DraftRequest struct {
 	// IfAutoDraft makes a new draft conditional on the auto-draft setting: with it off, the error is ErrAutoDraftOff.
 	// A session that already has a draft gets it back either way.
 	IfAutoDraft bool
-	// Fast lets cloud mode answer from its local cache, picking the member itself and confirming with the server
-	// afterwards, so a hook doesn't wait on the API. Without it, every draft is a server call.
-	Fast bool
+	// Idle means the session hasn't had a turn yet: it's drafted when it starts, ahead of its first prompt. In cloud
+	// mode such a draft rests if no prompt comes, so a session opened and left doesn't hold a name.
+	Idle bool
 }
 
 // ProjectLink is a project linked to a roster.
@@ -200,9 +201,6 @@ type Draft struct {
 	// RestingSince is when the session finished its last turn, once it has been resting (see RestAfter); zero while
 	// it's working or was recently.
 	RestingSince time.Time
-	// RenamedFrom is the name this session was told before the server confirmed a different one (cloud mode only;
-	// see Cloud). "" once the session has been told the new name, or when the names never differed.
-	RenamedFrom string
 }
 
 // Name is the agent's name, with its copy number ("Gandalf 2").
@@ -254,4 +252,26 @@ func (e userError) Unwrap() error { return e.kind }
 
 func notFound(format string, args ...any) error {
 	return userError{msg: fmt.Sprintf(format, args...), kind: ErrNotFound}
+}
+
+// AutoDraftEnv overrides the auto-draft setting on this machine: "on" or "off". Cloud containers, which start without
+// rostr's local files, set it in their environment.
+const AutoDraftEnv = "ROSTR_AUTO_DRAFT"
+
+// autoDraftOverride is the auto-draft setting AutoDraftEnv gives, if it gives one.
+func autoDraftOverride() (on, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(AutoDraftEnv))) {
+	case "on":
+		return true, true
+	case "off":
+		return false, true
+	}
+	return false, false
+}
+
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
 }

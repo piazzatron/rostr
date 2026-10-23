@@ -187,7 +187,7 @@ $ rostr task samwise "Migrate billing to Stripe v3"
         options: [
           { flag: "default", description: "The roster projects use when they don't have a link." },
           { flag: "emoji", description: "How agents show up: on (🧙 Gandalf), off (Gandalf), or only (🧙). only needs every member to have a different emoji." },
-          { flag: "auto-draft", description: "Draft new sessions automatically, or by hand with /draft." },
+          { flag: "auto-draft", description: "Draft new sessions automatically, or by hand with /draft. It's set per machine; ROSTR_AUTO_DRAFT=off turns it off in a cloud environment." },
           { flag: "key", description: "Print your rostr key, which puts a machine in cloud mode. There's no recovery, so keep it safe. --token prints the token for the API instead." },
         ],
         example: `$ rostr config

@@ -31,7 +31,7 @@ func newHookCommand() *cobra.Command {
 	hook := &cobra.Command{Use: "hook", Short: "What the installed hooks run (and `rostr hook sync` to reinstall them)"}
 	claudeCode := &cobra.Command{Use: "claude-code", Short: "Claude Code hooks"}
 	codexHooks := &cobra.Command{Use: "codex", Short: "Codex hooks"}
-	hook.AddCommand(claudeCode, codexHooks, newHookConfirmDraftCommand(), newHookSummarizeCommand(), newHookTurnCommand(), newHookSyncCommand())
+	hook.AddCommand(claudeCode, codexHooks, newHookDraftAheadCommand(), newHookSummarizeCommand(), newHookTurnCommand(), newHookSyncCommand())
 
 	claudeCode.AddCommand(
 		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
@@ -79,6 +79,11 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 		fmt.Fprintln(stderr, "rostr: writing CLAUDE_ENV_FILE:", err)
 	}
 	if input.Source != "resume" && input.Source != "compact" {
+		// Headless `claude -p` runs don't take a name. That's told from the Claude process, which a background
+		// process can't see, so it's checked here.
+		if !claudecode.IsHeadless(paths.ClaudeDir(), input.SessionID) {
+			draftAhead(input.SessionID, hookDir(input.Cwd))
+		}
 		return nil
 	}
 
@@ -116,8 +121,9 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	}
 	defer st.Close()
 
-	// A session that already has a name isn't on its first prompt
-	if d, err := knownSessionDraft(ctx, st, input.SessionID); err != nil || d != nil {
+	// A session whose agent already knows its name isn't on its first prompt
+	known, told, err := knownSessionDraft(ctx, st, input.SessionID)
+	if err != nil || told {
 		st.Close()
 		if err != nil {
 			return err
@@ -130,10 +136,28 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		return nil
 	}
 	placeholder := claudecode.PlaceholderTask(input.Prompt)
-	d, drafted, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), placeholder)
-	if err != nil || !drafted {
-		return err
+	var d store.Draft
+	if known != nil {
+		// Drafted when the session started: the turn starting now stops the draft counting as idle (a session idle long
+		// enough to lose its name gets a new one), and the task goes to the server in the background
+		st.Close()
+		d = *known
+		renamed, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
+		if err != nil {
+			return err
+		}
+		if renamed != nil {
+			d = *renamed
+		}
+		_ = spawnHook(nil, "task", "--session", input.SessionID, placeholder)
+	} else {
+		drafted, ok, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), placeholder)
+		if err != nil || !ok {
+			return err
+		}
+		d = drafted
 	}
+	markAnnounced(input.SessionID)
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
 	pane.Label(ctx, d.Display())
 
@@ -266,12 +290,6 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 		return err
 	}
 	context, title := note, ""
-	if d.RenamedFrom != "" {
-		context = claudecode.Renamed(d.Display(), d.RenamedFrom)
-		if cloud, ok := st.(*store.Cloud); ok {
-			cloud.MarkAnnounced(input.SessionID)
-		}
-	}
 	if d.Task != "" {
 		if t := claudecode.Title(d.Display(), d.Task); t != input.SessionTitle {
 			title = t
@@ -342,7 +360,7 @@ func recordTurnEnd(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	d, err := knownSessionDraft(ctx, st, sessionID)
+	d, _, err := knownSessionDraft(ctx, st, sessionID)
 	st.Close()
 	if err != nil || d == nil {
 		return err
@@ -389,7 +407,7 @@ func newHookDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := fastDraftSession(cmd.Context(), st, session, workingDir(), "")
+			d, err := hookDraftSession(cmd.Context(), st, session, workingDir(), "")
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil
@@ -444,43 +462,74 @@ func draftOrReclaim(ctx context.Context, st store.Store, sessionID, dir string, 
 	return st.Reclaim(ctx, sessionID)
 }
 
-// knownSessionDraft is the session's draft as this machine knows it: in cloud mode from the session's cache alone,
-// since every draft this machine makes is cached there and a session can't have been drafted from another machine,
-// so the first prompt makes no call to find that out.
-func knownSessionDraft(ctx context.Context, st store.Store, sessionID string) (*store.Draft, error) {
+// knownSessionDraft is the session's draft as this machine knows it, and whether the agent has been told that name: in
+// cloud mode from the session's cache alone, since every draft this machine makes is cached there and a session can't
+// have been drafted from another machine, so the first prompt makes no call to find that out. A session drafted when it
+// started is known but not yet told.
+func knownSessionDraft(ctx context.Context, st store.Store, sessionID string) (d *store.Draft, told bool, err error) {
 	if cloud, ok := st.(*store.Cloud); ok {
-		return cloud.CachedSessionDraft(sessionID), nil
+		d, told = cloud.CachedSessionDraft(sessionID)
+		return d, told, nil
 	}
-	return st.SessionDraft(ctx, sessionID)
+	d, err = st.SessionDraft(ctx, sessionID)
+	return d, d != nil, err
 }
 
-// fastDraftSession drafts for a hook: in cloud mode from the local cache when it can, confirming with the server in
-// the background, so the session isn't kept waiting.
-func fastDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (store.Draft, error) {
+// markAnnounced records, in cloud mode, that the agent has been told its session's name.
+func markAnnounced(sessionID string) {
+	st, err := openStore()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+	if cloud, ok := st.(*store.Cloud); ok {
+		cloud.MarkAnnounced(sessionID)
+	}
+}
+
+// hookDraftSession drafts the session in dir.
+func hookDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (store.Draft, error) {
 	repo, _ := project.Identify(dir)
-	return st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task, Fast: true})
+	return st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task})
 }
 
-// autoDraftSession is fastDraftSession when auto-draft is on; drafted is false when it's off.
+// autoDraftSession is hookDraftSession when auto-draft is on; drafted is false when it's off.
 func autoDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (d store.Draft, drafted bool, err error) {
 	repo, _ := project.Identify(dir)
-	d, err = st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task, Fast: true, IfAutoDraft: true})
+	d, err = st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task, IfAutoDraft: true})
 	if errors.Is(err, store.ErrAutoDraftOff) {
 		return store.Draft{}, false, nil
 	}
 	return d, err == nil, err
 }
 
-// newHookConfirmDraftCommand is `rostr hook confirm-draft`, which a Fast draft starts in the background to confirm
-// its pick with the server. It reads the store.Confirmation as JSON from stdin and prints nothing.
-func newHookConfirmDraftCommand() *cobra.Command {
+// draftAheadInput is what `rostr hook draft-ahead` reads: the session that just started, and its directory.
+type draftAheadInput struct {
+	SessionID string `json:"session"`
+	Dir       string `json:"dir"`
+}
+
+// draftAhead starts `rostr hook draft-ahead` in the background when a cloud-mode session starts, so its name is waiting
+// in the session's cache by the time its first prompt comes. Local mode drafts without a network call, so it drafts on
+// the first prompt as before.
+func draftAhead(sessionID, dir string) {
+	if hasCloudKey() {
+		_ = spawnHook(draftAheadInput{SessionID: sessionID, Dir: dir}, "hook", "draft-ahead")
+	}
+}
+
+// newHookDraftAheadCommand is `rostr hook draft-ahead`, which a session start runs in the background. With auto-draft on,
+// it drafts the session as idle, so the draft rests if no prompt comes, and records the draft as the end of a turn, so
+// the first prompt reports the turn starting (see wakeAfterRest). The agent learns its name on that first prompt. It
+// reads a draftAheadInput as JSON from stdin and prints nothing.
+func newHookDraftAheadCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:    "confirm-draft",
+		Use:    "draft-ahead",
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var conf store.Confirmation
-			if err := json.NewDecoder(cmd.InOrStdin()).Decode(&conf); err != nil {
+			var in draftAheadInput
+			if err := json.NewDecoder(cmd.InOrStdin()).Decode(&in); err != nil {
 				return nil
 			}
 			st, err := openStore()
@@ -488,9 +537,16 @@ func newHookConfirmDraftCommand() *cobra.Command {
 				return nil
 			}
 			defer st.Close()
-			if cloud, ok := st.(*store.Cloud); ok {
-				_, _ = cloud.ConfirmDraft(cmd.Context(), conf)
+			repo, _ := project.Identify(in.Dir)
+			d, err := st.Draft(cmd.Context(), store.DraftRequest{SessionID: in.SessionID, Repo: repo, IfAutoDraft: true, Idle: true})
+			if err != nil {
+				if !errors.Is(err, store.ErrAutoDraftOff) {
+					logBackground("drafting session %s ahead of its first prompt: %v", in.SessionID, err)
+				}
+				return nil
 			}
+			end := keepalive.TurnEnd{At: d.DraftedAt, Display: d.Display(), Task: d.Task}
+			_ = keepalive.SaveTurnEnd(paths.TurnDir(), in.SessionID, end)
 			return nil
 		},
 	}
@@ -544,11 +600,6 @@ func logBackground(format string, args ...any) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "%s rostr: %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, args...))
-}
-
-// spawnConfirmDraft starts `rostr hook confirm-draft` in the background.
-func spawnConfirmDraft(conf store.Confirmation) error {
-	return spawnHook(conf, "hook", "confirm-draft")
 }
 
 // spawnHook starts rostr with args detached from this process, with input as JSON on its stdin, so a hook can exit

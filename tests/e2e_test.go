@@ -180,11 +180,11 @@ func TestServerNeverSeesPlaintext(t *testing.T) {
 	var drafts, encryptedDrafts, links int
 	err = db.QueryRow(ctx, `
 		select count(*), count(*) filter (where length(d.task) >= 28 and length(d.repo) >= 28 and d.repo_hash ~ '^[0-9a-f]{64}$'),
-		       (select count(*) from project_links l join owners o on o.id = l.owner_id
-		        where o.auth_token_hash = encode(sha256(decode(translate($1, '-_', '+/') || '=', 'base64')), 'hex')
+		       (select count(*) from project_links l
+		        where l.owner_id = encode(sha256(decode(translate($1, '-_', '+/') || '=', 'base64')), 'hex')
 		          and l.repo_hash ~ '^[0-9a-f]{64}$')
-		from drafts d join owners o on o.id = d.owner_id
-		where o.auth_token_hash = encode(sha256(decode(translate($1, '-_', '+/') || '=', 'base64')), 'hex')`,
+		from drafts d
+		where d.owner_id = encode(sha256(decode(translate($1, '-_', '+/') || '=', 'base64')), 'hex')`,
 		token).Scan(&drafts, &encryptedDrafts, &links)
 	if err != nil {
 		t.Fatal(err)
@@ -352,31 +352,26 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		}
 	}
 
-	// Session start writes ROSTR_SESSION and drafts nothing
+	// Session start writes ROSTR_SESSION and, in the background, drafts the session ahead of its first prompt
 	if r := hook("session-start", start("startup")); r.code != 0 || r.stdout != "" {
 		t.Fatalf("start: %+v", r)
 	}
 	if env, _ := os.ReadFile(envFile); string(env) != "export ROSTR_SESSION=hs1\n" {
 		t.Fatalf("CLAUDE_ENV_FILE: %q", env)
 	}
-	if len(m.list().drafted()) != 0 {
-		t.Fatal("session start drafted")
-	}
+	waitFor(t, "the draft ahead of the first prompt", func() bool { return len(m.list().drafted()) == 1 })
 
-	// The first prompt drafts from the next state assemble cached, without waiting on the API, tells the agent who
-	// it is and to record its task in its reply, and titles the session; the server hears of the draft just after
-	if _, err := os.Stat(m.nextStatePath()); err != nil {
-		t.Fatalf("assemble didn't cache the next state: %v", err)
-	}
+	// The first prompt tells the agent the name drafted for it, and to record its task in its reply, and titles the
+	// session, all from the session's cache; the task reaches the server just after
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
 	if r.code != 0 || !strings.Contains(r.stdout, `You're 🧙 Gandalf for this session`) || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
 		!strings.Contains(r.stdout, "rostr task --session hs1") {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
-	waitFor(t, "the draft to be confirmed", func() bool { return len(m.list().drafted()) == 1 })
+	waitFor(t, "the first prompt's task", func() bool { return m.list().drafted()["Gandalf"] == "Fix the flaky login test" })
 	l := m.list()
-	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Task != "Fix the flaky login test" || d[0].Repo != "acme/hooks" {
+	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Repo != "acme/hooks" {
 		t.Fatalf("drafted: %+v", l)
 	}
 
@@ -444,16 +439,15 @@ func TestHooksWhenTheAPIIsDown(t *testing.T) {
 			return offline.with("CLAUDE_ENV_FILE="+envFile).run(repo, input, "hook", "claude-code", event)
 		}
 
-		// Every hook exits 0 within the 3-second timeout, and session start still sets ROSTR_SESSION. The first prompt
-		// names the session from the cached next state (its confirmation fails in the background), and resume re-tells
-		// that name from the session's cache; the hooks that need the server stay quiet
+		// Every hook exits 0 within the 3-second timeout, and session start still sets ROSTR_SESSION (its draft ahead
+		// fails in the background). The session stays unnamed: the hooks that need the server stay quiet
 		for _, h := range []struct {
 			event, input string
 			named        bool
 		}{
 			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"startup"}`, session, repo), false},
-			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo), true},
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"resume"}`, session, repo), true},
+			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo), false},
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"resume"}`, session, repo), false},
 			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"compact"}`, session, repo), false},
 			{"session-end", fmt.Sprintf(`{"session_id":%q}`, session), false},
 		} {
@@ -523,71 +517,79 @@ func TestConcurrentDraftsNeverCollide(t *testing.T) {
 	}
 }
 
-func TestTwoMachinesReserveDifferentNamesAndAStaleOneGetsACopy(t *testing.T) {
+func TestTwoMachinesStartingSessionsAtOnceGetDifferentNames(t *testing.T) {
 	t.Parallel()
 	a, b := newMachine(t), newMachine(t)
 	a.ok("assemble", "work", "--names", "🧙 Gandalf, 💍 Frodo, 🌱 Sam", "--cloud")
 	if out, code := b.joinWithKey(a.key()); code != 0 {
 		t.Fatalf("join: exit %d\n%s", code, out)
 	}
-	for _, m := range []*machine{a, b} {
-		if _, err := os.Stat(m.nextStatePath()); err != nil {
-			t.Fatalf("no cached next state: %v", err)
+	start := func(m *machine, session string) {
+		input := fmt.Sprintf(`{"session_id":%q,"cwd":%q,"hook_event_name":"SessionStart","source":"startup"}`, session, m.home)
+		if r := m.run(m.home, input, "hook", "claude-code", "session-start"); r.code != 0 {
+			t.Errorf("start %s: %+v", session, r)
 		}
 	}
-	prompt := func(m *machine, session, id, title string) result {
-		return m.run(m.home, fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Hello there","prompt_id":%q,"session_title":%q}`,
-			session, m.home, id, title), "hook", "claude-code", "prompt")
+	prompt := func(m *machine, session string) result {
+		return m.run(m.home, fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Hello there","prompt_id":"p1"}`,
+			session, m.home), "hook", "claude-code", "prompt")
 	}
 
-	// Each machine holds a different next pick, so their first sessions never announce the same name
-	if r := prompt(a, "a1", "p1", ""); !strings.Contains(r.stdout, "You're 🧙 Gandalf for this session") {
-		t.Fatalf("machine a: %+v", r)
+	// Both machines start a session at the same moment; the server drafts both, so they can't get the same name
+	var wg sync.WaitGroup
+	wg.Go(func() { start(a, "a1") })
+	wg.Go(func() { start(b, "b1") })
+	wg.Wait()
+	waitFor(t, "both drafts", func() bool { return len(a.list().drafted()) == 2 })
+	names := map[string]bool{}
+	for _, r := range []result{prompt(a, "a1"), prompt(b, "b1")} {
+		var out struct {
+			HookSpecificOutput struct{ AdditionalContext string }
+		}
+		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || !strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're ") {
+			t.Fatalf("prompt: %+v", r)
+		}
+		name := strings.SplitN(strings.TrimPrefix(out.HookSpecificOutput.AdditionalContext, "You're "), " for this", 2)[0]
+		names[name] = true
 	}
-	if r := prompt(b, "b0", "p1", ""); !strings.Contains(r.stdout, "You're 💍 Frodo for this session") {
-		t.Fatalf("machine b: %+v", r)
+	if len(names) != 2 || names["🧙 Gandalf 2"] || names["💍 Frodo 2"] {
+		t.Fatalf("names: %v", names)
 	}
-	waitFor(t, "both drafts", func() bool {
-		d := a.list().drafted()
-		_, ga := d["Gandalf"]
-		_, fr := d["Frodo"]
-		return ga && fr
+	waitFor(t, "the first prompts' tasks", func() bool {
+		tasks := 0
+		for _, task := range a.list().drafted() {
+			if task == "Hello there" {
+				tasks++
+			}
+		}
+		return tasks == 2
 	})
-	b.with("ROSTR_SESSION=b0").ok("bench")
+}
 
-	// A machine whose cache is stale (here: edited to still offer Gandalf, who a has since taken) announces a taken
-	// name; the server gives it Gandalf 2
-	var stale map[string]any
-	data, _ := os.ReadFile(b.nextStatePath())
-	if err := json.Unmarshal(data, &stale); err != nil {
+func TestASessionOpenedButNeverPromptedGivesUpItsName(t *testing.T) {
+	t.Parallel()
+	m := newMachine(t)
+	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
+	input := fmt.Sprintf(`{"session_id":"idle1","cwd":%q,"hook_event_name":"SessionStart","source":"startup"}`, m.home)
+	if r := m.run(m.home, input, "hook", "claude-code", "session-start"); r.code != 0 {
+		t.Fatalf("start: %+v", r)
+	}
+	waitFor(t, "the draft ahead", func() bool { return m.list().drafted()["Gandalf"] == "" && len(m.list().drafted()) == 1 })
+
+	// Twenty minutes with no prompt: the session is resting, so another session takes Gandalf rather than a copy
+	key, err := os.ReadFile(m.credentialsPath())
+	if err != nil {
 		t.Fatal(err)
 	}
-	work := stale["rosters"].([]any)[0].(map[string]any)
-	work["reserved"] = "Gandalf"
-	work["idle"] = append([]any{map[string]any{"name": "Gandalf", "emoji": "🧙", "team": "A"}}, work["idle"].([]any)...)
-	data, _ = json.Marshal(stale)
-	if err := os.WriteFile(b.nextStatePath(), data, 0o600); err != nil {
+	_, err = db.Exec(context.Background(), `
+		update drafts set turn_ended_at = turn_ended_at - interval '20 minutes', drafted_at = drafted_at - interval '20 minutes'
+		where session_id = 'idle1' and owner_id = encode(sha256(decode(translate($1, '-_', '+/') || '=', 'base64')), 'hex')`,
+		authToken(t, strings.TrimSpace(string(key))))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if r := prompt(b, "b1", "p1", ""); !strings.Contains(r.stdout, "You're 🧙 Gandalf for this session") {
-		t.Fatalf("machine b, stale: %+v", r)
-	}
-	waitFor(t, "b's draft", func() bool { return b.list().drafted()["Gandalf 2"] != "" })
-
-	// On its next prompt, b's session is told its real name, once, and retitled
-	r := prompt(b, "b1", "p2", "🧙 Gandalf · Hello there")
-	if !strings.Contains(r.stdout, "you're 🧙 Gandalf 2 now, not 🧙 Gandalf") || !strings.Contains(r.stdout, `"sessionTitle":"🧙 Gandalf 2 · Hello there"`) {
-		t.Fatalf("rename: %+v", r)
-	}
-	if r := prompt(b, "b1", "p3", "🧙 Gandalf 2 · Hello there"); r.code != 0 || r.stdout != "" {
-		t.Fatalf("after the rename: %+v", r)
-	}
-	// Neither session has a second draft, and b's agent can set its task under the new name
-	if drafted := a.list().drafted(); len(drafted) != 2 {
-		t.Fatalf("drafted: %v", drafted)
-	}
-	if out := b.with("ROSTR_SESSION=b1").ok("task", "Greet"); out != "🧙 Gandalf 2 · Greet\n" {
-		t.Fatalf("task: %q", out)
+	if d := m.draft(m.home, "other"); d.Name != "Gandalf" {
+		t.Fatalf("other session drafted %+v, want Gandalf", d)
 	}
 }
 

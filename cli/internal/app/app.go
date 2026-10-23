@@ -3,12 +3,9 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -113,40 +110,15 @@ func openStore() (store.Store, error) {
 	return newCloudStore(key)
 }
 
-// newCloudStore is the cloud store for this machine: with its local cache, and its machine ID so the API reserves
-// its next picks.
+// newCloudStore is the cloud store for this machine, with its cache of sessions' drafts and its auto-draft setting.
 func newCloudStore(key crypto.Key) (*store.Cloud, error) {
 	cloud, err := store.NewCloud(apiURL(), key)
 	if err != nil {
 		return nil, err
 	}
-	// A cloud session's container is a machine that drafts once and is thrown away, so it gets no reservation, which
-	// would only hold a name for a day
-	if os.Getenv("CLAUDE_CODE_REMOTE") != "true" {
-		cloud.MachineID = machineID()
-	}
-	cloud.UseCache(paths.CloudCacheDir(), spawnConfirmDraft)
+	cloud.UseCache(paths.CloudCacheDir())
+	cloud.AutoDraftFile = paths.AutoDraft()
 	return cloud, nil
-}
-
-// machineID is this machine's random ID, made on first use. Without one (an unwritable config dir) the API just
-// reserves nothing for this machine.
-func machineID() string {
-	if id, err := os.ReadFile(paths.MachineID()); err == nil {
-		return strings.TrimSpace(string(id))
-	}
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return ""
-	}
-	id := hex.EncodeToString(b)
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
-		return ""
-	}
-	if err := os.WriteFile(paths.MachineID(), []byte(id+"\n"), 0o600); err != nil {
-		return ""
-	}
-	return id
 }
 
 // hasCloudKey reports whether this machine has a rostr key, which is what puts it in cloud mode.

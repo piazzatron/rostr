@@ -1005,6 +1005,9 @@ func readSettings(ctx context.Context, q querier) (Settings, error) {
 			settings.Expiry = value
 		}
 	}
+	if on, ok := autoDraftOverride(); ok {
+		settings.AutoDraft = on
+	}
 	return settings, rows.Err()
 }
 
