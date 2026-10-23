@@ -297,3 +297,23 @@ func TestUnconfirmedDraftIsRetriedOnRead(t *testing.T) {
 		t.Fatal("retry didn't confirm")
 	}
 }
+
+func TestAStaleCachedDraftIsCheckedWithTheServer(t *testing.T) {
+	api, cloud, _ := newCachedCloud(t, nil)
+	if _, err := cloud.Draft(ctx, DraftRequest{SessionID: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	before := api.count("/v1/agents/draft")
+
+	// Fresh: answered from the cache
+	if _, err := cloud.Draft(ctx, DraftRequest{SessionID: "s1"}); err != nil || api.count("/v1/agents/draft") != before {
+		t.Fatalf("fresh cached draft called the server: %v", err)
+	}
+	// Older than the keep-alive interval: the server is asked
+	cs := cloud.cache.session("s1")
+	cs.At = time.Now().Add(-2 * cachedDraftTrust)
+	cloud.cache.saveSession(*cs)
+	if _, err := cloud.Draft(ctx, DraftRequest{SessionID: "s1"}); err != nil || api.count("/v1/agents/draft") != before+1 {
+		t.Fatalf("stale cached draft wasn't checked: %v", err)
+	}
+}

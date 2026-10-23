@@ -76,3 +76,19 @@ func TestReservationsExpireAndFollowDrafts(t *testing.T) {
 		t.Fatalf("a's hold after the others drafted: %v", next.Rosters[0].Reserved)
 	}
 }
+
+func TestADraftSkipsTheReservationItsMachineAnnouncedElsewhere(t *testing.T) {
+	t.Parallel()
+	c := newOwner(t)
+	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	a := c.onMachine(c.session("mac"))
+	call[nextResponse](a, "GET", "/v1/next", nil, http.StatusOK) // a holds Gandalf, and announces him to s1
+
+	// A server draft for another session, sent while s1's confirmation is pending, leaves Gandalf for s1
+	if d := draft(a, map[string]any{"session": c.session("s2"), "avoid": []string{"Gandalf"}}); d.Name != "Frodo" {
+		t.Fatalf("drafted %s, want Frodo", d.Name)
+	}
+	if d := draft(a, map[string]any{"session": c.session("s1"), "preferred": "Gandalf"}); displayOf(d) != "Gandalf" {
+		t.Fatalf("s1's confirmation: %s", displayOf(d))
+	}
+}

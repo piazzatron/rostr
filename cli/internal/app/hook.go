@@ -294,13 +294,16 @@ func keepDraftAlive(ctx context.Context, sessionID string) error {
 // member: the active draft, or the last member if still free, or nil, so sessions never drafted stay unnamed.
 func draftOrReclaim(ctx context.Context, st store.Store, sessionID, dir string, draftNew bool) (*store.Draft, error) {
 	if draftNew {
-		d, drafted, err := autoDraftSession(ctx, st, sessionID, dir, "")
+		// Not a fast draft: only the server knows whether the session's old name is still free
+		repo, _ := project.Identify(dir)
+		d, err := st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, IfAutoDraft: true})
+		if errors.Is(err, store.ErrAutoDraftOff) {
+			return st.Reclaim(ctx, sessionID)
+		}
 		if err != nil {
 			return nil, err
 		}
-		if drafted {
-			return &d, nil
-		}
+		return &d, nil
 	}
 	return st.Reclaim(ctx, sessionID)
 }

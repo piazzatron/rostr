@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -40,6 +41,7 @@ func Summarize(ctx context.Context, prompt string) (string, error) {
 		"--setting-sources", "", "--settings", `{"disableAllHooks":true}`, "--strict-mcp-config",
 		"--disable-slash-commands", "--tools", "", "--output-format", "json")
 	cmd.Stdin = strings.NewReader(input)
+	cmd.WaitDelay = 2 * time.Second // so a process left holding the output can't keep this one alive
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

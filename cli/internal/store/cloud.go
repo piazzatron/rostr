@@ -313,7 +313,9 @@ func (c *Cloud) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 
 	// A session that has its draft keeps it; a Fast draft is answered from the cache, and confirmed afterwards
 	if c.cache != nil {
-		if cs := c.cache.session(req.SessionID); cs != nil {
+		// A cached draft is trusted while unconfirmed (the confirmation is on its way) or recently confirmed;
+		// otherwise the server may have expired or released it, so ask
+		if cs := c.cache.session(req.SessionID); cs != nil && (!cs.Confirmed || now.Sub(cs.At) < cachedDraftTrust) {
 			return cs.Draft, nil
 		}
 		if req.Fast {

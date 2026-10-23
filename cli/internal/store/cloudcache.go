@@ -32,6 +32,9 @@ const (
 	// confirmRetryAfter is how long SessionDraft waits before retrying a confirmation itself, and between retries.
 	confirmRetryAfter = 3 * time.Second
 	confirmRetryEvery = time.Minute
+	// cachedDraftTrust is how long a confirmed draft is answered from the cache: the keep-alive interval, after which
+	// the server is asked again
+	cachedDraftTrust = time.Hour
 )
 
 // Confirmation is a Fast draft to confirm with the server: the request, plus the member the session was told.
@@ -353,9 +356,19 @@ func writeFileAtomically(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	// A temp file of its own, so two processes writing the same file can't interleave
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

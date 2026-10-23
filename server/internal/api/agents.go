@@ -193,6 +193,12 @@ func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput)
 	}
 	reservedByOthers(all, roster.ID, in.machine, busy)
 	preferred := ownReservation(all, roster.ID, in.machine)
+	for _, name := range in.avoid {
+		// The machine announced its reserved member to another session, whose confirmation is on its way
+		if nameKey(name) == nameKey(preferred) {
+			preferred = ""
+		}
+	}
 	if in.preferred != nil {
 		preferred = *in.preferred
 	}
