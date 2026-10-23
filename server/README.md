@@ -10,6 +10,8 @@ Environment:
 - `PORT` (default `8080`).
 - `RATE_LIMIT_REGISTRATIONS_PER_HOUR` (default `20`, per IP) and `RATE_LIMIT_REQUESTS_PER_MINUTE` (default `300`,
   per auth token).
+- `LIVE_URL` and `LIVE_SECRET` (optional): the live Worker's URL and shared secret. With both set, the server pushes
+  fresh home-page stats to it after writes; see [docs/live-stats.md](../docs/live-stats.md).
 
 ## Local development
 

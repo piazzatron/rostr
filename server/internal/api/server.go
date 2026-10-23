@@ -20,10 +20,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Config holds the server's rate limits.
+// Config holds the server's rate limits and where it pushes live stats.
 type Config struct {
-	RegistrationsPerHour int // per client IP
-	RequestsPerMinute    int // per auth token
+	RegistrationsPerHour int    // per client IP
+	RequestsPerMinute    int    // per auth token
+	LiveURL              string // the live Worker's base URL; nothing is pushed unless both it and LiveSecret are set
+	LiveSecret           string
 }
 
 // Server serves the rostr API.
@@ -31,6 +33,7 @@ type Server struct {
 	db                  *pgxpool.Pool
 	registrationLimiter *rateLimiter
 	requestLimiter      *rateLimiter
+	live                *livePusher // nil when live stats are off
 }
 
 // NewHandler returns the API's HTTP handler.
@@ -40,12 +43,15 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 		registrationLimiter: newRateLimiter(cfg.RegistrationsPerHour, time.Hour),
 		requestLimiter:      newRateLimiter(cfg.RequestsPerMinute, time.Minute),
 	}
+	if cfg.LiveURL != "" && cfg.LiveSecret != "" {
+		s.live = &livePusher{url: cfg.LiveURL, secret: cfg.LiveSecret, delay: 500 * time.Millisecond, db: db}
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("POST /v1/register", s.handleRegister)
 
-	// The one public endpoint. CORS allows any origin so browser dashboards can call it.
+	// The public endpoints. CORS allows any origin so browser dashboards and the site can call them.
 	mux.Handle("GET /v1/rosters", withPublicCORS(s.authed(s.handleListRosters)))
 	mux.Handle("OPTIONS /v1/rosters", withPublicCORS(http.HandlerFunc(handlePreflight)))
 
@@ -120,9 +126,10 @@ func (s *Server) authed(h ownerHandler) http.Handler {
 
 // withOwnerTx runs fn in a transaction holding the owner's row lock, so each owner's writes run one at a time. Before
 // fn runs, it releases the owner's drafts not seen within their draft expiry and deletes drafts released more than 7
-// days ago. This is the only cleanup; there's no background job.
+// days ago. This is the only cleanup; there's no background job. Once the transaction commits, it pushes live stats:
+// nearly every owner write can change the counts, and pushes are coalesced.
 func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx.Tx) error) error {
-	return pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `select 1 from owners where id = $1 for update`, ownerID); err != nil {
 			return err
 		}
@@ -147,6 +154,10 @@ func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx
 
 		return fn(tx)
 	})
+	if err == nil {
+		s.live.notify()
+	}
+	return err
 }
 
 func withPublicCORS(h http.Handler) http.Handler {
