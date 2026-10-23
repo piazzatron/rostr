@@ -135,7 +135,8 @@ cancels. Each question can be skipped with a flag, so an agent can run it non-in
   names until their sessions end (each draft stores its member's emoji, so `rostr list` still shows them); new
   sessions draft from the new cast.
 - Later runs skip the setup-wide questions (where rostr lives, auto-draft); change those with `rostr config`. They
-  reinstall the hooks, skill, and `/draft` only if they're missing, without duplicating them.
+  reinstall missing hooks without duplicating them, and replace an older version's skill and `/draft` text (see
+  [Upgrading](#the-rostr-hook-command)).
 - A name that's already taken asks for another one (or errors, when run with flags). `--cloud` on a later run errors
   and points to `rostr cloud on`.
 
@@ -316,13 +317,13 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
 
 **Upgrading.** Only a change to what rostr installs (a new hook event or matcher, a new permission, new skill or
 `/draft` text) needs anything rewritten. Each install records a fingerprint of what it wrote in
-`~/.cache/rostr/hooks/<agent>`. Every session start (Claude Code and Codex) compares the stamps with the binary's
-own fingerprints, which costs a file read, and when one differs it starts `rostr hook sync` in the background. That
+`~/.cache/rostr/hooks/<agent>`. Every session start (Claude Code and Codex) compares the stamps with the binary's own
+fingerprints, which costs a file read, and when one differs it starts `rostr hook sync` in the background. That
 reinstalls for each agent that has rostr's hooks already, never adding them where there are none, and updates the
-stamps. Installing replaces an older version's skill text, and `/draft` when it's rostr's (it runs
-`rostr hook claude-code draft`), so a `/draft` of your own is left alone. Claude Code picks up the rewritten settings on its own, so after `brew upgrade` the first session
-that starts brings everything up to date. The install script runs `rostr hook sync` too. New Codex hooks still need
-approving in Codex's `/hooks`.
+stamps. Installing replaces an older version's skill text, and `/draft` when it's rostr's (it runs `rostr hook
+claude-code draft`), so a `/draft` of your own is left alone. Claude Code picks up the rewritten settings on its own, so
+after `brew upgrade` the first session that starts brings everything up to date. The install script runs `rostr hook
+sync` too. New Codex hooks still need approving in Codex's `/hooks`.
 
 ### Claude Code events
 

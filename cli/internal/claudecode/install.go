@@ -81,8 +81,7 @@ func Install(claudeDir string) ([]string, error) {
 	}{
 		{filepath.Join(claudeDir, "skills", "rostr", "SKILL.md"), skillContent, "the rostr skill",
 			func(string) bool { return true }},
-		{filepath.Join(claudeDir, "commands", "draft.md"), draftCommandContent, "the /draft command",
-			func(existing string) bool { return strings.Contains(existing, "rostr hook claude-code draft") }},
+		{filepath.Join(claudeDir, "commands", "draft.md"), draftCommandContent, "the /draft command", isRostrDraft},
 	}
 	for _, f := range files {
 		wrote, err := writeRostrFile(f.path, f.content, f.ours)
@@ -111,15 +110,18 @@ func Uninstall(claudeDir string) ([]string, error) {
 		removed = append(removed, "hooks in "+settingsPath)
 	}
 
+	// The skill only if it's unchanged, but /draft whenever it's rostr's, since a leftover one would run rostr
 	files := []struct {
-		path, content, label string
+		path, label string
+		ours        func(existing string) bool
 	}{
-		{filepath.Join(claudeDir, "skills", "rostr", "SKILL.md"), skillContent, "the rostr skill"},
-		{filepath.Join(claudeDir, "commands", "draft.md"), draftCommandContent, "the /draft command"},
+		{filepath.Join(claudeDir, "skills", "rostr", "SKILL.md"), "the rostr skill",
+			func(existing string) bool { return existing == skillContent }},
+		{filepath.Join(claudeDir, "commands", "draft.md"), "the /draft command", isRostrDraft},
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f.path)
-		if errors.Is(err, fs.ErrNotExist) || (err == nil && string(data) != f.content) {
+		if errors.Is(err, fs.ErrNotExist) || (err == nil && !f.ours(string(data))) {
 			continue
 		}
 		if err != nil {
@@ -391,4 +393,9 @@ func hasAnyRostrHook(hooks map[string]any) bool {
 		}
 	}
 	return false
+}
+
+// isRostrDraft reports whether a /draft command is rostr's, from any version: it runs rostr's draft hook.
+func isRostrDraft(content string) bool {
+	return strings.Contains(content, "rostr hook claude-code draft")
 }

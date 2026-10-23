@@ -205,17 +205,18 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	} else {
 		fmt.Fprintf(out, "Use it for a project with `rostr link %s`.\n", created.Name)
 	}
+	// Only new hooks are worth a line; refreshed skill text isn't
 	var tools []string
-	if len(installed) > 0 {
+	if changedHooks(installed) {
 		tools = append(tools, "Claude Code")
 	}
-	if len(installedCodex) > 0 {
+	if changedHooks(installedCodex) {
 		tools = append(tools, "Codex")
 	}
 	if len(tools) > 0 {
 		fmt.Fprintf(out, "Hooks installed for %s.\n", strings.Join(tools, " and "))
 	}
-	if len(installedCodex) > 0 {
+	if changedHooks(installedCodex) {
 		fmt.Fprintln(out, "Codex only runs hooks you've approved: open /hooks in Codex and trust rostr's.")
 	}
 	return nil
@@ -570,4 +571,14 @@ func presetPreview(p presets.Preset, width int) string {
 		styleMuted.Render("B team"),
 		wrap.Inherit(styleFaint).Render(displayMembers(p.BTeam, roster.EmojiOn)),
 	)
+}
+
+// changedHooks reports whether an install's list of what it wrote includes hooks.
+func changedHooks(installed []string) bool {
+	for _, piece := range installed {
+		if strings.HasPrefix(piece, "hooks in ") {
+			return true
+		}
+	}
+	return false
 }

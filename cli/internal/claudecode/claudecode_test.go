@@ -430,3 +430,15 @@ func TestIsShellCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestUninstallRemovesAnOlderRostrDraft(t *testing.T) {
+	claudeDir := t.TempDir()
+	draft := filepath.Join(claudeDir, "commands", "draft.md")
+	write(t, draft, "!`rostr hook claude-code draft` (an older version)")
+	if removed, err := Uninstall(claudeDir); err != nil || strings.Join(removed, "; ") != "the /draft command" {
+		t.Fatalf("removed %v, %v", removed, err)
+	}
+	if _, err := os.Stat(draft); !os.IsNotExist(err) {
+		t.Fatal("left an older rostr /draft that would run rostr")
+	}
+}
