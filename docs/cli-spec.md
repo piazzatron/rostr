@@ -338,7 +338,10 @@ and the exact text the agent is told, live in the CLI, so upgrading rostr change
   Neither the hook input nor `CLAUDE_CODE_ENTRYPOINT` tells them apart (a `claude -p` an agent starts inherits its
   session's entrypoint, and Remote Control sessions report `sdk-cli` too), so the hooks read how the Claude process
   that ran them was started: `-p` or `--print` is headless, unless it's driven over stream-json (`--input-format
-  stream-json`, `--sdk-url`) or has a Remote Control bridge session. Anything unreadable counts as not headless.
+  stream-json`, `--sdk-url`) or has a Remote Control bridge session. Anything unreadable counts as not headless. (Claude Code 2.1.309's Remote
+  Control host starts each session as `claude --print --sdk-url <url> --session-id <id> --input-format stream-json
+  --output-format stream-json …`, and `--sdk-url` only works with `-p`. The hooks read the arguments with `ps -ww`,
+  since a `COLUMNS` inherited from a terminal would otherwise cut them off after `--print`.)
 - In tmux or herdr, the hooks also label the session's pane (see [tmux and herdr](#tmux-and-herdr)).
 
 ### Codex

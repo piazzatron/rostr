@@ -65,12 +65,13 @@ func isShellCommand(args []string) bool {
 }
 
 // processInfo returns a process's parent and arguments (split on spaces, which is enough to find flags), using ps so
-// it works on macOS and Linux alike.
+// it works on macOS and Linux alike. -ww keeps ps from cutting the arguments at the terminal's width (a COLUMNS
+// inherited from a terminal does it otherwise), which would drop the flags that come after --print.
 func processInfo(pid int) (int, []string) {
 	if pid <= 1 {
 		return 0, nil
 	}
-	out, err := exec.Command("ps", "-o", "ppid=", "-o", "args=", "-p", strconv.Itoa(pid)).Output()
+	out, err := exec.Command("ps", "-ww", "-o", "ppid=", "-o", "args=", "-p", strconv.Itoa(pid)).Output()
 	if err != nil {
 		return 0, nil
 	}
