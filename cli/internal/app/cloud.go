@@ -149,7 +149,7 @@ func runCloudOn(ctx context.Context, out io.Writer) error {
 // moveSetupToCloud generates a key and uploads the setup with it in one request. Only once that succeeds does it save
 // the key and delete the local database, so a failed upload leaves the local setup as it was.
 func moveSetupToCloud(ctx context.Context, out io.Writer, setup store.Setup) error {
-	if err := registerInCloud(ctx, setup); err != nil {
+	if _, err := registerInCloud(ctx, setup); err != nil {
 		return err
 	}
 	if len(setup.Rosters) == 0 {
@@ -165,27 +165,27 @@ func moveSetupToCloud(ctx context.Context, out io.Writer, setup store.Setup) err
 }
 
 // registerInCloud creates a cloud owner under a new key with setup uploaded in the same request, then saves the key
-// and deletes the local database.
-func registerInCloud(ctx context.Context, setup store.Setup) error {
+// and deletes the local database. It returns the new key.
+func registerInCloud(ctx context.Context, setup store.Setup) (crypto.Key, error) {
 	key, err := crypto.GenerateKey()
 	if err != nil {
-		return err
+		return key, err
 	}
 	cloud, err := newCloudStore(key) // registering warms its cache for this machine's first session
 	if err != nil {
-		return err
+		return key, err
 	}
 	if err := cloud.Register(ctx, setup); err != nil {
-		return fmt.Errorf("uploading to the rostr API failed, so your local setup is untouched: %w", err)
+		return key, fmt.Errorf("uploading to the rostr API failed, so your local setup is untouched: %w", err)
 	}
 
 	if err := saveCredentials(key); err != nil {
-		return fmt.Errorf("your setup is in the cloud, but saving its key failed (your local setup is untouched): %w", err)
+		return key, fmt.Errorf("your setup is in the cloud, but saving its key failed (your local setup is untouched): %w", err)
 	}
 	if err := removeLocalDatabase(); err != nil {
-		return fmt.Errorf("your setup is in the cloud and its key is saved, but deleting the local database failed: %w", err)
+		return key, fmt.Errorf("your setup is in the cloud and its key is saved, but deleting the local database failed: %w", err)
 	}
-	return nil
+	return key, nil
 }
 
 // joinCloudWithKey checks an existing key with the API, and saves it.
@@ -248,6 +248,15 @@ func removeLocalDatabase() error {
 		}
 	}
 	return nil
+}
+
+// printNewKey shows a new cloud setup's key, at a terminal only so it stays out of agents' transcripts, and what it's for.
+func printNewKey(out io.Writer, key crypto.Key) {
+	fmt.Fprintf(out, "\nYour rostr key:\n\n  %s\n\n", styleBold.Render(key.String()))
+	fmt.Fprintln(out, "Keep it secret: it's how your machines find your setup, and it encrypts your tasks and repo names.")
+	fmt.Fprintln(out, "  • Another machine: run `rostr cloud on` there and paste it.")
+	fmt.Fprintln(out, "  • A cloud environment: set it as the ROSTR_KEY environment variable.")
+	fmt.Fprintf(out, "It's saved in %s, and `rostr config key` shows it again.\n", paths.Credentials())
 }
 
 func printKeySaved(out io.Writer) {

@@ -36,6 +36,7 @@ func promptTheme() *huh.Theme {
 	t.Focused.Card = t.Focused.Base
 	t.Focused.Title = t.Focused.Title.Foreground(colorAccent).Bold(true)
 	t.Focused.Description = t.Focused.Description.Foreground(colorMuted)
+	t.Focused.NoteTitle = t.Focused.Title
 	t.Focused.ErrorIndicator = t.Focused.ErrorIndicator.Foreground(colorError)
 	t.Focused.ErrorMessage = t.Focused.ErrorMessage.Foreground(colorError)
 	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(colorAccent)
