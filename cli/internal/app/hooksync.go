@@ -12,9 +12,9 @@ import (
 )
 
 // Installed hooks are one-liners that call rostr, so an upgrade changes what they do right away; only a change to
-// which hooks rostr installs (a new event, say) needs settings rewritten. Each agent's stamp records the fingerprint
-// of the hooks rostr last installed for it, and a session start that finds a stamp out of date reinstalls them in the
-// background, so upgrading is just `brew upgrade`.
+// what rostr installs (a new hook event, say, or new skill text) needs files rewritten. Each agent's stamp records the
+// fingerprint of what rostr last installed for it, and a session start that finds a stamp out of date reinstalls in
+// the background, so upgrading is just `brew upgrade`.
 
 // hookSet is one agent's hooks.
 type hookSet struct {
@@ -47,8 +47,8 @@ func hookSets() []hookSet {
 	}
 }
 
-// syncHooksIfStale starts `rostr hook sync` in the background when any agent's stamp doesn't match this binary's
-// hooks. The session start that runs it keeps going without waiting; Claude Code picks up the rewritten settings on
+// syncHooksIfStale starts `rostr hook sync` in the background when any agent's stamp doesn't match what this binary
+// installs. The session start that runs it keeps going without waiting; Claude Code picks up the rewritten settings on
 // its own.
 func syncHooksIfStale() {
 	for _, set := range hookSets() {
@@ -64,7 +64,7 @@ func syncHooksIfStale() {
 func newHookSyncCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
-		Short: "Bring the installed Claude Code and Codex hooks up to date",
+		Short: "Bring the installed Claude Code and Codex hooks and skills up to date",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return syncHooks()
@@ -72,8 +72,8 @@ func newHookSyncCommand() *cobra.Command {
 	}
 }
 
-// syncHooks reinstalls each agent's hooks where rostr's hooks are installed already, never adding them for an agent
-// that doesn't have them, and records the stamps. A failed install is logged and leaves its stamp out of date, so the
+// syncHooks reinstalls each agent's hooks and skills where rostr's hooks are installed already, never adding them for
+// an agent that doesn't have them, and records the stamps. A failed install is logged and leaves its stamp out of date, so the
 // next session start tries again.
 func syncHooks() error {
 	for _, set := range hookSets() {
