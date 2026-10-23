@@ -267,3 +267,59 @@ func TestCloudRegisterKeepsRosterOrderWhenTimesTie(t *testing.T) {
 		t.Fatalf("createdAt: %v", times)
 	}
 }
+
+func TestCloudStatsIsOneCall(t *testing.T) {
+	var keys crypto.DerivedKeys
+	api, cloud, keys := newFakeAPI(t, func(w http.ResponseWriter, r recordedRequest) {
+		task, _ := keys.Encrypt("Fix CI")
+		json.NewEncoder(w).Encode(map[string]any{"rosters": []map[string]any{
+			{"name": "work", "emojiMode": "on", "isDefault": true, "createdAt": time.Now(),
+				"aTeam": []map[string]any{{"name": "Gandalf", "emoji": "🧙"}, {"name": "Frodo", "emoji": "💍"}}, "bTeam": []any{},
+				"drafted": []map[string]any{{"name": "Gandalf 2", "emoji": "🧙", "team": "a", "task": task, "repo": nil,
+					"draftedAt": time.Now(), "restingSince": nil}},
+				"idle": []any{}},
+			{"name": "home", "emojiMode": "only", "isDefault": false, "createdAt": time.Now(),
+				"aTeam": []map[string]any{{"name": "Sam", "emoji": "🥔"}}, "bTeam": []any{}, "drafted": []any{}, "idle": []any{}},
+		}})
+	})
+
+	stats, err := cloud.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(api.requests) != 1 || api.requests[0].path != "/v1/stats" {
+		t.Fatalf("requests: %+v", api.requests)
+	}
+	if stats.DefaultRoster != "work" || len(stats.Rosters) != 2 || len(stats.Rosters[0].ATeam) != 2 ||
+		stats.Rosters[1].EmojiMode != "only" || stats.Rosters[1].BTeam == nil {
+		t.Fatalf("stats: %+v", stats)
+	}
+	if len(stats.Drafts) != 1 || stats.Drafts[0].Member != "Gandalf" || stats.Drafts[0].Copy != 2 || stats.Drafts[0].Task != "Fix CI" {
+		t.Fatalf("drafts: %+v", stats.Drafts)
+	}
+}
+
+// A server from before the listing had casts leaves them out, so each cast and the default come from their own calls.
+func TestCloudStatsFromAnOlderServer(t *testing.T) {
+	api, cloud, _ := newFakeAPI(t, func(w http.ResponseWriter, r recordedRequest) {
+		switch r.path {
+		case "/v1/stats":
+			w.Write([]byte(`{"rosters": [{"name": "work", "emojiMode": "on", "drafted": [], "idle": []}]}`))
+		case "/v1/rosters/work":
+			w.Write([]byte(`{"name": "work", "emojiMode": "on", "aTeam": [{"name": "Gandalf", "emoji": "🧙"}], "bTeam": []}`))
+		case "/v1/settings":
+			w.Write([]byte(`{"defaultRoster": "work", "draftExpiry": "7d", "autoDraft": true}`))
+		}
+	})
+
+	stats, err := cloud.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.DefaultRoster != "work" || len(stats.Rosters) != 1 || stats.Rosters[0].ATeam[0].Name != "Gandalf" {
+		t.Fatalf("stats: %+v", stats)
+	}
+	if len(api.requests) != 3 {
+		t.Fatalf("requests: %+v", api.requests)
+	}
+}

@@ -154,20 +154,61 @@ func (c *Cloud) Register(ctx context.Context, setup Setup) error {
 // Rosters
 
 func (c *Cloud) Rosters(ctx context.Context) ([]Roster, error) {
-	// The listing gives every roster's name, oldest first; each roster's cast comes from its own endpoint
 	var listing apiListing
 	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
 		return nil, err
 	}
+	return c.listedRosters(ctx, listing)
+}
+
+// listedRosters is the listing's rosters, oldest first. A server from before the listing had casts leaves them out,
+// so then each cast comes from its roster's own endpoint.
+func (c *Cloud) listedRosters(ctx context.Context, listing apiListing) ([]Roster, error) {
 	out := make([]Roster, len(listing.Rosters))
 	for i, r := range listing.Rosters {
-		full, err := c.Roster(ctx, r.Name)
-		if err != nil {
-			return nil, err
+		if r.ATeam == nil {
+			full, err := c.Roster(ctx, r.Name)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = full
+			continue
 		}
-		out[i] = full
+		out[i] = Roster{Name: r.Name, EmojiMode: r.EmojiMode, ATeam: r.ATeam, BTeam: nonNil(r.BTeam), CreatedAt: r.CreatedAt}
 	}
 	return out, nil
+}
+
+// Stats reads everything `rostr stats` shows from the listing, in one call.
+func (c *Cloud) Stats(ctx context.Context) (Stats, error) {
+	var listing apiListing
+	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
+		return Stats{}, err
+	}
+	rosters, err := c.listedRosters(ctx, listing)
+	if err != nil {
+		return Stats{}, err
+	}
+	drafts, err := c.listedDrafts(listing)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats := Stats{Rosters: rosters, Drafts: drafts}
+	oldServer := false
+	for _, r := range listing.Rosters {
+		if r.IsDefault {
+			stats.DefaultRoster = r.Name
+		}
+		oldServer = oldServer || r.ATeam == nil
+	}
+	if oldServer {
+		settings, err := c.Settings(ctx)
+		if err != nil {
+			return Stats{}, err
+		}
+		stats.DefaultRoster = settings.DefaultRoster
+	}
+	return stats, nil
 }
 
 func (c *Cloud) Roster(ctx context.Context, name string) (Roster, error) {
@@ -488,12 +529,17 @@ func (c *Cloud) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
 		return nil, err
 	}
+	return c.listedDrafts(listing)
+}
+
+// listedDrafts is the listing's drafted agents, with their tasks and repos decrypted.
+func (c *Cloud) listedDrafts(listing apiListing) ([]Draft, error) {
 	var out []Draft
 	for _, r := range listing.Rosters {
 		for _, d := range r.Drafted {
 			member, copy := splitAgentName(d.Name)
 			draft := Draft{
-				Roster: r.Name, EmojiMode: roster.EmojiMode(r.EmojiMode), Member: member, Emoji: d.Emoji, Copy: copy,
+				Roster: r.Name, EmojiMode: r.EmojiMode, Member: member, Emoji: d.Emoji, Copy: copy,
 				Team: strings.ToUpper(deref(d.Team)), DraftedAt: d.DraftedAt,
 			}
 			if d.RestingSince != nil {
@@ -759,8 +805,12 @@ func (s apiSettings) toSettings() Settings {
 // apiListing is the public GET /v1/stats.
 type apiListing struct {
 	Rosters []struct {
-		Name      string `json:"name"`
-		EmojiMode string `json:"emojiMode"`
+		Name      string           `json:"name"`
+		EmojiMode roster.EmojiMode `json:"emojiMode"`
+		ATeam     []roster.Member  `json:"aTeam"`
+		BTeam     []roster.Member  `json:"bTeam"`
+		IsDefault bool             `json:"isDefault"`
+		CreatedAt time.Time        `json:"createdAt"`
 		Drafted   []struct {
 			Name         string     `json:"name"`
 			Emoji        string     `json:"emoji"`

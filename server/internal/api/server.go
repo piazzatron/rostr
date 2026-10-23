@@ -33,6 +33,7 @@ type Server struct {
 	db                  *pgxpool.Pool
 	registrationLimiter *rateLimiter
 	requestLimiter      *rateLimiter
+	owners              *ownerCache
 	live                *livePusher // nil when live stats are off
 }
 
@@ -42,6 +43,7 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 		db:                  db,
 		registrationLimiter: newRateLimiter(cfg.RegistrationsPerHour, time.Hour),
 		requestLimiter:      newRateLimiter(cfg.RequestsPerMinute, time.Minute),
+		owners:              newOwnerCache(),
 	}
 	if cfg.LiveURL != "" && cfg.LiveSecret != "" {
 		s.live = &livePusher{url: cfg.LiveURL, secret: cfg.LiveSecret, delay: 500 * time.Millisecond, db: db}
@@ -109,15 +111,18 @@ func (s *Server) authed(h ownerHandler) http.Handler {
 			return
 		}
 
-		var ownerID string
-		err := s.db.QueryRow(r.Context(), `select id from owners where auth_token_hash = $1`, hash).Scan(&ownerID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, errUnauthorized)
-			return
-		}
-		if err != nil {
-			writeError(w, err)
-			return
+		ownerID, ok := s.owners.get(hash)
+		if !ok {
+			err := s.db.QueryRow(r.Context(), `select id from owners where auth_token_hash = $1`, hash).Scan(&ownerID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeError(w, errUnauthorized)
+				return
+			}
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			s.owners.put(hash, ownerID)
 		}
 
 		if err := h(w, r, ownerID); err != nil {
@@ -128,35 +133,36 @@ func (s *Server) authed(h ownerHandler) http.Handler {
 
 // withOwnerTx runs fn in a transaction holding the owner's row lock, so each owner's writes run one at a time. Before
 // fn runs, it releases the owner's drafts not seen within their draft expiry and deletes drafts released more than 7
-// days ago. This is the only cleanup; there's no background job. Once the transaction commits, it pushes live stats:
-// nearly every owner write can change the counts, and pushes are coalesced.
+// days ago. This is the only cleanup; there's no background job. The lock and the cleanup go in one round trip. Once
+// the transaction commits, it pushes live stats: nearly every owner write can change the counts, and pushes are
+// coalesced.
 func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx.Tx) error) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `select 1 from owners where id = $1 for update`, ownerID); err != nil {
-			return err
-		}
+		batch := &pgx.Batch{}
+		// No owner row means a cached owner that has since been deleted
+		batch.Queue(`select 1 from owners where id = $1 for update`, ownerID).Exec(func(tag pgconn.CommandTag) error {
+			if tag.RowsAffected() == 0 {
+				s.owners.forgetOwner(ownerID)
+				return errUnauthorized
+			}
+			return nil
+		})
 
 		// Expire stale drafts
-		_, err := tx.Exec(ctx, `
+		batch.Queue(`
 			update drafts d set benched_at = now()
 			from rosters r, owners o
 			where d.roster_id = r.id and r.owner_id = $1 and o.id = $1
 			  and d.benched_at is null and d.last_seen_at < now() - o.draft_expiry`, ownerID)
-		if err != nil {
-			return err
-		}
 
 		// Prune released drafts past the 7-day resume window, and expired reservations
-		_, err = tx.Exec(ctx, `
+		batch.Queue(`
 			delete from drafts d using rosters r
 			where d.roster_id = r.id and r.owner_id = $1 and d.benched_at < now() - interval '7 days'`, ownerID)
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `
+		batch.Queue(`
 			delete from reservations v using rosters r
 			where v.roster_id = r.id and r.owner_id = $1 and v.expires_at <= now()`, ownerID)
-		if err != nil {
+		if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 			return err
 		}
 

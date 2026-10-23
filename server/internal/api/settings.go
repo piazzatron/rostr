@@ -24,13 +24,25 @@ type settingsPatch struct {
 func loadSettings(ctx context.Context, q querier, ownerID string) (settingsResponse, error) {
 	var resp settingsResponse
 	var expiryHours int
-	err := q.QueryRow(ctx, `
-		select r.name, (extract(epoch from o.draft_expiry) / 3600)::int, o.auto_draft
-		from owners o left join rosters r on r.id = o.default_roster_id
-		where o.id = $1`, ownerID).Scan(&resp.DefaultRoster, &expiryHours, &resp.AutoDraft)
+	err := q.QueryRow(ctx, settingsQuery, ownerID).Scan(&resp.DefaultRoster, &expiryHours, &resp.AutoDraft)
 	resp.DraftExpiry = formatExpiryHours(expiryHours)
 	return resp, err
 }
+
+// queueSettings queues loadSettings on a batch, filling resp once the batch runs.
+func queueSettings(batch *pgx.Batch, ownerID string, resp *settingsResponse) {
+	batch.Queue(settingsQuery, ownerID).QueryRow(func(row pgx.Row) error {
+		var expiryHours int
+		err := row.Scan(&resp.DefaultRoster, &expiryHours, &resp.AutoDraft)
+		resp.DraftExpiry = formatExpiryHours(expiryHours)
+		return err
+	})
+}
+
+const settingsQuery = `
+	select r.name, (extract(epoch from o.draft_expiry) / 3600)::int, o.auto_draft
+	from owners o left join rosters r on r.id = o.default_roster_id
+	where o.id = $1`
 
 func applySettings(ctx context.Context, tx pgx.Tx, ownerID string, patch settingsPatch) error {
 	if patch.DefaultRoster != nil {

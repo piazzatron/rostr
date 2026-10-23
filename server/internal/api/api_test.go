@@ -313,6 +313,10 @@ func TestPublicListShape(t *testing.T) {
 		Rosters []struct {
 			Name      string           `json:"name"`
 			EmojiMode string           `json:"emojiMode"`
+			ATeam     []member         `json:"aTeam"`
+			BTeam     []member         `json:"bTeam"`
+			IsDefault bool             `json:"isDefault"`
+			CreatedAt time.Time        `json:"createdAt"`
 			Drafted   []map[string]any `json:"drafted"`
 			Idle      []map[string]any `json:"idle"`
 		} `json:"rosters"`
@@ -322,6 +326,13 @@ func TestPublicListShape(t *testing.T) {
 	}
 	if len(raw.Rosters) != 2 || raw.Rosters[0].Name != "work" || raw.Rosters[1].Name != "empty" {
 		t.Fatalf("rosters: %s", rec.Body.String())
+	}
+
+	// Each roster has its cast and whether it's the default
+	work, empty := raw.Rosters[0], raw.Rosters[1]
+	if len(work.ATeam) != 2 || work.ATeam[1].Name != "Frodo" || len(work.BTeam) != 1 || work.BTeam[0].Emoji != "🛡️" ||
+		!work.IsDefault || work.CreatedAt.IsZero() || empty.IsDefault || len(empty.ATeam) != 1 || empty.BTeam == nil {
+		t.Fatalf("casts: %s", rec.Body.String())
 	}
 
 	drafted := raw.Rosters[0].Drafted

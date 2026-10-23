@@ -35,51 +35,35 @@ type draftWithNext struct {
 }
 
 // loadNext is the owner's next state as seen by one machine: idle members leave out the ones other machines hold
-// reservations on, and each roster says which member this machine holds.
+// reservations on, and each roster says which member this machine holds. Its queries go in one round trip.
 func loadNext(ctx context.Context, q querier, ownerID, machine string) (nextResponse, error) {
-	settings, err := loadSettings(ctx, q, ownerID)
-	if err != nil {
-		return nextResponse{}, err
-	}
-	all, err := reservations(ctx, q, ownerID)
-	if err != nil {
-		return nextResponse{}, err
-	}
-	rosterIDs := map[string]string{}
-	rows, err := q.Query(ctx, `select r.id, r.name from rosters r where r.owner_id = $1`, ownerID)
-	if err != nil {
-		return nextResponse{}, err
-	}
-	if _, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
-		var id, name string
-		err := row.Scan(&id, &name)
-		rosterIDs[name] = id
-		return struct{}{}, err
-	}); err != nil {
-		return nextResponse{}, err
-	}
-	rows, err = q.Query(ctx, `
+	batch := &pgx.Batch{}
+	var settings settingsResponse
+	queueSettings(batch, ownerID, &settings)
+	var all []reservation
+	queueReservations(batch, ownerID, &all)
+	var links []nextLink
+	batch.Queue(`
 		select l.repo_hash, r.name from project_links l join rosters r on r.id = l.roster_id
-		where l.owner_id = $1 order by r.name, l.repo_hash`, ownerID)
-	if err != nil {
-		return nextResponse{}, err
-	}
-	links, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (nextLink, error) {
-		var l nextLink
-		err := row.Scan(&l.RepoHash, &l.Roster)
-		return l, err
+		where l.owner_id = $1 order by r.name, l.repo_hash`, ownerID).Query(func(rows pgx.Rows) error {
+		var err error
+		links, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (nextLink, error) {
+			var l nextLink
+			err := row.Scan(&l.RepoHash, &l.Roster)
+			return l, err
+		})
+		return err
 	})
-	if err != nil {
+	listing := queueListing(batch, ownerID)
+	if err := q.SendBatch(ctx, batch).Close(); err != nil {
 		return nextResponse{}, err
 	}
-	listed, err := listRosters(ctx, q, ownerID)
-	if err != nil {
-		return nextResponse{}, err
-	}
+
+	listed := listing()
 	rosters := make([]nextRoster, len(listed))
 	for i, r := range listed {
 		taken := map[slot]bool{}
-		reservedByOthers(all, rosterIDs[r.Name], machine, taken)
+		reservedByOthers(all, r.id, machine, taken)
 		idle := []idleMember{}
 		for _, m := range r.Idle {
 			if !taken[slot{nameKey(m.Name), 1}] {
@@ -87,7 +71,7 @@ func loadNext(ctx context.Context, q querier, ownerID, machine string) (nextResp
 			}
 		}
 		rosters[i] = nextRoster{Name: r.Name, EmojiMode: r.EmojiMode, Idle: idle}
-		if held := ownReservation(all, rosterIDs[r.Name], machine); held != "" {
+		if held := ownReservation(all, r.id, machine); held != "" {
 			rosters[i].Reserved = &held
 		}
 	}

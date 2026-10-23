@@ -175,9 +175,9 @@ A draft from the holding machine without `preferred` takes its reserved member.
 |---|---|---|
 | `GET /health` | none | Deploy and compose healthchecks |
 | `POST /v1/register` | none | `cloud on` (new setup), `assemble --cloud` |
-| `GET /v1/stats` | bearer, **public** | `stats`, finding an agent by name (`bench`, `task`), dashboards |
+| `GET /v1/stats` | bearer, **public** | `stats`, every roster's cast, finding an agent by name (`bench`, `task`), dashboards |
 | `POST /v1/rosters` | bearer | `assemble` (new roster) |
-| `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `stats`, `edit`, `disband` confirmation, `config emoji` |
+| `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `edit`, `disband` confirmation, `config emoji` |
 | `PUT /v1/rosters/{name}` | bearer | `edit`, `config emoji` |
 | `PUT /v1/rosters/{name}/cast` | bearer | `assemble` (replace a cast) |
 | `DELETE /v1/rosters/{name}` | bearer | `disband` |
@@ -255,7 +255,8 @@ Rate-limited per client IP.
 
 ### `GET /v1/stats` (public, stable)
 
-Every roster with its drafted agents and idle members, in the shape of `rostr stats --json`.
+Every roster with its cast, drafted agents, and idle members, in the shape of `rostr stats --json`. It's everything
+`rostr stats` shows, in one call.
 
 ```json
 {
@@ -263,6 +264,10 @@ Every roster with its drafted agents and idle members, in the shape of `rostr st
     {
       "name": "work",
       "emojiMode": "on",
+      "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }, { "name": "Frodo", "emoji": "💍" }],
+      "bTeam": [],
+      "isDefault": true,
+      "createdAt": "2026-10-20T09:57:14Z",
       "drafted": [
         {
           "name": "Gandalf 2",
@@ -280,6 +285,8 @@ Every roster with its drafted agents and idle members, in the shape of `rostr st
 }
 ```
 
+- `aTeam`, `bTeam`, `isDefault`, and `createdAt` are as in the [Roster](#objects) object. `isDefault` is whether it's
+  the owner's default roster.
 - Rosters are oldest first. `drafted` is oldest draft first; `idle` is in draft order: the order the next drafts
   take them (A team first, least recently drafted first).
 - In `drafted`, `name` includes the copy number (`Gandalf 2`), `emoji` is the one stored on the draft, and `team` is
@@ -328,6 +335,8 @@ names and stored emoji until their sessions end; new sessions draft from the new
 Disbands a roster, deleting its drafts and project links. If it was the default, the oldest remaining roster becomes
 the default. If it was the owner's **last** roster, the owner is deleted too (settings and all), so nothing of theirs
 is left; the auth token gets `401 unauthorized` from then on, and registering it again starts a fresh, empty owner.
+(Each server instance caches which owner a token belongs to for up to a minute, so for that long another instance may
+answer the token's reads with the deleted owner's empty data; its writes get `401`.)
 
 ```json
 { "name": "work", "benchedDrafts": 2, "unlinkedProjects": 1, "newDefault": "home", "ownerDeleted": false }

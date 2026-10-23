@@ -93,6 +93,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// The token may have belonged to an owner that was deleted, whose ID this instance still has cached
+	s.owners.forgetHash(hashAuthToken(token))
 	s.live.notify()
 	writeJSON(w, http.StatusCreated, resp)
 }

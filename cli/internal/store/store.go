@@ -76,6 +76,8 @@ type Store interface {
 	SessionDraft(ctx context.Context, sessionID string) (*Draft, error)
 	// ActiveDrafts returns every active draft across all rosters.
 	ActiveDrafts(ctx context.Context) ([]Draft, error)
+	// Stats returns what `rostr stats` shows: every roster, every active draft, and the default roster.
+	Stats(ctx context.Context) (Stats, error)
 	// Bench frees the session's member, returning the released draft or nil if it had none.
 	Bench(ctx context.Context, sessionID string) (*Draft, error)
 	// BenchAgent frees one drafted agent. The error wraps ErrNotFound if it isn't drafted.
@@ -86,6 +88,13 @@ type Store interface {
 	// last-seen time. Each time only moves forward, so a late report can't undo a newer one. The error wraps
 	// ErrNotFound when the session has no active draft, as when another session took its name while it rested.
 	RecordTurn(ctx context.Context, sessionID string, ended bool, at time.Time) error
+}
+
+// Stats is every roster, oldest first, with every active draft and the default roster's name ("" if none).
+type Stats struct {
+	Rosters       []Roster
+	Drafts        []Draft
+	DefaultRoster string
 }
 
 // Roster is a named cast of members.

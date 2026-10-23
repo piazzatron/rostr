@@ -34,16 +34,25 @@ type reservation struct {
 
 // reservations is every unexpired reservation on the owner's rosters.
 func reservations(ctx context.Context, q querier, ownerID string) ([]reservation, error) {
-	rows, err := q.Query(ctx, `
+	var all []reservation
+	batch := &pgx.Batch{}
+	queueReservations(batch, ownerID, &all)
+	err := q.SendBatch(ctx, batch).Close()
+	return all, err
+}
+
+// queueReservations queues reservations on a batch, filling all once the batch runs.
+func queueReservations(batch *pgx.Batch, ownerID string, all *[]reservation) {
+	batch.Queue(`
 		select v.roster_id, v.machine_id, v.member_name from reservations v join rosters r on r.id = v.roster_id
-		where r.owner_id = $1 and v.expires_at > now()`, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (reservation, error) {
-		var v reservation
-		err := row.Scan(&v.rosterID, &v.machineID, &v.memberName)
-		return v, err
+		where r.owner_id = $1 and v.expires_at > now()`, ownerID).Query(func(rows pgx.Rows) error {
+		var err error
+		*all, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (reservation, error) {
+			var v reservation
+			err := row.Scan(&v.rosterID, &v.machineID, &v.memberName)
+			return v, err
+		})
+		return err
 	})
 }
 
