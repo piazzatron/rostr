@@ -255,7 +255,7 @@ Rate-limited per client IP.
 
 ### `GET /v1/rosters` (public, stable)
 
-Every roster with its drafted agents and idle members, in the shape of `rostr list --json`.
+Every roster with its drafted agents and idle members, in the shape of `rostr stats --json`.
 
 ```json
 {

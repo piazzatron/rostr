@@ -84,11 +84,11 @@ $ rostr unlink
 Unlinked me/recipes. It now uses your default roster, work`,
       },
       {
-        id: "list",
-        usage: "rostr list [<roster>...] [--json]",
+        id: "stats",
+        usage: "rostr stats [<roster>, ...] [--json]",
         summary: "See who's working on what, who's resting, and who's on the bench, across all your rosters. Name rosters to see just those.",
         options: [{ flag: "--json", description: "Print the result as JSON." }],
-        example: `$ rostr list
+        example: `$ rostr stats
 work roster
 🧙 Gandalf   Fix auth redirect loop         acme/api      12m
 💍 Frodo     Flaky e2e tests on CI          acme/web      3m
@@ -99,7 +99,7 @@ side roster
 🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
 bench: LeBron, Kobe, Magic, Bird, Curry, Shaq
 
-$ rostr list side
+$ rostr stats side
 side roster
 🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
 bench: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
@@ -141,11 +141,11 @@ Disbanded work. side is now your default roster`,
         id: "draft",
         heading: "draft / bench",
         badge: "⚙️ On session start and end",
-        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr bench [<name>... | all] [--session <id>]",
+        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr bench [<name>, ... | all] [--session <id>]",
         summary:
           "Draft the next free agent when a session starts, A team first, and send it back to the bench when the session ends. The same session always gets the same name back.",
         options: [
-          { flag: "--task <description>", description: "What the agent is working on. Shown in rostr list." },
+          { flag: "--task <description>", description: "What the agent is working on. Shown in rostr stats." },
           { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION." },
           { flag: "--json", description: "Print the drafted agent as JSON." },
         ],

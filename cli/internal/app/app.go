@@ -61,7 +61,7 @@ func newRootCommand() *cobra.Command {
 		newAssembleCommand("create", true),
 		newLinkCommand(),
 		newUnlinkCommand(),
-		newListCommand(),
+		newStatsCommand(),
 		newEditCommand(),
 		newPresetsCommand(),
 		newDisbandCommand(),

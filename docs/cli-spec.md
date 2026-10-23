@@ -132,7 +132,7 @@ cancels. Each question can be skipped with a flag, so an agent can run it non-in
   replace an existing roster's cast, or edit one (which opens `rostr edit`). Agents passing flags always make a new
   roster.
 - **Replacing a cast** keeps the roster's name, project links, and default status. Agents already drafted keep their
-  names until their sessions end (each draft stores its member's emoji, so `rostr list` still shows them); new
+  names until their sessions end (each draft stores its member's emoji, so `rostr stats` still shows them); new
   sessions draft from the new cast.
 - Later runs skip the setup-wide questions (where rostr lives, auto-draft); change those with `rostr config`. They
   reinstall the hooks, skill, and `/draft` only if they're missing, without duplicating them.
@@ -151,16 +151,16 @@ Link a roster to the current project, or unlink it to go back to the default. `-
 - **Bare `rostr link`** is interactive: it shows which roster the project uses now and why (linked, or your default),
   and lets you pick another. Run by an agent (no terminal), it just prints the current roster and why.
 
-#### `rostr list`
+#### `rostr stats`
 
 ```
-rostr list [<roster>, ...] [--json]
+rostr stats [<roster>, ...] [--json]
 ```
 
 Shows every roster, headed `<name> roster`, with its working agents (display, task, repo, time since drafted), then
 under `Resting:` the agents whose session finished its turn at least 15 minutes ago (with the time they've rested; see
 [Resting](#resting)), then its members on the bench. Name one or more rosters, separated by commas, to show just those. `--json` prints the
-same data as `{"rosters": [{"name", "emojiMode", "drafted", "resting", "bench"}]}`.
+same data as `{"rosters": [{"name", "emojiMode", "drafted", "resting", "bench"}]}`. `rostr list` still works as an alias.
 
 
 #### `rostr edit`
@@ -486,7 +486,7 @@ You're 🧙 Gandalf for this session (drafted by rostr from the "work" roster).
 
 ### Skill
 
-A reference the agent loads when the user asks about rostr: who else is running (`rostr list`), changing its task,
+A reference the agent loads when the user asks about rostr: who else is running (`rostr stats`), changing its task,
 setting rostr up, editing rosters. Identity doesn't depend on it.
 
 ### `/draft`
@@ -522,7 +522,7 @@ server afterwards; two machines announcing the same member within the same momen
 ### Resting
 
 A session rests once it has finished its turn and nobody has sent it a prompt for 15 minutes. It keeps its name and
-shows under `Resting:` in `rostr list`, but when a new session finds no name free, it takes the name of the member who
+shows under `Resting:` in `rostr stats`, but when a new session finds no name free, it takes the name of the member who
 has rested longest instead of drafting a copy. Fanning out to many sessions reuses the names of ones you've left,
 while a session you come back to soon keeps its name. Sessions that never fire `SessionEnd` (a closed desktop session, an
 archived cloud session, a terminal left open) rest instead of holding a name until the expiry.
@@ -569,7 +569,7 @@ A draft's last-seen time is bumped by drafting the same session again (resume, c
   - **encryption key:** encrypts tasks and repo names with AES-256-GCM, a random 96-bit nonce per value. Encrypted
     values are base64: the 12-byte nonce, then the ciphertext with its tag.
   - **fingerprint key:** HMAC-SHA256 over the lowercased `owner/repo`, so the server can match project links without
-    repo names. The encrypted copy is what `rostr list` shows.
+    repo names. The encrypted copy is what `rostr stats` shows.
 - **What's plaintext on the server:** rosters, which members are drafted and when, session IDs.
 - **No recovery and no rotation in v1.** A lost key means lost cloud rosters.
 - **Trade-offs of encrypting tasks:** API responses contain ciphertext, so web dashboards need the key to show tasks;
@@ -588,7 +588,7 @@ GET https://api.getrostr.sh/v1/rosters
 Authorization: Bearer <auth token>
 ```
 
-- **Response:** the same shape as `rostr list --json`, except each drafted agent's `task` and `repo` are encrypted
+- **Response:** the same shape as `rostr stats --json`, except each drafted agent's `task` and `repo` are encrypted
   values. Rosters, members, emoji, and who's drafted since when are readable as-is, so a "who's busy" widget needs no
   decryption.
 - **Decrypting** takes the recipe in [Derived keys](#cloud-and-keys) and about 15 lines in any language with
@@ -598,7 +598,7 @@ Authorization: Bearer <auth token>
   repos, the integration also needs your full key. The site says to use it only
   in things you run yourself.
 - **CORS** allows any origin, so browser dashboards can call it. Rate-limited per auth token.
-- Local mode has no API; `rostr list --json` covers integrations on your own machine.
+- Local mode has no API; `rostr stats --json` covers integrations on your own machine.
 
 ## Not in v1
 

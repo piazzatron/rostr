@@ -45,7 +45,7 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" || d.Team != "A" {
 		t.Fatalf("draft: %+v", d)
 	}
-	if text := m.ok("list"); !strings.Contains(text, "🧙 Gandalf   Write the e2e tests   -   just now") {
+	if text := m.ok("stats"); !strings.Contains(text, "🧙 Gandalf   Write the e2e tests   -   just now") {
 		t.Fatalf("list text:\n%s", text)
 	}
 	var config struct{ Storage, Default string }
@@ -465,7 +465,7 @@ func TestHooksWhenTheAPIIsDown(t *testing.T) {
 		if env, _ := os.ReadFile(envFile); !strings.HasPrefix(string(env), "export ROSTR_SESSION="+session+"\n") {
 			t.Fatalf("%s: CLAUDE_ENV_FILE %q", down.name, env)
 		}
-		if r := offline.run(repo, "", "list"); r.code != 1 || !strings.Contains(r.stderr, "can't reach the rostr API") {
+		if r := offline.run(repo, "", "stats"); r.code != 1 || !strings.Contains(r.stderr, "can't reach the rostr API") {
 			t.Fatalf("%s: list: %+v", down.name, r)
 		}
 
@@ -752,6 +752,6 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	if _, err := os.Stat(m.credentialsPath()); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("credentials still there: %v", err)
 	}
-	m.fails("No rosters yet", "list")
+	m.fails("No rosters yet", "stats")
 	m.fails("No rosters yet", "draft", "--session", "s5")
 }

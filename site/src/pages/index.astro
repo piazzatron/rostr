@@ -44,7 +44,7 @@ const HERO_STATUS_TASKS = ["CI", "billing", "auth", "the docs", "the API", "dark
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
-// The hero's `rostr list --all`: one roster for work and one for side projects
+// The hero's `rostr stats --all`: one roster for work and one for side projects
 const HERO_ROSTERS = [
   {
     name: "work",
@@ -71,7 +71,7 @@ const COMMAND_GROUP_CARDS = [
     href: "/cli#roster-commands",
     title: "🎯 Roster commands",
     description: "Assemble and edit rosters, link them to your repos, see who's working on what.",
-    commands: ["assemble", "link", "list", "edit", "presets", "disband"],
+    commands: ["assemble", "link", "stats", "edit", "presets", "disband"],
   },
   {
     href: "/cli#agent-commands",
@@ -116,7 +116,7 @@ const formatElapsed = (minutes: number) =>
 // Terminal examples, rendered with Expressive Code
 const HERO_LIST_EXAMPLE = toTerminalText(
   [
-    "$ rostr list",
+    "$ rostr stats",
     ...HERO_ROSTERS.flatMap((roster, index) => [
       ...(index > 0 ? [""] : []),
       `${ANSI_DIM}${roster.name} roster${ANSI_RESET}`,
@@ -372,13 +372,13 @@ const LIST_JSON_EXAMPLE = `{
     <section class="section">
       <h2>Build on it</h2>
       <p class="section-lede">
-        Use the output of <code>rostr list --json</code> or the list API endpoint to build your own dashboards,
+        Use the output of <code>rostr stats --json</code> or the list API endpoint to build your own dashboards,
         monitoring, and integrations.
       </p>
 
       <figure
         class="dashboard"
-        aria-label="Example team dashboard built on rostr list --json"
+        aria-label="Example team dashboard built on rostr stats --json"
         data-tasks={JSON.stringify(DASHBOARD_TASKS)}
       >
         <div class="dashboard-app">
@@ -416,12 +416,12 @@ const LIST_JSON_EXAMPLE = `{
             </div>
           </div>
         </div>
-        <figcaption>A team dashboard built on <code>rostr list --json</code>.</figcaption>
+        <figcaption>A team dashboard built on <code>rostr stats --json</code>.</figcaption>
       </figure>
       <div class="cards build-cards">
         <div class="card">
           <h3>💻 On your machine</h3>
-          <Code code="rostr list --json" lang="sh" />
+          <Code code="rostr stats --json" lang="sh" />
           <p class="build-note">Local or cloud mode. Tasks and repos come back decrypted.</p>
           <h3 class="build-subhead">🌐 On the web</h3>
           <Code code={API_EXAMPLE} lang="sh" />

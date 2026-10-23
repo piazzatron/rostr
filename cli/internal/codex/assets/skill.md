@@ -14,8 +14,8 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 
 ## Who's running
 
-- `rostr list`: every roster, its working agents (name, task, repo, time since drafted), its resting ones (their session finished its turn a while ago), then its members on the bench.
-- `rostr list <roster>, ... --json`: the same as JSON.
+- `rostr stats`: every roster, its working agents (name, task, repo, time since drafted), its resting ones (their session finished its turn a while ago), then its members on the bench.
+- `rostr stats <roster>, ... --json`: the same as JSON.
 
 ## Your task
 

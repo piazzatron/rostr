@@ -63,7 +63,7 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 | `rostr assemble [<roster>]` | Set up a roster: interactive, or with `--preset`, `--names`, `--emoji`, `--cloud`, `--link` |
 | `rostr link [<roster>]` | Use a roster for the current project; bare, shows which one it uses |
 | `rostr unlink` | Go back to the default roster for the current project |
-| `rostr list [<roster>, ...]` | Who's drafted and what they're working on, and who's idle (`--json` for scripts) |
+| `rostr stats [<roster>, ...]` | Who's drafted and what they're working on, and who's idle (`--json` for scripts) |
 | `rostr edit [<roster>]` | Edit a roster's members, emoji, and A team in `$EDITOR` |
 | `rostr presets` | List the pre-built rosters |
 | `rostr disband [<roster>]` | Delete a roster |
