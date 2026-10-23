@@ -168,6 +168,12 @@ func Renamed(display, from string) string {
 		"time got that name first). Sign as %s from now on.", display, from, display)
 }
 
+// RenamedAfterRest tells the agent that another session took its name while it was resting.
+func RenamedAfterRest(display, from string) string {
+	return fmt.Sprintf("rostr renamed this session: you're %s now, not %s (another session took that name while this "+
+		"one was resting). Sign as %s from now on.", display, from, display)
+}
+
 func Identity(display, rosterName, sessionID string) string {
 	return strings.Join([]string{
 		fmt.Sprintf("You're %s for this session (drafted by rostr from the %q roster).", display, rosterName),

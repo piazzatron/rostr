@@ -132,7 +132,7 @@ type listOutput struct {
 	Rosters []struct {
 		Name    string
 		Drafted []struct{ Name, Display, Task, Repo, Session, Team string }
-		Idle    []struct{ Name string }
+		Bench   []struct{ Name string }
 	}
 }
 
@@ -177,7 +177,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	s.fails(s.home, nil, "rostr cloud on", "assemble", "x", "--preset", "kanto", "--cloud")
 
 	listing := s.list()
-	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Idle) != 20 {
+	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Bench) != 20 {
 		t.Fatalf("list: %+v", listing)
 	}
 	if text := s.ok(s.home, nil, "list", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {
@@ -224,7 +224,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "Review the PR" || gandalf.Repo != "" {
 		t.Fatalf("list: %+v", listing)
 	}
-	if text := s.ok(s.home, nil, "list", "play"); !strings.Contains(text, "Ada   Fix auth redirect loop   acme/api   just now") || !strings.Contains(text, "Idle: Grace") {
+	if text := s.ok(s.home, nil, "list", "play"); !strings.Contains(text, "Ada   Fix auth redirect loop   acme/api   just now") || !strings.Contains(text, "Bench: Grace") {
 		t.Fatalf("list text:\n%s", text)
 	}
 
@@ -669,8 +669,8 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 		Hooks map[string][]any
 	}
 	json.Unmarshal(second, &settings)
-	if settings.Theme != "dark" || len(settings.Hooks["Stop"]) != 1 || len(settings.Hooks["SessionStart"]) != 1 ||
-		len(settings.Hooks["UserPromptSubmit"]) != 1 || len(settings.Hooks["PostToolUse"]) != 1 || len(settings.Hooks["SessionEnd"]) != 1 {
+	if settings.Theme != "dark" || len(settings.Hooks["Stop"]) != 2 || len(settings.Hooks["SessionStart"]) != 1 ||
+		len(settings.Hooks["UserPromptSubmit"]) != 1 || len(settings.Hooks["PostToolUse"]) != 2 || len(settings.Hooks["SessionEnd"]) != 1 {
 		t.Fatalf("settings: %s", second)
 	}
 	for _, path := range []string{"skills/rostr/SKILL.md", "commands/draft.md"} {

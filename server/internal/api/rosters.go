@@ -308,6 +308,9 @@ type listedDraft struct {
 	Task      *string   `json:"task"`
 	Repo      *string   `json:"repo"`
 	DraftedAt time.Time `json:"draftedAt"`
+	// RestingSince is when the agent's session finished its last turn, once it has been resting (15 minutes); null
+	// while it's working or was recently
+	RestingSince *time.Time `json:"restingSince"`
 }
 
 type idleMember struct {
@@ -348,7 +351,7 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 
 	// Active drafts, leaving out any past the owner's expiry that the next write will release
 	rows, err = q.Query(ctx, `
-		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at
+		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at, `+restingSince+`
 		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
 		where r.owner_id = $1 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry
 		order by d.drafted_at, d.id`, ownerID)
@@ -360,10 +363,11 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 		copy                              int
 		task, repo                        []byte
 		draftedAt                         time.Time
+		restingSince                      *time.Time
 	}
 	drafts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (activeDraft, error) {
 		var d activeDraft
-		err := row.Scan(&d.rosterID, &d.memberName, &d.memberEmoji, &d.copy, &d.task, &d.repo, &d.draftedAt)
+		err := row.Scan(&d.rosterID, &d.memberName, &d.memberEmoji, &d.copy, &d.task, &d.repo, &d.draftedAt, &d.restingSince)
 		return d, err
 	})
 	if err != nil {
@@ -388,12 +392,13 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 				busy[nameKey(d.memberName)] = true
 			}
 			entry.Drafted = append(entry.Drafted, listedDraft{
-				Name:      displayName(d.memberName, d.copy),
-				Emoji:     d.memberEmoji,
-				Team:      roster.team(d.memberName),
-				Task:      encodeCiphertext(d.task),
-				Repo:      encodeCiphertext(d.repo),
-				DraftedAt: d.draftedAt,
+				Name:         displayName(d.memberName, d.copy),
+				Emoji:        d.memberEmoji,
+				Team:         roster.team(d.memberName),
+				Task:         encodeCiphertext(d.task),
+				Repo:         encodeCiphertext(d.repo),
+				DraftedAt:    d.draftedAt,
+				RestingSince: d.restingSince,
 			})
 		}
 		for _, team := range [][]member{roster.ATeam, roster.BTeam} {

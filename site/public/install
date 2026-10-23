@@ -64,6 +64,8 @@ main() {
 	echo "Installed $("${dir}/rostr" version) to ${dir}/rostr"
 
 	# Claude Code cloud sessions start from a fresh container each time, so install the hooks there too
+	# Bring hooks installed by an older rostr up to date
+	"${dir}/rostr" hook sync >/dev/null 2>&1 || true
 	if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
 		"${dir}/rostr" cloud install
 	fi

@@ -32,6 +32,16 @@ func KeepAliveDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "keepalive")
 }
 
+// HooksStamp records the fingerprint of the hooks rostr last installed for an agent ("claude-code" or "codex").
+func HooksStamp(agent string) string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "hooks", agent)
+}
+
+// TurnDir holds one file per session whose last turn ended: when, and the name the session had then.
+func TurnDir() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "turns")
+}
+
 // CloudCacheDir holds cloud mode's local cache: the next state to draft from, and each session's own draft.
 func CloudCacheDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "cloud")

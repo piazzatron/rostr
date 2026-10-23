@@ -2,7 +2,9 @@ package claudecode
 
 import (
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +31,8 @@ var hookEvents = []struct {
 	{"SessionStart", "", "session-start"},
 	{"UserPromptSubmit", "", "prompt"},
 	{"PostToolUse", RemoteTitleTool + "|" + LocalTitleTool + "|Bash", "title-set"},
+	{"PostToolUse", "", "working"},
+	{"Stop", "", "turn-end"},
 	{"SessionEnd", "", "session-end"},
 }
 
@@ -37,6 +41,23 @@ var permissions = []string{
 	RemoteTitleTool,
 	LocalTitleTool,
 	"Bash(rostr task:*)",
+}
+
+// Fingerprint identifies the hooks and permissions this version of rostr installs, so an upgrade that changes them
+// can be noticed and the hooks reinstalled.
+func Fingerprint() string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%v %v", hookEvents, permissions))
+	return hex.EncodeToString(sum[:8])
+}
+
+// Installed reports whether settings.json in claudeDir has any of rostr's hooks, current or not.
+func Installed(claudeDir string) bool {
+	settings, err := readSettings(filepath.Join(claudeDir, "settings.json"))
+	if err != nil {
+		return false
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	return hasAnyRostrHook(hooks)
 }
 
 // Install adds rostr's hooks and permissions to settings.json, and writes the skill and /draft command, skipping
@@ -342,4 +363,21 @@ func writeIfMissing(path, content string) (bool, error) {
 		return false, err
 	}
 	return true, os.WriteFile(path, []byte(content), 0o644)
+}
+
+// hasAnyRostrHook reports whether any event has one of rostr's hooks.
+func hasAnyRostrHook(hooks map[string]any) bool {
+	for _, value := range hooks {
+		groups, _ := value.([]any)
+		for _, group := range groups {
+			groupMap, _ := group.(map[string]any)
+			groupHooks, _ := groupMap["hooks"].([]any)
+			for _, hook := range groupHooks {
+				if hookMap, _ := hook.(map[string]any); isRostrHook(hookMap) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

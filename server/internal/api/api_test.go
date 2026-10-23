@@ -325,10 +325,10 @@ func TestPublicListShape(t *testing.T) {
 	}
 
 	drafted := raw.Rosters[0].Drafted
-	if len(drafted) != 1 || !slices.Equal(sortedKeys(drafted[0]), []string{"draftedAt", "emoji", "name", "repo", "task", "team"}) {
+	if len(drafted) != 1 || !slices.Equal(sortedKeys(drafted[0]), []string{"draftedAt", "emoji", "name", "repo", "restingSince", "task", "team"}) {
 		t.Fatalf("drafted: %v", drafted)
 	}
-	if drafted[0]["name"] != "Gandalf" || drafted[0]["emoji"] != "🧙" || drafted[0]["team"] != "a" ||
+	if drafted[0]["name"] != "Gandalf" || drafted[0]["emoji"] != "🧙" || drafted[0]["team"] != "a" || drafted[0]["restingSince"] != nil ||
 		drafted[0]["task"] != fakeCiphertext("t") || drafted[0]["repo"] != fakeCiphertext("a/b") {
 		t.Fatalf("drafted: %v", drafted[0])
 	}

@@ -129,7 +129,7 @@ func TestInstallIsIdempotentAndKeepsOtherHooks(t *testing.T) {
 	if err := json.Unmarshal(first, &config); err != nil {
 		t.Fatal(err)
 	}
-	if config.Description != "mine" || len(config.Hooks["Stop"]) != 1 || len(config.Hooks["SessionEnd"]) != 1 {
+	if config.Description != "mine" || len(config.Hooks["Stop"]) != 2 || len(config.Hooks["SessionEnd"]) != 1 {
 		t.Errorf("other hooks lost or rostr's duplicated: %s", first)
 	}
 	if !strings.Contains(string(first), ">/dev/null") {

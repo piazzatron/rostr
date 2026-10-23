@@ -304,7 +304,7 @@ type listing struct {
 		Name      string
 		EmojiMode string
 		Drafted   []struct{ Name, Emoji, Display, Team, Task, Repo string }
-		Idle      []struct{ Name, Emoji, Team string }
+		Bench     []struct{ Name, Emoji, Team string }
 	}
 }
 

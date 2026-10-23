@@ -496,6 +496,9 @@ func (c *Cloud) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 				Roster: r.Name, EmojiMode: roster.EmojiMode(r.EmojiMode), Member: member, Emoji: d.Emoji, Copy: copy,
 				Team: strings.ToUpper(deref(d.Team)), DraftedAt: d.DraftedAt,
 			}
+			if d.RestingSince != nil {
+				draft.RestingSince = *d.RestingSince
+			}
 			var err error
 			if draft.Task, err = c.decrypt(d.Task); err != nil {
 				return nil, err
@@ -534,6 +537,18 @@ func (c *Cloud) SetTask(ctx context.Context, agent AgentKey, task string) (Draft
 		_ = c.cache.saveConfirmed(d, time.Now())
 	}
 	return d, err
+}
+
+func (c *Cloud) RecordTurn(ctx context.Context, sessionID string, ended bool, at time.Time) error {
+	err := c.call(ctx, "POST", "/v1/agents/turn", map[string]any{"session": sessionID, "ended": ended, "at": at}, nil)
+	// The server doesn't have an unconfirmed draft yet, while its confirmation is on its way, so only a confirmed one
+	// is gone
+	if errors.Is(err, ErrNotFound) && c.cache != nil {
+		if cs := c.cache.session(sessionID); cs != nil && cs.Confirmed {
+			c.cache.releaseSession(sessionID, time.Now())
+		}
+	}
+	return err
 }
 
 // RefreshNext fetches the next state after a write whose response doesn't carry it. A failed fetch drops the cached
@@ -747,12 +762,13 @@ type apiListing struct {
 		Name      string `json:"name"`
 		EmojiMode string `json:"emojiMode"`
 		Drafted   []struct {
-			Name      string    `json:"name"`
-			Emoji     string    `json:"emoji"`
-			Team      *string   `json:"team"`
-			Task      *string   `json:"task"`
-			Repo      *string   `json:"repo"`
-			DraftedAt time.Time `json:"draftedAt"`
+			Name         string     `json:"name"`
+			Emoji        string     `json:"emoji"`
+			Team         *string    `json:"team"`
+			Task         *string    `json:"task"`
+			Repo         *string    `json:"repo"`
+			DraftedAt    time.Time  `json:"draftedAt"`
+			RestingSince *time.Time `json:"restingSince"`
 		} `json:"drafted"`
 	} `json:"rosters"`
 }

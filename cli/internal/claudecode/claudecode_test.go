@@ -241,11 +241,13 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake {
 		t.Errorf("UserPromptSubmit: %+v", prompt)
 	}
-	if stop, ok := settings.Hooks["Stop"]; ok {
+	if stop := settings.Hooks["Stop"]; len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("turn-end") || stop[0].Hooks[0].Async {
 		t.Errorf("Stop: %+v", stop)
 	}
-	if post := settings.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" ||
-		post[0].Hooks[0].Command != HookCommand("title-set") || post[0].Hooks[0].Async {
+	// PostToolUse: the title hook on the title tools and Bash, and the turn-start check on every tool
+	if post := settings.Hooks["PostToolUse"]; len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" ||
+		post[0].Hooks[0].Command != HookCommand("title-set") || post[0].Hooks[0].Async ||
+		post[1].Matcher != "" || post[1].Hooks[0].Command != HookCommand("working") {
 		t.Errorf("PostToolUse: %+v", post)
 	}
 	if len(settings.Hooks["SessionEnd"]) != 1 {
@@ -344,9 +346,11 @@ func TestInstallReplacesTheOldBackgroundHooks(t *testing.T) {
 	data, _ := os.ReadFile(settingsPath)
 	json.Unmarshal(data, &settings)
 	prompt, post := settings.Hooks["UserPromptSubmit"], settings.Hooks["PostToolUse"]
-	_, hasStop := settings.Hooks["Stop"]
-	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake || hasStop ||
-		len(post) != 1 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" || post[0].Hooks[0].Async {
+	// The old Stop title step is replaced by the turn-end hook
+	stop := settings.Hooks["Stop"]
+	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake ||
+		len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("turn-end") ||
+		len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" || post[0].Hooks[0].Async {
 		t.Fatalf("hooks: %s", data)
 	}
 }

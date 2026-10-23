@@ -646,7 +646,9 @@ func TestMigratesReleasedAtToBenchedAt(t *testing.T) {
 	draft(t, st, "s1", "work")
 
 	// Turn it back into a version 1 database
-	if _, err := st.db.Exec("alter table drafts rename column benched_at to released_at; pragma user_version = 1"); err != nil {
+	if _, err := st.db.Exec(`alter table drafts rename column benched_at to released_at;
+		alter table drafts drop column turn_started_at; alter table drafts drop column turn_ended_at;
+		pragma user_version = 1`); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -656,6 +658,7 @@ func TestMigratesReleasedAtToBenchedAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
+	recordTurn(t, st, "s1", true, time.Now())
 	if d, err := st.Bench(ctx, "s1"); err != nil || d == nil {
 		t.Fatalf("bench after migrating: %v, %v", d, err)
 	}

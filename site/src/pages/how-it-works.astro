@@ -41,7 +41,8 @@ import Rostr from "../components/Rostr.astro";
         <dt><code>UserPromptSubmit</code></dt>
         <dd>
           On the first prompt, drafts a name before Claude sees the prompt, tells the agent who it is as additional
-          context, and asks it to title the session as part of its first reply. Later prompts keep the name alive.
+          context, and asks it to title the session as part of its first reply. Later prompts keep the name alive,
+          and give a session that lost its name while resting a new one.
         </dd>
       </div>
       <div class="row">
@@ -50,6 +51,13 @@ import Rostr from "../components/Rostr.astro";
           Runs after a title tool, or after the agent records its task in a terminal. Records the summary from the title as the agent's task, so <code>rostr list</code> shows
           what everyone is doing. When the title call comes after the answer, it ends the turn there, so Claude
           doesn't have to reply to the tool's result.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>Stop</code></dt>
+        <dd>
+          Records that the turn ended. A session that gets no new prompt for 15 minutes is resting: it keeps its name,
+          but when every other name is taken, a new session takes the name of the one that has rested longest.
         </dd>
       </div>
       <div class="row">

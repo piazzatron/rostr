@@ -67,8 +67,12 @@ create table drafts (
   repo         bytea,         -- same ciphertext as project_links
   task         bytea,         -- AES-256-GCM ciphertext, encrypted on the user's machine; the server can't read it
   drafted_at   timestamptz not null default now(),
-  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts, `rostr task`, and the hourly keep-alive
-  benched_at   timestamptz    -- null while the agent is active
+  last_seen_at timestamptz not null default now(),  -- bumped by re-drafts, `rostr task`, turns, and the keep-alive
+  benched_at   timestamptz,   -- null while the agent is active
+  -- When the session's turn last started and ended, as the client reported them (POST /v1/agents/turn). Resting:
+  -- turn_ended_at at least 15 minutes ago, and no later turn_started_at
+  turn_started_at timestamptz,
+  turn_ended_at   timestamptz
 );
 
 -- A machine's next pick in a roster, held so no other machine drafts that member first (docs/api.md, Reservations).
@@ -113,7 +117,8 @@ create index drafts_roster on drafts (roster_id, benched_at);
    drafts; never drafted first, then roster order), A team before the B team, skipping members other machines hold
    reservations on, or the `preferred` member the CLI already
    announced (their lowest free copy if their name is taken), leaving out the members in `avoid`. If every member
-   is busy, draft a free numbered copy (`copy` 2, then 3). See [api.md](api.md#post-v1agentsdraft).
+   is busy, take the name of the member who has rested longest, benching their draft; with no one resting, draft
+   a free numbered copy (`copy` 2, then 3). See [api.md](api.md#post-v1agentsdraft).
 
 The unique indexes back this up: if the logic ever gets it wrong, the insert fails instead of drafting a duplicate.
 

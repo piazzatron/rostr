@@ -18,7 +18,9 @@ endpoint is **internal**: only the CLI calls it, and it can change with the CLI.
   as-is and never decrypts them.
 - **Machines:** the CLI sends its random machine ID as `X-Rostr-Machine` (1 to 64 letters, digits, underscores or
   hyphens) on every call. The server uses it to hold a reservation on the member that machine will draft next, one
-  per roster (see [Reservations](#reservations)). Without the header nothing is reserved for the caller.
+  per roster (see [Reservations](#reservations)). Without the header nothing is reserved for the caller. The CLI
+  leaves it out in Claude Code cloud sessions (`CLAUDE_CODE_REMOTE=true`): each container drafts once and is thrown
+  away, so a reservation would only hold a name for a day.
 - **Fingerprints** (`repoHash`): HMAC-SHA256 of the lowercased `owner/repo` with the fingerprint key, as 64
   lowercase hex characters.
 - **Names:** roster and member names match ignoring case and accents (`eowyn` finds `Éowyn`), in paths and bodies.
@@ -189,6 +191,7 @@ A draft from the holding machine without `preferred` takes its reserved member.
 | `POST /v1/agents/keepalive` | bearer | Prompt-hook keep-alive, compaction, resume with auto-draft off |
 | `POST /v1/agents/bench` | bearer | `bench`, `SessionEnd` |
 | `POST /v1/agents/task` | bearer | `task` |
+| `POST /v1/agents/turn` | bearer | The `Stop` hook, and the next prompt's hook: a session's turn ended or started |
 | `GET /v1/sessions/{session}` | bearer | Looking up a session's draft without bumping it (`task` without a name) |
 | `GET /v1/next` | bearer | Refreshing the local next state after a write whose response doesn't carry it |
 
@@ -267,7 +270,8 @@ Every roster with its drafted agents and idle members, in the shape of `rostr li
           "team": "a",
           "task": "🔒 base64 | null",
           "repo": "🔒 base64 | null",
-          "draftedAt": "2026-10-20T09:57:14Z"
+          "draftedAt": "2026-10-20T09:57:14Z",
+          "restingSince": "2026-10-20T10:31:02Z | null"
         }
       ],
       "idle": [{ "name": "Frodo", "emoji": "💍", "team": "a" }]
@@ -282,6 +286,9 @@ Every roster with its drafted agents and idle members, in the shape of `rostr li
   `null` if the member has left the cast.
 - `idle` is the cast members whose name (copy 1) is free, which is who the next draft can pick. So with `Gandalf 2`
   drafted and copy 1 free, Gandalf is listed as idle too.
+- `restingSince` is when the agent's session finished its last turn, once it has been resting: the turn ended at
+  least 15 minutes ago and no new one has started. It's `null` while the agent is working or rested less than that.
+  A draft takes a resting agent's name only when no name is free (see `POST /v1/agents/draft`).
 - Drafts past the owner's expiry are left out, even before a write releases them.
 - `drafted` and `idle` are `[]` when empty, never `null`.
 - `task` and `repo` are ciphertext; everything else is plaintext, so a "who's busy" widget needs no key.
@@ -391,8 +398,11 @@ In one transaction, holding the owner's lock:
      draft them if their name is free, else their lowest free copy (`Ginny 2`), so the session keeps a name it
      recognizes.
    - Else draft the free member drafted least recently, A team first, leaving out members other machines hold
-     reservations on and `avoid`; if all are busy, held or avoided, a free copy 2 (`avoid` included), then 3, and
-     so on.
+     reservations on and `avoid`.
+   - If all are busy, held or avoided, take the name (copy 1) of the member who has rested longest: their draft is
+     benched and the new session gets the member, so the resting session loses the name (see
+     `POST /v1/agents/turn`).
+   - With no one resting, a free copy 2 (`avoid` included), then 3, and so on.
    Then hold a reservation for the machine on its next pick in every roster.
 
 **`200`** with the Draft, plus `next`. Errors: `400`, `404 roster_not_found`, `404 no_rosters`.
@@ -436,6 +446,18 @@ The same target as bench (`session`, or `name` with optional `roster`), plus the
 ```
 
 Sets the task and bumps last-seen. **`200`** with the Draft plus `next`. Errors: as for bench.
+
+### `POST /v1/agents/turn`
+
+```json
+{ "session": "5f0c…", "ended": true, "at": "2026-10-20T10:31:02Z" }
+```
+
+Records that the session's turn ended (`ended: true`, from the `Stop` hook) or started (`false`, from the next
+prompt's hook) at `at`, the client's time, never later than now, and bumps last-seen. Each time only moves forward,
+so a report that arrives late can't undo a newer one. A draft whose turn ended at least 15 minutes ago, with no turn
+started since, is resting (`restingSince` in `GET /v1/rosters`). **`204`**, or **`404 not_drafted`** when the session
+has no active draft, as when another session took its name while it rested.
 
 ### `GET /v1/sessions/{session}`
 

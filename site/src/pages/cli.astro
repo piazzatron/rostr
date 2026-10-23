@@ -86,23 +86,23 @@ Unlinked me/recipes. It now uses your default roster, work`,
       {
         id: "list",
         usage: "rostr list [<roster>...] [--json]",
-        summary: "See who's working on what, and who's idle, across all your rosters. Name rosters to see just those.",
+        summary: "See who's working on what, who's resting, and who's on the bench, across all your rosters. Name rosters to see just those.",
         options: [{ flag: "--json", description: "Print the result as JSON." }],
         example: `$ rostr list
 work roster
 🧙 Gandalf   Fix auth redirect loop         acme/api      12m
 💍 Frodo     Flaky e2e tests on CI          acme/web      3m
 🌱 Samwise   Migrate billing to Stripe v3   acme/billing  1h
-idle: Aragorn, Legolas, Gimli, Boromir, Merry, Pippin
+bench: Aragorn, Legolas, Gimli, Boromir, Merry, Pippin
 
 side roster
 🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
-idle: LeBron, Kobe, Magic, Bird, Curry, Shaq
+bench: LeBron, Kobe, Magic, Bird, Curry, Shaq
 
 $ rostr list side
 side roster
 🐐 Jordan    Port the recipe app to iOS     me/recipes    40m
-idle: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
+bench: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
       },
       {
         id: "edit",

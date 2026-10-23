@@ -90,13 +90,19 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       comes when the first turn finishes.
 - [ ] Understand how Homebrew releases work (the tap, the formula GoReleaser pushes, `brew upgrade`); see
       `RELEASING.md`.
-- [ ] Upgrading rostr should refresh what it installed (the skill and /draft text, the hooks layout); `assemble`
-      only writes files that are missing today.
+- [x] Upgrading rostr refreshes the installed hooks: a session start that finds them out of date reinstalls them in
+      the background (`docs/cli-spec.md`, Upgrading).
+- [ ] Upgrading rostr should refresh the skill and /draft text too, unless the user edited them; the installer only
+      writes them when missing.
 - [x] A Remote Control host's own first session has no `claude-code-remote` title tool (only sessions started from the
       app or claude.ai get it); the instruction now tells the agent to skip titling without it.
 - [ ] Hook titles don't reach the app or claude.ai in any Remote Control session, even on Claude Code 2.1.308:
       anthropics/claude-code#104473 (the app and the `remote-control` host both ignore the engine's title report).
-- [ ] Archiving a desktop session doesn't seem to release its name (♟️ Ron stayed drafted); check that SessionEnd fires.
+- [x] Archived desktop and cloud sessions never fire SessionEnd, so their names stayed drafted (♟️ Ron, Gimli, Merry).
+      Sessions now rest 15 minutes after their turn ends, and a draft that finds no free name takes the longest-resting
+      one before handing out copies (`docs/cli-spec.md`, Resting).
+- [ ] Check that the `Stop` hook fires in the Mac desktop app (a GitHub report says it doesn't on Windows); without it,
+      Local sessions never rest.
 - [x] Detect headless `claude -p` runs in the hooks and skip drafting for them.
 - [ ] Do the same for Codex's `codex exec` (check what its hooks can see).
 - [x] Check what Codex's hooks provide (a session ID at start and end, a way to set env vars), then build its hooks

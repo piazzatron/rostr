@@ -39,7 +39,7 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	}
 
 	l := m.list()
-	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Idle) != 20 {
+	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Bench) != 20 {
 		t.Fatalf("list: %+v", l)
 	}
 	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" || d.Team != "A" {
@@ -632,7 +632,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)
 	}
 	l := m.list()
-	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || d[0].Team != "" || l.Rosters[0].Idle[0].Name != "Harry" {
+	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || d[0].Team != "" || l.Rosters[0].Bench[0].Name != "Harry" {
 		t.Fatalf("after replacing the cast: %+v", l)
 	}
 	if d := m.draft(m.home, "s2"); d.Name != "Harry" {

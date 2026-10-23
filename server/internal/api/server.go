@@ -73,6 +73,7 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 	mux.Handle("POST /v1/agents/keepalive", s.authed(s.handleKeepAlive))
 	mux.Handle("POST /v1/agents/bench", s.authed(s.handleBench))
 	mux.Handle("POST /v1/agents/task", s.authed(s.handleSetTask))
+	mux.Handle("POST /v1/agents/turn", s.authed(s.handleTurn))
 	mux.Handle("GET /v1/sessions/{session}", s.authed(s.handleGetSession))
 	mux.Handle("GET /v1/next", s.authed(s.handleGetNext))
 

@@ -123,7 +123,7 @@ const HERO_LIST_EXAMPLE = toTerminalText(
       ...roster.drafted.map(
         (member) => `${member.emoji} ${member.name.padEnd(8)} ${member.task.padEnd(30)} ${member.where.padEnd(13)} ${member.since}`,
       ),
-      `${ANSI_DIM}idle: ${roster.idle.join(", ")}${ANSI_RESET}`,
+      `${ANSI_DIM}bench: ${roster.idle.join(", ")}${ANSI_RESET}`,
     ]),
   ].join("\n"),
 );
