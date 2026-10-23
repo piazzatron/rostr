@@ -219,7 +219,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	s.fails(s.home, nil, "no session", "task", "Something")
 	s.fails(s.home, session("nobody"), "no drafted agent", "task", "Something")
 
-	listing = s.list("play", "work")
+	listing = s.list("play,", "work")
 	ada, gandalf := listing.Rosters[0].Drafted[0], listing.Rosters[1].Drafted[0]
 	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "Review the PR" || gandalf.Repo != "" {
 		t.Fatalf("list: %+v", listing)
@@ -233,13 +233,13 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("bench by name: %q", out)
 	}
 	s.fails(s.home, nil, `no agent named "ada" is drafted`, "bench", "ada")
-	// copies: the shell splits "Ada 2" into two args, which still name one agent
+	// names are separated by commas, since they can have spaces the shell splits apart
 	s.draft(s.home, "s4", "--roster", "play")
 	s.draft(s.home, "s5", "--roster", "play")
 	if d := s.draft(s.home, "s6", "--roster", "play"); d.Name != "Ada 2" {
 		t.Fatalf("draft copy: %+v", d)
 	}
-	if out := s.ok(s.home, nil, "bench", "ada", "2", "grace"); out != "Benched Ada 2 from the play roster.\nBenched Grace from the play roster.\n" {
+	if out := s.ok(s.home, nil, "bench", "ada", "2,", "grace"); out != "Benched Ada 2 from the play roster.\nBenched Grace from the play roster.\n" {
 		t.Fatalf("bench copy: %q", out)
 	}
 	s.ok(s.home, nil, "bench", "ada", "--roster", "play")
@@ -325,11 +325,11 @@ func TestBenchSeveralNamesAndAll(t *testing.T) {
 	names := s.list("work").Rosters[0].Drafted
 
 	// A typo benches nobody
-	s.fails(s.home, nil, `no agent named "nobody" is drafted`, "bench", names[0].Name, "nobody", "--roster", "work")
+	s.fails(s.home, nil, `no agent named "nobody" is drafted`, "bench", names[0].Name+",", "nobody", "--roster", "work")
 
 	// Several names at once
 	want := fmt.Sprintf("Benched %s from the work roster.\nBenched %s from the work roster.\n", names[0].Display, names[1].Display)
-	if out := s.ok(s.home, nil, "bench", names[0].Name, names[1].Name, "--roster", "work"); out != want {
+	if out := s.ok(s.home, nil, "bench", names[0].Name+",", names[1].Name, "--roster", "work"); out != want {
 		t.Fatalf("bench several: %q", out)
 	}
 

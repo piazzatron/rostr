@@ -54,7 +54,7 @@ type benchMemberJSON struct {
 func newListCommand() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "list [<roster>...]",
+		Use:   "list [<roster>, ...]",
 		Short: "Show who's drafted and what they're working on, who's resting, and who's on the bench",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -68,9 +68,9 @@ func newListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(args) > 0 {
+			if names := splitNames(args); len(names) > 0 {
 				rosters = nil
-				for _, name := range args {
+				for _, name := range names {
 					r, err := st.Roster(ctx, name)
 					if err != nil {
 						return err

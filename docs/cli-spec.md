@@ -154,12 +154,12 @@ Link a roster to the current project, or unlink it to go back to the default. `-
 #### `rostr list`
 
 ```
-rostr list [<roster>...] [--json]
+rostr list [<roster>, ...] [--json]
 ```
 
 Shows every roster, headed `<name> roster`, with its working agents (display, task, repo, time since drafted), then
 under `Resting:` the agents whose session finished its turn at least 15 minutes ago (with the time they've rested; see
-[Resting](#resting)), then its members on the bench. Name one or more rosters to show just those. `--json` prints the
+[Resting](#resting)), then its members on the bench. Name one or more rosters, separated by commas, to show just those. `--json` prints the
 same data as `{"rosters": [{"name", "emojiMode", "drafted", "resting", "bench"}]}`.
 
 
@@ -218,14 +218,14 @@ These are run by the hooks, the skill, and `/draft`, not usually by people.
 
 ```
 rostr draft [--task <description>] [--session <id>] [--roster <roster>] [--json]
-rostr bench [<name>... | all] [--session <id>] [--roster <roster>]
+rostr bench [<name>, ... | all] [--session <id>] [--roster <roster>]
 ```
 
 - **Draft** gives the session the next free member, A team first (see [Drafting](#drafting)). Drafting is
   idempotent per session: drafting again returns the same member.
 - `--json` prints `{"name", "emoji", "team", "roster", "display"}`, where `display` follows the emoji mode, so hooks
   don't rebuild it.
-- **Bench** frees the session's member, the named members, or with `all` every drafted member (only `--roster`'s, if
+- **Bench** frees the session's member, the named members (separated by commas, since names can have spaces), or with `all` every drafted member (only `--roster`'s, if
   given). Benching by name is the manual fix for names left stuck by sessions that died, so it searches all your
   rosters, not just the current one. If more than one roster has a member drafted, it asks which (or takes
   `--roster`). Every name is looked up before any is benched, so a typo benches nobody.
