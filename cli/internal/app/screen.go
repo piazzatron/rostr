@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,7 +16,7 @@ import (
 // puts the terminal back as it was.
 type screen struct {
 	command string
-	panel   *sidePanel
+	panels  []*sidePanel
 	// onFocus refreshes a step's dynamic text (titles, options, defaults) from earlier answers as it comes into view
 	onFocus func(huh.Field) tea.Cmd
 
@@ -27,14 +28,19 @@ type screen struct {
 	cancelled     bool
 }
 
-// screenStep is one question of a flow, asked in its own group so shift+tab goes back to it. shown, when set, hides the
-// step when earlier answers make it irrelevant.
+// screenStep is one page of a flow, asked in its own group so shift+tab goes back to it: one question, or with more,
+// several asked together. shown, when set, hides the step when earlier answers make it irrelevant.
 type screenStep struct {
 	field huh.Field
+	more  []huh.Field
 	shown func() bool
 }
 
-// sidePanel is shown beside one step, when the terminal is wide enough.
+func (step screenStep) fields() []huh.Field {
+	return append([]huh.Field{step.field}, step.more...)
+}
+
+// sidePanel is shown beside one step's field, when the terminal is wide enough.
 type sidePanel struct {
 	field     huh.Field
 	formWidth int
@@ -72,7 +78,7 @@ func (s *screen) run(steps []screenStep) error {
 func (s *screen) buildForm(steps []screenStep) {
 	groups := make([]*huh.Group, len(steps))
 	for i, step := range steps {
-		groups[i] = huh.NewGroup(step.field)
+		groups[i] = huh.NewGroup(step.fields()...)
 		if shown := step.shown; shown != nil {
 			groups[i].WithHideFunc(func() bool { return !shown() })
 		}
@@ -100,11 +106,13 @@ func (s *screen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if key := msg.String(); key == "esc" || key == "ctrl+c" {
+		key := msg.String()
+		typing, ok := s.focused.(interface{ capturesKeys() bool })
+		if key == "ctrl+c" || key == "esc" && !(ok && typing.capturesKeys()) {
 			s.cancelled = true
 			return s, tea.Quit
 		}
-		s.goingBack = msg.String() == "shift+tab"
+		s.goingBack = key == "shift+tab"
 		_, cmd = s.form.Update(msg)
 	case tea.WindowSizeMsg:
 		s.width, s.height = msg.Width, msg.Height
@@ -147,12 +155,16 @@ func (s *screen) View() string {
 	if formWidth, panelWidth := s.layout(); panelWidth > 0 {
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
 			lipgloss.NewStyle().Width(formWidth+sidePanelGap).Render(body),
-			sidePanelStyle.Width(panelWidth).MaxHeight(s.formHeight()).Render(s.panel.render(panelWidth-sidePanelStyle.GetHorizontalFrameSize())))
+			sidePanelStyle.Width(panelWidth).MaxHeight(s.formHeight()).Render(s.panel().render(panelWidth-sidePanelStyle.GetHorizontalFrameSize())))
 	}
 
 	// Footer: the keys, pinned to the bottom
 	top := lipgloss.JoinVertical(lipgloss.Left, title, rule, "", body)
-	page := top + strings.Repeat("\n", max(2, s.height-2-lipgloss.Height(top))) + s.footer()
+	footer := s.footer()
+	if lipgloss.Width(footer) > width {
+		footer = strings.ReplaceAll(footer, styleFaint.Render("  ·  "), "  ")
+	}
+	page := top + strings.Repeat("\n", max(2, s.height-2-lipgloss.Height(top))) + lipgloss.NewStyle().MaxWidth(width).Render(footer)
 	return lipgloss.NewStyle().Padding(1, screenPadX).Render(page)
 }
 
@@ -163,7 +175,7 @@ func (s *screen) progress() (current, total int) {
 			continue
 		}
 		total++
-		if step.field == s.focused {
+		if slices.Contains(step.fields(), s.focused) {
 			current = total
 		}
 	}
@@ -172,10 +184,21 @@ func (s *screen) progress() (current, total int) {
 
 func (s *screen) footer() string {
 	keys := [][2]string{{"↑/↓", "move"}, {"←/→", "choose"}, {"enter", "select"}}
+	if field, ok := s.focused.(interface{ footerKeys() [][2]string }); ok {
+		keys = field.footerKeys()
+	}
+	typing, _ := s.focused.(interface{ capturesKeys() bool })
+	if typing != nil && typing.capturesKeys() {
+		return joinKeys(keys)
+	}
 	if len(s.steps) > 1 {
 		keys = append(keys, [2]string{"shift+tab", "back"})
 	}
 	keys = append(keys, [2]string{"esc", "quit"})
+	return joinKeys(keys)
+}
+
+func joinKeys(keys [][2]string) string {
 	parts := make([]string, len(keys))
 	for i, k := range keys {
 		parts[i] = styleMuted.Render(k[0]) + " " + styleFaint.Render(k[1])
@@ -190,6 +213,8 @@ func (s *screen) resizeForm() tea.Cmd {
 	}
 	formWidth, _ := s.layout()
 	_, cmd := s.form.Update(tea.WindowSizeMsg{Width: formWidth, Height: s.formHeight()})
+	// Every step gets the whole height, so one that grows after the form is built (like the cast editor) has room
+	s.form.WithHeight(s.formHeight())
 	return cmd
 }
 
@@ -200,14 +225,25 @@ func (s *screen) formHeight() int {
 // layout splits the content width between the form and the side panel, which is dropped on narrow terminals.
 func (s *screen) layout() (formWidth, panelWidth int) {
 	width := s.contentWidth()
-	if s.panel == nil || s.focused != s.panel.field {
+	panel := s.panel()
+	if panel == nil {
 		return min(width, screenMaxFormWidth), 0
 	}
-	room := width - s.panel.formWidth - sidePanelGap
+	room := width - panel.formWidth - sidePanelGap
 	if room < sidePanelMinWidth {
 		return min(width, screenMaxFormWidth), 0
 	}
-	return s.panel.formWidth, min(room, sidePanelMaxWidth)
+	return panel.formWidth, min(room, sidePanelMaxWidth)
+}
+
+// panel is the side panel for the focused field, if it has one.
+func (s *screen) panel() *sidePanel {
+	for _, panel := range s.panels {
+		if panel.field == s.focused {
+			return panel
+		}
+	}
+	return nil
 }
 
 func (s *screen) contentWidth() int {
