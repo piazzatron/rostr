@@ -23,7 +23,7 @@ type Preset struct {
 // FreeAgentsID is the preset that mixes everyone else's characters.
 const FreeAgentsID = "free-agents"
 
-// FreeAgents is the Free Agents preset with a new random cast, for the wizard: as many members as the site's Free Agents, drawn from
+// FreeAgents is the Free Agents preset with a new random cast: as many members as the site's Free Agents, drawn from
 // every other preset, no two sharing a name or an emoji, so every emoji mode works.
 func FreeAgents() Preset {
 	p, _ := ByID(FreeAgentsID)

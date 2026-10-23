@@ -294,7 +294,7 @@ func TestSessionKeepsItsRosterWhenItChangesDirectory(t *testing.T) {
 func TestReleaseByNameAsksWhichRosterWhenAmbiguous(t *testing.T) {
 	s := newSandbox(t)
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
-	s.ok(s.home, nil, "assemble", "side", "--preset", "free-agents")
+	s.ok(s.home, nil, "assemble", "side", "--names", "🧙 Gandalf, 🐸 Yoda")
 	s.draft(s.home, "s1")
 	s.draft(s.home, "s2", "--roster", "side")
 

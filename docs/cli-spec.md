@@ -26,9 +26,8 @@ A roster is a named list of members, each a name and an emoji. A person can have
   Drafting picks from the A team first, whoever was drafted longest ago, and only calls up the B team when every
   A-teamer is busy.
 - **Presets.** Pre-built rosters ship with the CLI. The list lives in `site/src/data/rosters.ts` (id, name, source,
-  emoji, A team, B team). Picked in the wizard, Free Agents is a new random draw from the other
-  presets each time, the same size as the listed one, with no two members sharing a name or emoji. `--preset
-  free-agents` gives the listed cast.
+  emoji, A team, B team). Free Agents is a new random draw from the other presets each time it's
+  used, the same size as the listed one, with no two members sharing a name or emoji.
 - **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr release eowyn`
   finds Éowyn. A roster can't have two members whose names match this way, and you can't have two rosters whose
   names do.

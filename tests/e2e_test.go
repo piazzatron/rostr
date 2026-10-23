@@ -646,7 +646,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	repo := m.gitRepo("git@github.com:Acme/API.git")
 	m.ok("assemble", "work", "--preset", "fellowship", "--cloud")
 	m.ok("assemble", "play", "--names", "🧮 Ada, Grace", "--emoji", "off")
-	m.ok("assemble", "side", "--preset", "free-agents")
+	m.ok("assemble", "side", "--names", "🧙 Gandalf, 🐸 Yoda")
 	m.fails("already exists", "assemble", "WORK", "--preset", "hogwarts")
 
 	// link: bare, named, and --repo

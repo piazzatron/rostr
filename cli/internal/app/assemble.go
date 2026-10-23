@@ -245,6 +245,9 @@ func presetCast(id string) (cast, error) {
 	if !ok {
 		return cast{}, fmt.Errorf("no preset with id %q; see `rostr presets`", id)
 	}
+	if id == presets.FreeAgentsID {
+		p = presets.FreeAgents()
+	}
 	return cast{
 		presetID: p.ID,
 		aTeam:    append([]roster.Member{}, p.ATeam...),
@@ -623,8 +626,7 @@ const teamsFormWidth = 46
 // before, the cast's own A team picked.
 func (f *assembleFlow) prepareTeams(teams *huh.MultiSelect[string], panel *sidePanel) {
 	if f.build == buildFreeAgents && len(f.freeAgents.aTeam) == 0 {
-		p := presets.FreeAgents()
-		f.freeAgents = cast{presetID: p.ID, aTeam: p.ATeam, bTeam: p.BTeam}
+		f.freeAgents, _ = presetCast(presets.FreeAgentsID)
 		f.draws++
 	}
 	base := f.baseCast()
