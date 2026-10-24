@@ -41,8 +41,8 @@ for module in cli server tests; do
   (cd "$module" && go mod download)
 done
 
-# The site's packages, for `npm run build`
-(cd site && npm install --no-audit --no-fund --loglevel=error)
+# The site's packages, for `npm run build`. npm ci, since an older npm's `npm install` rewrites the lockfile
+(cd site && npm ci --no-audit --no-fund --loglevel=error)
 
 # Codex, to run rostr's Codex hooks for real
 if [ "$(codex --version 2>/dev/null)" != "codex-cli $CODEX_VERSION" ]; then
