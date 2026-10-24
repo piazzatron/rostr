@@ -1387,8 +1387,18 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     }
   }
 
-  .roster-cards {
-    margin-top: 48px;
+  .tip {
+    margin: 40px 0 0;
+    padding: 14px 18px;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    background: var(--surface);
+    color: var(--muted);
+    max-width: 44em;
+  }
+
+  .tip strong {
+    color: var(--text);
   }
 
   /* Inset by the page's side padding, so its top border lines up with the section dividers */
