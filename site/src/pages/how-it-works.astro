@@ -32,23 +32,19 @@ import Rostr from "../components/Rostr.astro";
     <h2>Drafting a name</h2>
     <p>Each session is drafted from the roster linked to its project, else your default roster. The pick goes:</p>
     <ol class="terse-list">
-      <li><strong>Same session, same name.</strong> A session that already has a name keeps it.</li>
       <li>
-        <strong>Resumed sessions get their old name back</strong>, if no one else has taken it since.
+        <strong>Least recently drafted.</strong> The free member drafted longest ago, so names cycle through the whole
+        roster.
       </li>
       <li>
-        <strong>Least recently drafted.</strong> Otherwise the free member drafted longest ago, so names cycle through
-        the whole roster.
-      </li>
-      <li>
-        <strong>Take a resting name.</strong> If everyone's busy, a new session takes the name of the session that has
-        rested longest.
+        <strong>Take a resting name.</strong> If everyone's busy, the name of the session that has rested longest.
       </li>
       <li>
         <strong>Copies.</strong> If no one is resting either, a numbered copy like 🧙 Gandalf 2. A session always gets a
         name.
       </li>
     </ol>
+    <p>A resumed session gets its old name back, if no one else has taken it since.</p>
     <p>
       In cloud mode, Claude Code sessions draft in the background as soon as they start, so the first prompt doesn't
       wait on the network.
