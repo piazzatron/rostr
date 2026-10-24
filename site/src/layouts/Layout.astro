@@ -1388,17 +1388,36 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   }
 
   .tip {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    width: fit-content;
+    max-width: 100%;
     margin: 40px 0 0;
-    padding: 14px 18px;
-    border-left: 3px solid var(--accent);
-    border-radius: 0 8px 8px 0;
+    padding: 12px 18px 12px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
     background: var(--surface);
     color: var(--muted);
-    max-width: 44em;
+    font-size: 15px;
   }
 
-  .tip strong {
-    color: var(--text);
+  .tip-label {
+    flex: none;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 640px) {
+    .tip {
+      border-radius: 14px;
+    }
   }
 
   /* Inset by the page's side padding, so its top border lines up with the section dividers */
