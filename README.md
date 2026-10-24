@@ -91,22 +91,10 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 | `rostr uninstall` | Remove rostr from Claude Code and Codex and delete all your rosters |
 | `rostr version` | Print rostr's version |
 
-## Specs
+## Docs
 
-How rostr works is written down in [`docs/`](docs). Agents working on rostr should read the relevant spec before
-changing behavior, and update it along with the code.
-
-| Spec | What it covers |
-|---|---|
-| [`cli-spec.md`](docs/cli-spec.md) | How the CLI and hooks behave: the source of truth |
-| [`keepalive.md`](docs/keepalive.md) | How a session keeps its name: keep-alive, resting, expiry, and how to test them |
-| [`api.md`](docs/api.md) | The HTTP API behind cloud mode |
-| [`server-schema.md`](docs/server-schema.md) | The server's Postgres schema and drafting |
-| [`local-storage.md`](docs/local-storage.md) | The local SQLite database and cache files |
-| [`drafting-latency.md`](docs/drafting-latency.md) | Drafting at session start so the first prompt doesn't wait |
-| [`live-counts.md`](docs/live-counts.md) | The site's live agent counts |
-| [`claude-code-session-titles.md`](docs/claude-code-session-titles.md) | How the Claude Code title hook ended up this way |
-| [`integrations-research.md`](docs/integrations-research.md) | Codex, herdr, and tmux research |
+How rostr works is written down in [`docs/`](docs/README.md): its architecture, the agent hooks, drafting, keep-alive
+and resting, storage, the cloud API, and the live counts.
 
 ## Contributing
 

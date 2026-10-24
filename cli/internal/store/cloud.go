@@ -23,7 +23,7 @@ import (
 // CloudTimeout is how long any one call to the rostr API may take.
 const CloudTimeout = 3 * time.Second
 
-// Cloud is the cloud-mode Store: every read and write is a call to the rostr API (docs/api.md). Tasks and repo names
+// Cloud is the cloud-mode Store: every read and write is a call to the rostr API (docs/cloud.md). Tasks and repo names
 // are encrypted before they're sent and decrypted when read; repos are looked up by their fingerprint.
 type Cloud struct {
 	baseURL string
@@ -90,7 +90,7 @@ func (c *Cloud) Close() error {
 	return nil
 }
 
-// Register creates the cloud owner for this key, uploading setup in the same request (docs/api.md, POST
+// Register creates the cloud owner for this key, uploading setup in the same request (POST
 // /v1/register). If it fails, nothing is created on the server.
 func (c *Cloud) Register(ctx context.Context, setup Setup) error {
 	imp := map[string]any{}
@@ -631,7 +631,7 @@ func (c *Cloud) decrypt(value *string) (string, error) {
 	return c.keys.Decrypt(*value)
 }
 
-// Wire shapes, as in docs/api.md
+// Wire shapes of the rostr API
 
 type apiRoster struct {
 	Name           string           `json:"name"`

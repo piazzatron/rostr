@@ -253,7 +253,7 @@ func (s *SQLite) EditRoster(ctx context.Context, rosterName string, mode roster.
 			return err
 		}
 		for _, d := range active {
-			if _, ok := memberNamed(members, d.Member); !ok {
+			if m, ok := memberNamed(members, d.Member); !ok || m.Name != d.Member {
 				return fmt.Errorf("%s is drafted, so you can't rename or remove them. Wait for their session to end, "+
 					"or release them first: rostr bench %q", d.Name(), d.Name())
 			}
@@ -445,14 +445,13 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
-		// Same session, same name; or its old name back, if free
-		reclaimed, last, err := s.reclaim(ctx, tx, req.SessionID, req.Task)
-		if err != nil {
+		// Same session, same name
+		active, err := s.bumpActive(ctx, tx, req.SessionID, req.Task)
+		if err != nil || active != nil {
+			if active != nil {
+				out = active.Draft
+			}
 			return err
-		}
-		if reclaimed != nil {
-			out = reclaimed.Draft
-			return nil
 		}
 		if req.IfAutoDraft {
 			settings, err := readSettings(ctx, tx)
@@ -464,18 +463,16 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			}
 		}
 
-		// A session's roster and project are pinned at its first draft
-		var r rosterRow
-		repo, task := req.Repo, req.Task
-		if last != nil {
-			r, err = rosterByID(ctx, tx, last.rosterID)
-			repo = last.Repo
-			if task == "" {
-				task = last.Task
+		// Its old name back, if free
+		resumed, err := s.resume(ctx, tx, req.SessionID, req.Repo, req.Task)
+		if err != nil || resumed != nil {
+			if resumed != nil {
+				out = resumed.Draft
 			}
-		} else {
-			r, err = firstDraftRoster(ctx, tx, req)
+			return err
 		}
+
+		r, err := draftRoster(ctx, tx, req)
 		if err != nil {
 			return err
 		}
@@ -495,7 +492,7 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			}
 		}
 		inserted, err := s.insertDraft(ctx, tx, newDraft{
-			rosterID: r.id, member: member, copy: copy, sessionID: req.SessionID, repo: repo, task: task,
+			rosterID: r.id, member: member, copy: copy, sessionID: req.SessionID, repo: req.Repo, task: req.Task,
 		})
 		out = inserted.Draft
 		return err
@@ -509,9 +506,12 @@ func (s *SQLite) Reclaim(ctx context.Context, sessionID string) (*Draft, error) 
 		if err := s.expireStaleDrafts(ctx, tx); err != nil {
 			return err
 		}
-		reclaimed, _, err := s.reclaim(ctx, tx, sessionID, "")
-		if reclaimed != nil {
-			out = &reclaimed.Draft
+		d, err := s.bumpActive(ctx, tx, sessionID, "")
+		if err == nil && d == nil {
+			d, err = s.resume(ctx, tx, sessionID, "", "")
+		}
+		if d != nil {
+			out = &d.Draft
 		}
 		return err
 	})
@@ -646,53 +646,54 @@ func (s *SQLite) updateAgent(ctx context.Context, agent AgentKey, update string,
 	return out, err
 }
 
-// reclaim returns the session's active draft (bumped, with its task replaced if task isn't empty), or else redrafts
-// its last member if they're still in the cast and free. It also returns the session's last draft, if any, when
-// nothing could be reclaimed.
-func (s *SQLite) reclaim(ctx context.Context, tx *sql.Tx, sessionID, task string) (*draftRow, *draftRow, error) {
+// bumpActive returns the session's active draft, bumped and with its task replaced if task isn't empty, or nil.
+func (s *SQLite) bumpActive(ctx context.Context, tx *sql.Tx, sessionID, task string) (*draftRow, error) {
 	active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.benched_at is null", sessionID)
-	if err != nil {
-		return nil, nil, err
+	if err != nil || len(active) == 0 {
+		return nil, err
 	}
-	if len(active) > 0 {
-		d := active[0]
-		d.LastSeenAt = s.now().UTC().Truncate(time.Second)
-		if task != "" {
-			d.Task = task
-		}
-		_, err := tx.ExecContext(ctx, "update drafts set last_seen_at = ?, task = ? where id = ?",
-			formatTime(d.LastSeenAt), nullIfEmpty(d.Task), d.id)
-		return &d, nil, err
+	d := active[0]
+	d.LastSeenAt = s.now().UTC().Truncate(time.Second)
+	if task != "" {
+		d.Task = task
 	}
+	_, err = tx.ExecContext(ctx, "update drafts set last_seen_at = ?, task = ? where id = ?",
+		formatTime(d.LastSeenAt), nullIfEmpty(d.Task), d.id)
+	return &d, err
+}
 
+// resume redrafts the session's last member if they're still in the cast and free, or returns nil. The new draft keeps
+// the last draft's repo and task unless new ones are given.
+func (s *SQLite) resume(ctx context.Context, tx *sql.Tx, sessionID, repo, task string) (*draftRow, error) {
 	recent, err := queryDrafts(ctx, tx, "where d.session_id = ? order by d.drafted_at desc, d.id desc limit 1", sessionID)
 	if err != nil || len(recent) == 0 {
-		return nil, nil, err
+		return nil, err
 	}
 	last := recent[0]
 
 	r, err := rosterByID(ctx, tx, last.rosterID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	member, inCast := memberNamed(r.Members, last.Member)
 	if !inCast {
-		return nil, &last, nil
+		return nil, nil
 	}
-	var busy int
-	if err := tx.QueryRowContext(ctx,
-		"select count(*) from drafts where roster_id = ? and member_name = ? and copy = ? and benched_at is null",
-		last.rosterID, last.Member, last.Copy).Scan(&busy); err != nil || busy > 0 {
-		return nil, &last, err
+	busy, err := busySlots(ctx, tx, r.id)
+	if err != nil || busy[slot{roster.NormalizeName(member.Name), last.Copy}] {
+		return nil, err
 	}
 
+	if repo == "" {
+		repo = last.Repo
+	}
 	if task == "" {
 		task = last.Task
 	}
 	d, err := s.insertDraft(ctx, tx, newDraft{
-		rosterID: last.rosterID, member: member, copy: last.Copy, sessionID: sessionID, repo: last.Repo, task: task,
+		rosterID: last.rosterID, member: member, copy: last.Copy, sessionID: sessionID, repo: repo, task: task,
 	})
-	return &d, nil, err
+	return &d, err
 }
 
 // takeRestingMember releases the roster's longest-resting draft of a member's own name (copy 1) whose member is still
@@ -773,9 +774,9 @@ func (s *SQLite) insertDraft(ctx context.Context, tx *sql.Tx, d newDraft) (draft
 	return rows[0], nil
 }
 
-// firstDraftRoster picks the roster for a session's first draft: req.Roster, else the project's link, else the
+// draftRoster picks the roster for a session that needs a new member: req.Roster, else the project's link, else the
 // default.
-func firstDraftRoster(ctx context.Context, tx *sql.Tx, req DraftRequest) (rosterRow, error) {
+func draftRoster(ctx context.Context, tx *sql.Tx, req DraftRequest) (rosterRow, error) {
 	if req.Roster != "" {
 		return findRoster(ctx, tx, req.Roster)
 	}
@@ -807,38 +808,45 @@ func firstFreeMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Membe
 		return roster.Member{}, 0, fmt.Errorf("the %s roster has no members", r.Name)
 	}
 
-	type slot struct {
-		member string
-		copy   int
-	}
-	busy := map[slot]bool{}
-	rows, err := tx.QueryContext(ctx,
-		"select member_name, copy from drafts where roster_id = ? and benched_at is null", r.id)
+	busy, err := busySlots(ctx, tx, r.id)
 	if err != nil {
 		return roster.Member{}, 0, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var s slot
-		if err := rows.Scan(&s.member, &s.copy); err != nil {
-			return roster.Member{}, 0, err
-		}
-		busy[s] = true
-	}
-	if err := rows.Err(); err != nil {
-		return roster.Member{}, 0, err
-	}
-
 	last, err := lastDrafted(ctx, tx, r.id)
 	if err != nil {
 		return roster.Member{}, 0, err
 	}
-	m, copy := pickFreeMember(r.Members, func(name string, copy int) bool { return busy[slot{name, copy}] }, last)
+	m, copy := pickFreeMember(r.Members, func(name string, copy int) bool { return busy[slot{roster.NormalizeName(name), copy}] }, last)
 	return m, copy, nil
 }
 
+// slot is a member (by normalized name) and copy number.
+type slot struct {
+	member string
+	copy   int
+}
+
+// busySlots is the roster's actively drafted slots.
+func busySlots(ctx context.Context, tx *sql.Tx, rosterID int64) (map[slot]bool, error) {
+	rows, err := tx.QueryContext(ctx, "select member_name, copy from drafts where roster_id = ? and benched_at is null", rosterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	busy := map[slot]bool{}
+	for rows.Next() {
+		var name string
+		var copy int
+		if err := rows.Scan(&name, &copy); err != nil {
+			return nil, err
+		}
+		busy[slot{roster.NormalizeName(name), copy}] = true
+	}
+	return busy, rows.Err()
+}
+
 // pickFreeMember picks the free member drafted least recently (never drafted first, then roster order), then numbered
-// copies the same way. The cast is never empty.
+// copies the same way. last is keyed by normalized name. The cast is never empty.
 func pickFreeMember(members []roster.Member, busy func(name string, copy int) bool, last map[string]time.Time) (roster.Member, int) {
 	for copy := 1; ; copy++ {
 		var best roster.Member
@@ -848,7 +856,7 @@ func pickFreeMember(members []roster.Member, busy func(name string, copy int) bo
 			if busy(m.Name, copy) {
 				continue
 			}
-			if at := last[m.Name]; !found || at.Before(bestAt) {
+			if at := last[roster.NormalizeName(m.Name)]; !found || at.Before(bestAt) {
 				best, bestAt, found = m, at, true
 			}
 		}
@@ -858,7 +866,8 @@ func pickFreeMember(members []roster.Member, busy func(name string, copy int) bo
 	}
 }
 
-// lastDrafted is when each of a roster's members was last drafted, within the retention of released drafts.
+// lastDrafted is when each of a roster's members (by normalized name) was last drafted, within the retention of
+// released drafts.
 func lastDrafted(ctx context.Context, tx *sql.Tx, rosterID int64) (map[string]time.Time, error) {
 	rows, err := tx.QueryContext(ctx, "select member_name, max(drafted_at) from drafts where roster_id = ? group by member_name", rosterID)
 	if err != nil {
@@ -871,14 +880,17 @@ func lastDrafted(ctx context.Context, tx *sql.Tx, rosterID int64) (map[string]ti
 		if err := rows.Scan(&name, &at); err != nil {
 			return nil, err
 		}
-		last[name] = parseTime(at)
+		key, t := roster.NormalizeName(name), parseTime(at)
+		if t.After(last[key]) {
+			last[key] = t
+		}
 	}
 	return last, rows.Err()
 }
 
 func memberNamed(members []roster.Member, name string) (roster.Member, bool) {
 	for _, m := range members {
-		if m.Name == name {
+		if roster.NamesMatch(m.Name, name) {
 			return m, true
 		}
 	}

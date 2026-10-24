@@ -1,7 +1,7 @@
 # CLI review findings (temporary)
 
 Second review, against the current CLI (`assemble`, `link`/`unlink`, `agent draft|release|task`, `config …`).
-Write each decision into [`docs/cli-spec.md`](docs/cli-spec.md), then remove it here. Delete this file once
+Write each decision into the code (and [`docs/`](docs/README.md) if it changes how a system works), then remove it here. Delete this file once
 each item is decided.
 
 **Done:**
