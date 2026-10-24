@@ -138,7 +138,7 @@ import Rostr from "../components/Rostr.astro";
     <h2>Titles in Claude Code</h2>
     <p>
       The first-prompt hook sets the title to <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>,
-      so the name shows straight away. Then a 3-5 word summary replaces the prompt, written by the agent or by <Rostr />,
+      so the name shows straight away. Then a 3-5 word summary replaces the prompt, written by <Rostr /> or by the agent,
       depending on where the session runs:
     </p>
     <table class="surface-table">
@@ -150,6 +150,13 @@ import Rostr from "../components/Rostr.astro";
       </thead>
       <tbody>
         <tr>
+          <th scope="row">Terminal</th>
+          <td>
+            <Rostr /> summarizes your first prompt in the background (a headless Claude Code run with Haiku, on your own
+            login) and puts the summary in the terminal title on your next prompt
+          </td>
+        </tr>
+        <tr>
           <th scope="row">Desktop app, Local session</th>
           <td>
             The agent writes its answer, then calls the app's <code>set_session_title</code> at the end of the same
@@ -160,13 +167,6 @@ import Rostr from "../components/Rostr.astro";
           <th scope="row">Desktop app via Remote Control, and cloud sessions</th>
           <td>
             The agent calls Claude Code's remote <code>set_session_title</code> first, before writing its answer
-          </td>
-        </tr>
-        <tr>
-          <th scope="row">Terminal</th>
-          <td>
-            <Rostr /> summarizes your first prompt in the background (a headless Claude Code run with Haiku, on your own
-            login) and puts the summary in the terminal title on your next prompt
           </td>
         </tr>
       </tbody>
