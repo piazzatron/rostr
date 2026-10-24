@@ -1,4 +1,4 @@
-// Package api implements the rostr HTTP API (see docs/api.md) on top of Postgres.
+// Package api implements the rostr HTTP API (see docs/cloud.md) on top of Postgres.
 package api
 
 import (

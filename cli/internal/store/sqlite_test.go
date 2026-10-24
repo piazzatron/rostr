@@ -165,7 +165,7 @@ func TestResumeGetsTheOldNameBackIfFree(t *testing.T) {
 	}
 }
 
-func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.T) {
+func TestASessionThatCantResumeDraftsFromTheRosterItAsksFor(t *testing.T) {
 	st, _ := openTestStore(t)
 	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 	createFellowship(t, st, "play")
@@ -177,8 +177,21 @@ func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.
 	draft(t, st, "s3", "work") // takes Gandalf, drafted longest ago
 
 	d := draft(t, st, "s1", "play")
-	if d.Name() != "Frodo" || d.Roster != "work" {
-		t.Fatalf("got %s from %s, want Frodo from work (the session's pinned roster)", d.Name(), d.Roster)
+	if d.Name() != "Gandalf" || d.Roster != "play" {
+		t.Fatalf("got %s from %s, want Gandalf from play", d.Name(), d.Roster)
+	}
+}
+
+func TestDraftingMatchesNamesLoosely(t *testing.T) {
+	st, _ := openTestStore(t)
+	createRoster(t, st, "work", members("Eowyn"))
+
+	draft(t, st, "s1", "work") // Eowyn
+	if err := st.ReplaceCast(ctx, "work", members("Éowyn")); err != nil {
+		t.Fatal(err)
+	}
+	if d := draft(t, st, "s2", "work"); d.Name() != "Éowyn 2" {
+		t.Fatalf("got %s, want a copy: Eowyn is still drafted", d.Name())
 	}
 }
 
@@ -295,7 +308,7 @@ func TestBenchedDraftsAreKeptForSevenDays(t *testing.T) {
 	}
 }
 
-func TestSessionRosterIsPinnedAtFirstDraft(t *testing.T) {
+func TestASessionKeepsItsDraftAcrossProjects(t *testing.T) {
 	st, clock := openTestStore(t)
 	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 	createRoster(t, st, "play", members("Mario", "Link"))
@@ -309,7 +322,7 @@ func TestSessionRosterIsPinnedAtFirstDraft(t *testing.T) {
 		t.Fatalf("got %s from %s", d.Name(), d.Roster)
 	}
 
-	// Even after expiry, with Gandalf taken, it redrafts from work and keeps its original repo
+	// Once its name is gone, a new member comes from the roster and project it's in now
 	draft(t, st, "s2", "work") // Frodo
 	clock.Advance(8 * 24 * time.Hour)
 	draft(t, st, "s3", "work") // both expired; takes Gandalf, drafted longest ago
@@ -317,8 +330,8 @@ func TestSessionRosterIsPinnedAtFirstDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Roster != "work" || d.Name() != "Frodo" || d.Repo != "acme/api" {
-		t.Fatalf("got %+v, want Frodo from work in acme/api", d)
+	if d.Roster != "play" || d.Name() != "Mario" || d.Repo != "other/repo" {
+		t.Fatalf("got %+v, want Mario from play in other/repo", d)
 	}
 }
 
@@ -708,5 +721,22 @@ func TestMigratingMergesTheTeams(t *testing.T) {
 	}
 	if d, _ := st.SessionDraft(ctx, "s1"); d == nil || d.Name() != "Gandalf" {
 		t.Fatalf("draft after migrating: %+v", d)
+	}
+}
+
+func TestAutoDraftOffOnlyKeepsAnActiveDraft(t *testing.T) {
+	st, _ := openTestStore(t)
+	createRoster(t, st, "work", members("Gandalf"))
+	draft(t, st, "s1", "work")
+	if err := st.SetAutoDraft(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if d, err := st.Draft(ctx, DraftRequest{SessionID: "s1", IfAutoDraft: true}); err != nil || d.Name() != "Gandalf" {
+		t.Fatalf("got %v, %v; want the active Gandalf", d, err)
+	}
+	bench(t, st, "s1")
+	if _, err := st.Draft(ctx, DraftRequest{SessionID: "s1", IfAutoDraft: true}); !errors.Is(err, ErrAutoDraftOff) {
+		t.Fatalf("got %v, want ErrAutoDraftOff rather than resuming", err)
 	}
 }

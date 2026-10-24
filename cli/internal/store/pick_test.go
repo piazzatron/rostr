@@ -14,11 +14,11 @@ func TestPickFreeMemberCyclesThroughTheRoster(t *testing.T) {
 	day := func(n int) time.Time { return time.Date(2026, 10, n, 0, 0, 0, 0, time.UTC) }
 
 	// Never drafted beats drafted; among the drafted, the longest ago; never a busy one; ties keep roster order
-	all := map[string]time.Time{"Gandalf": day(3), "Samwise": day(1), "Boromir": day(4), "Merry": day(5)}
+	all := map[string]time.Time{"gandalf": day(3), "samwise": day(1), "boromir": day(4), "merry": day(5)}
 	if m, copy := pickFreeMember(members, isBusy, all); m.Name != "Samwise" || copy != 1 {
 		t.Fatalf("least recent: %s copy %d", m.Name, copy)
 	}
-	if m, _ := pickFreeMember(members, isBusy, map[string]time.Time{"Gandalf": day(3)}); m.Name != "Samwise" {
+	if m, _ := pickFreeMember(members, isBusy, map[string]time.Time{"gandalf": day(3)}); m.Name != "Samwise" {
 		t.Fatalf("never drafted: %s", m.Name)
 	}
 	if m, _ := pickFreeMember(members, isBusy, nil); m.Name != "Gandalf" {
@@ -27,7 +27,7 @@ func TestPickFreeMemberCyclesThroughTheRoster(t *testing.T) {
 
 	// Copies only once everyone is busy, by the same rule
 	busy["Gandalf"], busy["Samwise"], busy["Boromir"], busy["Merry"] = true, true, true, true
-	if m, copy := pickFreeMember(members, isBusy, map[string]time.Time{"Gandalf": day(3)}); m.Name != "Frodo" || copy != 2 {
+	if m, copy := pickFreeMember(members, isBusy, map[string]time.Time{"gandalf": day(3)}); m.Name != "Frodo" || copy != 2 {
 		t.Fatalf("copies: %s copy %d", m.Name, copy)
 	}
 }
