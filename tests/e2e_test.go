@@ -430,7 +430,10 @@ func TestHooksWhenTheAPIIsDown(t *testing.T) {
 		}
 
 		// Every hook exits 0 within the 3-second timeout, and session start still sets ROSTR_SESSION (its draft ahead
-		// fails in the background). The session stays unnamed: the hooks that need the server stay quiet
+		// fails in the background). The session stays unnamed: the hooks that need the server stay quiet. Each call gives
+		// up on its own, so the hooks (and a command that can't reach the server) run at once rather than waiting out the
+		// timeout one after another
+		var wg sync.WaitGroup
 		for _, h := range []struct{ event, input string }{
 			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"startup"}`, session, repo)},
 			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo)},
@@ -438,16 +441,24 @@ func TestHooksWhenTheAPIIsDown(t *testing.T) {
 			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"compact"}`, session, repo)},
 			{"session-end", fmt.Sprintf(`{"session_id":%q}`, session)},
 		} {
-			r := hook(h.event, h.input)
-			if r.code != 0 || strings.Contains(r.stdout, "Gandalf") || r.took > 5*time.Second {
-				t.Fatalf("%s, %s: exit %d after %v, stdout %q, stderr %q", down.name, h.event, r.code, r.took, r.stdout, r.stderr)
+			wg.Go(func() {
+				r := hook(h.event, h.input)
+				if r.code != 0 || strings.Contains(r.stdout, "Gandalf") || r.took > 5*time.Second {
+					t.Errorf("%s, %s: exit %d after %v, stdout %q, stderr %q", down.name, h.event, r.code, r.took, r.stdout, r.stderr)
+				}
+			})
+		}
+		wg.Go(func() {
+			if r := offline.run(repo, "", "stats"); r.code != 1 {
+				t.Errorf("%s: list: %+v", down.name, r)
 			}
+		})
+		wg.Wait()
+		if t.Failed() {
+			t.FailNow()
 		}
 		if env, _ := os.ReadFile(envFile); !strings.HasPrefix(string(env), "export ROSTR_SESSION="+session+"\n") {
 			t.Fatalf("%s: CLAUDE_ENV_FILE %q", down.name, env)
-		}
-		if r := offline.run(repo, "", "stats"); r.code != 1 {
-			t.Fatalf("%s: list: %+v", down.name, r)
 		}
 
 		// The real server never heard of the session: it's unnamed
