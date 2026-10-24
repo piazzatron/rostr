@@ -56,6 +56,26 @@ import Rostr from "../components/Rostr.astro";
   </section>
 
   <section class="section">
+    <h2>Resting and benching</h2>
+    <ul class="terse-list">
+      <li>
+        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting. It
+        keeps its name, but when every other name is taken, a new session can take it. If that happens, the resting
+        session gets a new name on its next prompt, and the agent is told.
+      </li>
+      <li>
+        <strong>Keep-alive.</strong> Each prompt and turn tells <Rostr /> the session is still around, and later prompts
+        check in at most once an hour.
+      </li>
+      <li>
+        <strong>Benching.</strong> When a session ends, its name goes back to the bench. A session that's never seen
+        again, like a closed desktop session, is benched after 7 days (<code>rostr config expiry</code>), and{" "}
+        <code>rostr bench &lt;name&gt;</code> frees a name sooner.
+      </li>
+    </ul>
+  </section>
+
+  <section class="section">
     <h2>Telling the agent who it is</h2>
     <p>
       The draft goes into the agent's context: its name, to sign messages it writes outside the chat (PR descriptions,
@@ -122,26 +142,6 @@ import Rostr from "../components/Rostr.astro";
       When a session is drafted or renamed, <Rostr /> labels its pane: herdr shows the name as the pane's agent, and in
       tmux a window with a single pane is renamed to it. The label is cleared when the session ends.
     </p>
-  </section>
-
-  <section class="section">
-    <h2>Resting and benching</h2>
-    <ul class="terse-list">
-      <li>
-        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting. It
-        keeps its name, but when every other name is taken, a new session can take it. If that happens, the resting
-        session gets a new name on its next prompt, and the agent is told.
-      </li>
-      <li>
-        <strong>Keep-alive.</strong> Each prompt and turn tells <Rostr /> the session is still around, and later prompts
-        check in at most once an hour.
-      </li>
-      <li>
-        <strong>Benching.</strong> When a session ends, its name goes back to the bench. A session that's never seen
-        again, like a closed desktop session, is benched after 7 days (<code>rostr config expiry</code>), and{" "}
-        <code>rostr bench &lt;name&gt;</code> frees a name sooner.
-      </li>
-    </ul>
   </section>
 
   <section class="section">
