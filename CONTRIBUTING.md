@@ -53,8 +53,8 @@ tests/run.sh
 ```
 
 In a Claude Code cloud environment, set the environment's setup script to `bash rostr/scripts/cloud-setup.sh`. It
-starts Docker (and keeps it running across a session's restarts), makes image builds work through the environment's
-proxy, and installs what the tests need, Codex included, so all of the above works there too.
+installs what the tests need (Codex included), starts Docker, and builds the images `tests/run.sh` uses, so all of the
+above works there too.
 
 **Site**
 
