@@ -4,188 +4,253 @@ import Rostr from "../components/Rostr.astro";
 ---
 
 <Layout
-  title="How rostr names your sessions"
-  description="How rostr uses Claude Code hooks to name each session, and why the agent writes its own title."
+  title="How rostr works"
+  description="How rostr drafts a name for each Claude Code and Codex session, titles it, and frees the name again."
 >
   <section class="page-hero">
-    <h1>How <Rostr /> names your sessions</h1>
-    <p class="lede">
-      Every Claude Code session gets a name from your roster and a short summary of what it's doing, like <span
-        class="session-title">🧹 Ginny · Fix flaky login test</span>. Here's how that works under the hood, and why it
-      works this way.
-    </p>
+    <h1>How <Rostr /> works</h1>
   </section>
 
   <section class="section">
     <h2>The short version</h2>
     <p>
-      When a session starts, <Rostr /> drafts a name from your roster, like 🧹 Ginny. During its first reply, the agent
-      writes a 3-5 word summary of the task and sets the session's title to <span class="session-title"
-        >🧹 Ginny · &lt;summary&gt;</span>. When the session ends, Ginny goes back to the bench for the next one.
+      <code>rostr assemble</code> installs hooks into Claude Code and Codex. Each hook calls the <Rostr /> CLI, which
+      keeps your rosters and who's drafted where: in a local SQLite database, or on the <Rostr /> API in cloud mode, so
+      sessions on every machine draft from the same rosters.
     </p>
-    <p>All of it runs on Claude Code hooks that call the <Rostr /> CLI.</p>
+    <p>
+      On a session's first prompt, <Rostr /> drafts a name, tells the agent who it is, and puts the name in the session's
+      title. While the session works, the hooks keep the name alive. When it ends, the name goes back to the bench.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>Drafting a name</h2>
+    <p>Each session is drafted from the roster linked to its project, else your default roster. The pick goes:</p>
+    <ol class="terse-list">
+      <li>
+        <strong>Least recently drafted.</strong> The free member drafted longest ago, so names cycle through the whole
+        roster.
+      </li>
+      <li>
+        <strong>Take a resting name.</strong> If everyone's busy, the name of the session that has rested longest.
+      </li>
+      <li>
+        <strong>Copies.</strong> If no one is resting either, a numbered copy like 🧙 Gandalf 2. A session always gets a
+        name.
+      </li>
+    </ol>
+    <p>A resumed session gets its old name back, if no one else has taken it since.</p>
+    <p>
+      In cloud mode, Claude Code sessions draft in the background as soon as they start, so the first prompt doesn't
+      wait on the network.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>Resting and benching</h2>
+    <p>
+      A member is <strong>drafted</strong>, <strong>resting</strong>, or on the <strong>bench</strong>.
+    </p>
+    <ul class="terse-list">
+      <li>
+        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting. It
+        keeps its name, but when every other name is taken, a new session can take it. If that happens, the resting
+        session gets a new name on its next prompt, and the agent is told.
+      </li>
+      <li>
+        <strong>Keep-alive.</strong> Each prompt and turn tells <Rostr /> the session is still around, and later prompts
+        check in at most once an hour.
+      </li>
+      <li>
+        <strong>Benching.</strong> When a session ends, its name goes back to the bench. A session that's never seen
+        again, like a closed desktop session, is benched after 7 days (<code>rostr config expiry</code>), and{" "}
+        <code>rostr bench &lt;name&gt;</code> frees a name sooner.
+      </li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>Telling the agent who it is</h2>
+    <p>
+      The hook tells the agent its name, and to sign anything it writes outside the chat with it, like PR descriptions
+      and Slack messages. After compaction, it's told again.
+    </p>
+    <p>
+      Commands the agent runs, like <code>rostr task</code>, need to know which session they're in. In Claude Code, the
+      start hook appends <code>export ROSTR_SESSION=&lt;session ID&gt;</code> to the session's env file (the path Claude
+      Code passes in <code>CLAUDE_ENV_FILE</code>), and Claude Code loads that file before every shell command the agent
+      runs. Codex sets <code>CODEX_THREAD_ID</code> in its commands' environment itself, so <Rostr /> reads that. The
+      <code>rostr task</code> command the agent is told to run also names the session with <code>--session</code>, so
+      it works even where neither variable is set.
+    </p>
   </section>
 
   <section class="section">
     <h2>The hooks</h2>
-    <p><code>rostr assemble</code> installs four hooks into <code>~/.claude/settings.json</code>.</p>
+    <p>
+      Both agents get the same five hooks. Each one is a one-liner that runs <code>rostr hook</code> only if <Rostr /> is
+      installed, so the logic lives in the binary and updates when you upgrade. After an upgrade, the first session
+      reinstalls the hooks if they've changed.
+    </p>
     <dl class="rows">
       <div class="row">
         <dt><code>SessionStart</code></dt>
         <dd>
-          Records the session and sets <code>ROSTR_SESSION</code>, so any <Rostr /> command run later knows which session
-          it's in.
+          Claude Code: records the session in <code>ROSTR_SESSION</code> and, in cloud mode, drafts ahead. Both: get the
+          old name back on resume, and re-tell the name after compaction. Codex: drafts a forked thread.
         </dd>
       </div>
       <div class="row">
         <dt><code>UserPromptSubmit</code></dt>
         <dd>
-          On the first prompt, drafts a name before Claude sees the prompt, tells the agent who it is as additional
-          context, and asks it to title the session as part of its first reply. Later prompts keep the name alive,
-          and give a session that lost its name while resting a new one.
+          First prompt: drafts, tells the agent who it is, and starts the title (below). Later prompts: end a rest, keep
+          the name alive, and retitle the session if its task changed.
         </dd>
       </div>
       <div class="row">
         <dt><code>PostToolUse</code></dt>
         <dd>
-          Runs after a title tool, or after the agent records its task in a terminal. Records the summary from the title as the agent's task, so <code>rostr stats</code> shows
-          what everyone is doing. When the title call comes after the answer, it ends the turn there, so Claude
-          doesn't have to reply to the tool's result.
+          Marks the session as working again. Claude Code: after a title call, records the summary as the task and tells
+          the agent to carry on with its answer.
         </dd>
       </div>
       <div class="row">
         <dt><code>Stop</code></dt>
-        <dd>
-          Records that the turn ended. A session that gets no new prompt for 15 minutes is resting: it keeps its name,
-          but when every other name is taken, a new session takes the name of the one that has rested longest.
-        </dd>
+        <dd>Records that the turn ended, which starts the 15 minutes until the session rests.</dd>
       </div>
       <div class="row">
         <dt><code>SessionEnd</code></dt>
-        <dd>Releases the name.</dd>
+        <dd>Benches the name and clears the pane label.</dd>
       </div>
     </dl>
-  </section>
-
-  <section class="section">
-    <h2>Why the agent sets the title</h2>
-    <p>The obvious design is for <Rostr />'s hook to set the whole title itself. Claude Code doesn't allow that today:</p>
-    <ul class="terse-list">
-      <li>
-        <strong>Hooks can set a title at only two moments.</strong> Claude Code lets a hook set the session's title
-        when the session starts or when a prompt arrives.
-      </li>
-      <li>
-        <strong>Hook titles don't reach every session.</strong> In the desktop app, a hook's title shows up for Local
-        sessions, but not for Remote Control or cloud sessions. That's a known Claude Code issue. Those sessions can
-        only be renamed through a title tool.
-      </li>
-      <li>
-        <strong>The app's own summary lands too late.</strong> The desktop app writes its own short title about a
-        second after your first message, but only saves it where other programs can read it a few seconds later, after{" "}
-        <Rostr />'s first-prompt hook has already run. Nothing outside the app can make it save sooner.
-      </li>
-    </ul>
     <p>
-      So <Rostr /> hands that part to the agent. It already knows what the task is, so it writes a 3-5 word summary and
-      sets <span class="session-title">&lt;emoji name&gt; · &lt;summary&gt;</span> with the session's title tool,
-      during its first reply.
+      Hooks never block a session. Network calls time out after 3 seconds, and anything slow runs in the background. If{" "}
+      <Rostr /> can't draft, the session just starts unnamed.
     </p>
   </section>
 
   <section class="section">
-    <h2>Which tool sets the title</h2>
-    <p>It depends on where the session runs.</p>
+    <h2>Titles in Claude Code</h2>
+    <p>
+      The title is <span class="session-title">&lt;name&gt; · &lt;3-5 word summary&gt;</span>. Who writes the summary
+      depends on where the session runs:
+    </p>
     <table class="surface-table">
       <thead>
         <tr>
           <th>Where the session runs</th>
-          <th>How the title is set</th>
+          <th>How the title gets there</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <th scope="row">Desktop app, Local session</th>
-          <td>The app's own session tool: <code>set_session_title</code> with session <code>"self"</code></td>
-        </tr>
-        <tr>
-          <th scope="row">Desktop app via Remote Control, and cloud sessions</th>
-          <td>Claude Code's remote <code>set_session_title</code>, with the session's server ID</td>
-        </tr>
-        <tr>
           <th scope="row">Terminal</th>
           <td>
-            There's no title tool, so the agent isn't asked. <Rostr /> summarizes your first prompt itself in the
-            background (a headless Claude Code run on your own login, with Haiku), and its hook puts <span
-              class="session-title">&lt;name&gt; · &lt;summary&gt;</span> in the terminal title on your next prompt
+            The first-prompt hook sets <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>, so
+            the name shows straight away. <Rostr /> summarizes your prompt in the background with{" "}
+            <code>claude -p --model haiku</code>, on your own login, and puts the summary in the title on your next prompt
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Desktop app and cloud sessions</th>
+          <td>
+            Before writing anything, the agent calls the app's <code>set_session_title</code>. In Local sessions it loads
+            the tool with ToolSearch first
           </td>
         </tr>
       </tbody>
     </table>
+    <p>
+      The summary is recorded as the session's task, which <code>rostr stats</code> shows. When the task changes, later
+      prompts retitle the session to match.
+    </p>
+    <h3>Why the agent writes the summary in the app</h3>
+    <p>
+      Hooks can only set a title when a prompt arrives. In a terminal, that's the best there is: the summary shows up
+      on your second prompt. The app can do better, because it gives the agent a title tool. The agent already knows
+      the task, so it titles the session in its first reply.
+    </p>
+    <p>
+      The title tool is also the only option in Remote Control and cloud sessions, where a hook's title doesn't show up
+      at all (a <a href="https://github.com/anthropics/claude-code/issues/104473">known Claude Code bug</a>).
+    </p>
+    <h3>Why the title comes first</h3>
+    <p>
+      Recent models can turn text written just before a tool call into a progress update, a short summary of it. So an
+      answer followed by a title call could show up twice: once as a summary, then again in full. The first thing in a
+      reply is never turned into one, so the agent sets the title before writing anything.
+    </p>
   </section>
 
   <section class="section">
-    <h2>Why there's no extra message</h2>
+    <h2>Titles in Codex</h2>
     <p>
-      Any tool call normally makes Claude reply again, and Claude Code doesn't let a turn end with no visible text.
-      Left alone, a title call would make Claude add one more message after your answer. <Rostr /> avoids that:
+      The title is <span class="session-title">&lt;name&gt; · &lt;Codex's own title&gt;</span>. On the first prompt,{" "}
+      <Rostr /> drafts a name and tells the agent who it is, but leaves the thread unnamed. Codex's TUI and app then title
+      the thread themselves, usually within a few seconds. <Rostr /> waits for that title in the background, makes it the
+      session's task, and renames the thread to <span class="session-title">&lt;name&gt; · &lt;title&gt;</span>.
+    </p>
+    <h3>Why <Rostr /> waits for Codex</h3>
+    <p>
+      Codex hooks can't set a title, so <Rostr /> names threads through the Codex app-server instead. Codex only titles
+      a thread that has no name, and drops its title if the name changes while it's writing one. Naming the thread on
+      the first prompt would mean no summary, so <Rostr /> waits and adds the name to Codex's title. The summary costs
+      no extra tokens.
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>Token use</h2>
+    <p>
+      <Rostr /> adds a few hundred tokens to a session, almost all on the first prompt. Later prompts add nothing unless
+      the session is renamed.
     </p>
     <ul class="terse-list">
       <li>
-        <strong>The call comes after the answer.</strong> The agent writes its answer, then makes the title call at the
-        end of that same message, whether the answer took one sentence or a long stretch of work.
+        <strong>Every session.</strong> The <Rostr /> skill's one-line description sits in the agent's skill list, about 80
+        tokens. The full skill loads only when you ask about <Rostr />.
       </li>
       <li>
-        <strong>Then the turn ends.</strong> <Rostr />'s PostToolUse hook sees that the answer is already written and
-        nothing but the title call came after it, and ends the turn right there, so the answer stays the last thing
-        on screen.
+        <strong>First prompt, Claude Code.</strong> The agent's identity, about 120 tokens. In the app, the title request
+        (about 100 more) and one short title call, which in Local sessions first loads the title tool. In a terminal,
+        there's no title call: <code>claude -p --model haiku</code> summarizes up to the first 4,000 characters of your
+        prompt instead, on your own login.
       </li>
       <li>
-        <strong>Remote Control and cloud sessions title first instead.</strong> Their apps show Claude's progress
-        updates, and an answer written just before a tool call can come back as one: a short summary of the answer,
-        followed by the answer again. So there the agent makes the title call before writing anything, and the answer
-        ends the turn as usual.
+        <strong>First prompt, Codex.</strong> Only the agent's identity, about 120 tokens. The title is the one Codex
+        writes anyway.
+      </li>
+      <li>
+        <strong>Now and then.</strong> After compaction, or when a resting session is renamed, the agent is told its
+        name again, about 120 tokens.
       </li>
     </ul>
   </section>
 
   <section class="section">
-    <h2>What didn't work</h2>
-    <p>Each of these looked simpler, and none held up:</p>
-    <ul class="terse-list">
-      <li>
-        <strong>Asking for the title after the answer, with a Stop hook.</strong> Claude Code shows it as a hook error,
-        and the title line becomes the session's last message.
-      </li>
-      <li>
-        <strong>Waking Claude in the background once the app's summary exists.</strong> The wake-up only arrives after
-        the reply, and applying a title from it either shows you a blocked-prompt notice or makes Claude take another
-        visible turn.
-      </li>
-      <li>
-        <strong>Reading the app's own summary.</strong> It's saved where other programs can read it seconds too late.
-      </li>
-      <li>
-        <strong>Generating the summary outside Claude</strong>, with a separate <code>claude -p</code> call or an
-        on-device model. Slow, may cost money, and depends on the platform.
-      </li>
-    </ul>
-  </section>
-
-  <section class="section">
-    <h2>What it costs</h2>
+    <h2>tmux and herdr</h2>
     <p>
-      One short summary written by the agent and one or two small tool calls on the first reply. No extra round trips
-      for the answer, and no extra messages.
+      When a session is drafted or renamed, <Rostr /> labels its pane: herdr shows the name as the pane's agent, and in
+      tmux a window with a single pane is renamed to it. The label is cleared when the session ends.
+    </p>
+    <p>
+      Claude Code runs its hooks inside the session's own pane, so <Rostr /> knows which pane to label. Codex runs hooks
+      in a shared background process, whose pane is whichever terminal started it, and nothing ties a thread to the
+      terminal showing it. So <Rostr /> works from the title instead: it has just named the thread, and Codex puts the
+      thread's name in its terminal title. <Rostr /> labels the one Codex pane whose title shows the new name, and labels
+      nothing if it finds none or more than one. If you set a custom <code>tui.terminal_title</code> in Codex, include{" "}
+      <code>thread-name</code>.
     </p>
   </section>
 
   <section class="section">
-    <h2>What's next</h2>
+    <h2>Privacy and security</h2>
     <p>
-      If Claude Code lets a hook's title reach Remote Control and cloud sessions, <Rostr /> can drop the agent's part and
-      title those sessions straight from the hook.
+      Local mode makes no network calls. In cloud mode, tasks and repo names are encrypted on your machine before
+      they're sent, and the server never sees your <Rostr /> key, prompts, or code.
     </p>
+    <p class="docs-link"><a href="/privacy">Learn more about privacy →</a></p>
     <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
   </section>
 </Layout>

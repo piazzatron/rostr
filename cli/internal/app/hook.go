@@ -167,13 +167,19 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	pane.Label(ctx, pane.Claude, d.Display())
 
 	// The agent titles the session with its summary where it has a title tool; in a terminal, rostr summarizes the
-	// prompt in the background and the next prompt's hook puts it in the title
+	// prompt in the background and the next prompt's hook puts it in the title. Until then a terminal shows the start
+	// of the prompt as the task. A desktop Local session doesn't: its agent titles it first thing, and a placeholder
+	// would only change the title once more
 	where := titleWhere(input.SessionID)
 	context := claudecode.Identity(d.Display(), d.Roster, input.SessionID)
 	if instruction := claudecode.TitleInstruction(d.Display(), input.SessionID, where); instruction != "" {
 		context += "\n" + instruction
 	}
-	fmt.Fprintln(stdout, claudecode.PromptOutput(context, claudecode.Title(d.Display(), placeholder)))
+	title := claudecode.Title(d.Display(), placeholder)
+	if where.DesktopLocal {
+		title = ""
+	}
+	fmt.Fprintln(stdout, claudecode.PromptOutput(context, title))
 	if where.IsTerminal() {
 		_ = spawnHook(summarizeInput{SessionID: input.SessionID, Prompt: claudecode.UserPrompt(input.Prompt), Placeholder: placeholder},
 			"hook", "summarize")
@@ -203,7 +209,7 @@ func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, 
 	}
 	pane.Label(ctx, pane.Claude, d.Display())
 	note = claudecode.RenamedAfterRest(d.Display(), from)
-	if where := titleWhere(input.SessionID); where.TitlesFirst() {
+	if where := titleWhere(input.SessionID); !where.ShowsHookTitles() {
 		note += "\n" + claudecode.TitleInstruction(d.Display(), input.SessionID, where)
 	}
 	return note, nil
@@ -307,18 +313,17 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 }
 
 // hookTitleSet is the PostToolUse hook on the title tools and Bash. When the agent titles the session
-// "<name> · <summary>", it records the summary as the agent's task. When the title call (or the agent recording its
-// task) came after the answer, it ends the turn, so Claude doesn't have to reply to the tool's result: Claude Code
-// doesn't let a turn end without visible text, so that reply would repeat the answer. When a title call came before
-// the answer, it tells Claude to answer the user rather than report the rename. In Remote Control and cloud sessions
-// the title call always comes first, so it never ends the turn there: any text before it is a lead-in, not the answer.
+// "<name> · <summary>", it records the summary as the agent's task. A title call comes before the answer, so it tells
+// Claude to answer the user rather than report the rename. When the agent recording its task came after the answer,
+// it ends the turn, so Claude doesn't have to reply to the tool's result: Claude Code doesn't let a turn end without
+// visible text, so that reply would repeat the answer.
 func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	isTaskCommand := claudecode.IsTaskCommand(input.ToolInput.Command)
 	if input.ToolName == "Bash" && !isTaskCommand {
 		return nil
 	}
 	// Every time the turn isn't ended after the answer, Claude replies to the tool's result, so the reason goes in the log
-	if !isTaskCommand && titleWhere(input.SessionID).TitlesFirst() {
+	if !isTaskCommand {
 		fmt.Fprintln(stdout, claudecode.AdditionalContext("PostToolUse", claudecode.TitleSetContext))
 	} else if ends, reason := claudecode.EndsPlainAnswer(input.TranscriptPath, input.ToolUseID); ends {
 		fmt.Fprintln(stdout, `{"continue": false, "suppressOutput": true}`)
@@ -328,9 +333,6 @@ func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stder
 		}
 	} else {
 		logBackground("title-set for session %s didn't end the turn: %s", input.SessionID, reason)
-		if !isTaskCommand {
-			fmt.Fprintln(stdout, claudecode.AdditionalContext("PostToolUse", claudecode.TitleSetContext))
-		}
 	}
 	if isTaskCommand {
 		return nil

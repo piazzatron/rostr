@@ -214,7 +214,9 @@ const LIST_JSON_EXAMPLE = `{
     <!-- How it works -->
     <section class="section" id="how-it-works">
       <h2>How it works</h2>
-      <p class="section-lede"><Rostr /> is a small <a class="accent-link" href="/cli">CLI</a> plus a skill that teaches your agent how to use it.</p>
+      <p class="section-lede">
+        <Rostr /> is a small <a class="accent-link" href="/cli">CLI</a>, a few hooks, and a skill for your agent.
+      </p>
       <ol class="steps">
         <li>
           <h3>Assemble your roster</h3>
@@ -233,7 +235,7 @@ const LIST_JSON_EXAMPLE = `{
           </p>
         </li>
       </ol>
-      <p class="docs-link"><a href="/how-it-works">How the session hooks work under the hood →</a></p>
+      <p class="docs-link"><a href="/how-it-works">Learn how <Rostr /> works under the hood →</a></p>
 
       <p class="subhead-command"><span aria-hidden="true">$</span>rostr --help</p>
       <div class="group-cards">
@@ -297,18 +299,12 @@ const LIST_JSON_EXAMPLE = `{
         <a href="/rosters">See all rosters / submit your own →</a>
       </p>
 
-      <div class="cards roster-cards">
-        <div class="card">
-          <h3>🎚️ Pick your team size</h3>
-          <p>
-            Twenty names are too many to get to know. Start with a team of a roster's best-known names (4, 8, or 16), or
-            take everyone. Then pick anyone else you'd rather have.
-          </p>
-        </div>
-        <div class="card">
-          <h3>📁 Different rosters for different projects</h3>
-          <p>Easily distinguish different projects by giving them different rosters with <code>rostr link</code>.</p>
-        </div>
+      <div class="tip">
+        <span class="tip-icon" aria-hidden="true">📁</span>
+        <p>
+          <strong>Tip: different rosters for different projects.</strong> Run <code>rostr link</code> in a repo to give it
+          its own roster, so you can tell projects apart at a glance.
+        </p>
       </div>
     </section>
 

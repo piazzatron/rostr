@@ -519,9 +519,9 @@ func TestClaudeCodeHooks(t *testing.T) {
 	expectCarryOn("title call before the answer", hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)))
 	expectQuiet("other Bash call", hook("title-set", toolCall(answer, "Bash", `{"command":"ls"}`)), 0)
 
-	// Local desktop session: the name shows right away, and the agent uses the app's own tool
+	// Local desktop session: the agent titles it first thing with the app's own tool, so the hook sets no placeholder
 	os.WriteFile(filepath.Join(sessionsDir, "4343.json"), []byte(`{"sessionId":"s9","bridgeSessionId":"session_l","entrypoint":"claude-desktop"}`), 0o644)
-	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); !strings.HasSuffix(out.HookSpecificOutput.SessionTitle, " · Fix the login redirect loop") ||
+	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); out.HookSpecificOutput.SessionTitle != "" ||
 		!strings.Contains(out.HookSpecificOutput.AdditionalContext, "mcp__ccd_session_mgmt__set_session_title") ||
 		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `"self"`) {
 		t.Fatalf("Local first prompt: %+v", out)

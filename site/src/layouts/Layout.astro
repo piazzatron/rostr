@@ -52,7 +52,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
       <a class="wordmark" href="/"><Logo class="wordmark-logo" aria-hidden="true" />rostr</a>
       <nav>
         <a href="/#how-it-works">How it works</a>
-        <a href="/cli">CLI docs</a>
+        <a href="/cli">CLI</a>
         <a href="/#install">Install</a>
         <a class="nav-icon" href={GITHUB_URL} aria-label="GitHub"><GitHubIcon aria-hidden="true" /></a>
       </nav>
@@ -63,7 +63,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     </main>
 
     <footer class="footer">
-      <a class="wordmark footer-wordmark" href="/">rostr</a>
+      <a class="wordmark footer-wordmark" href="/"><Logo class="wordmark-logo" aria-hidden="true" />rostr</a>
       <nav class="footer-links" aria-label="Footer">
         <a href="/privacy-policy">Privacy</a>
         <a href="/terms">Terms</a>
@@ -1387,8 +1387,38 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     }
   }
 
-  .roster-cards {
-    margin-top: 48px;
+  .tip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: 640px;
+    margin: 40px 0 0;
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+  }
+
+  .tip-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    font-size: 20px;
+  }
+
+  .tip p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .tip strong {
+    color: var(--text);
   }
 
   /* Inset by the page's side padding, so its top border lines up with the section dividers */
@@ -1411,6 +1441,10 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     justify-self: start;
     font-size: 17px;
     color: var(--text);
+  }
+
+  .footer-wordmark .wordmark-logo {
+    width: 20px;
   }
 
   .footer-links {
