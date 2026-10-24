@@ -17,7 +17,7 @@ for module in cli server tests; do
 done
 # npm ci, since an older npm's `npm install` rewrites the lockfile
 (cd "$repo/site" && npm ci --no-audit --no-fund --loglevel=error)
-# The Codex version rostr's Codex hooks were last checked against (docs/integrations-research.md)
+# The Codex version rostr's Codex hooks were last checked against
 npm install -g --no-audit --no-fund --loglevel=error @openai/codex@0.164.0
 
 start_docker='docker info >/dev/null 2>&1 || (nohup dockerd >/var/log/dockerd.log 2>&1 &)'

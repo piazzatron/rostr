@@ -24,8 +24,6 @@ services:
       # End-to-end tests register many owners from one IP
       RATE_LIMIT_REGISTRATIONS_PER_HOUR: "10000"
       RATE_LIMIT_REQUESTS_PER_MINUTE: "100000"
-      # Draft the first free member instead of a random one, so end-to-end tests know who they'll get
-      ROSTR_DRAFT_PICK: first
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:

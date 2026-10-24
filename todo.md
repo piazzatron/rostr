@@ -23,12 +23,12 @@ Get everything working end to end, then a final pass over the landing page.
 
 ## CLI design
 
-Decisions live in [`docs/cli-spec.md`](docs/cli-spec.md).
+How things work is in [`docs/`](docs/README.md).
 
 - [ ] Work through the findings in [`cli-review.md`](cli-review.md), writing each decision into the spec, then delete
       that file.
 - [x] Get rostr API call latency off the first prompt: hooks draft from a local cache and confirm in the background
-      (see [`docs/drafting-latency.md`](docs/drafting-latency.md)).
+      (see [`docs/drafting.md`](docs/drafting.md#drafting-ahead)).
 - [ ] Measure the API's latency from a Claude Code cloud container (the one place a first prompt still waits on it),
       and `rostr stats`'s several calls (~1.4s from Tokyo).
 - [ ] Real first prompts are long tasks, so the agent sets its `name · summary` title late: after a long plain answer,
@@ -55,7 +55,7 @@ Decide once there's a working build to play with.
 - [ ] Decide the final tagline ("Give your agents names and remember who's doing what"), used in the CLI's help and on
       the website.
 - [x] A "How it works" section on the site, linking to a write-up of how rostr names sessions (hooks, the app's own
-      titles, Remote Control vs Local vs terminal, the title cache) from `docs/claude-code-session-titles.md`.
+      titles, Remote Control vs Local vs terminal, the title cache) from `docs/hooks.md`.
 - [ ] Do a pass on the How it works page; it reads way too Claude-y.
 - [x] A latency and performance section on the site, once it's really fast: how quickly the name shows up, and how.
       It matters a lot.
@@ -73,8 +73,6 @@ Decide once there's a working build to play with.
 
 ## CLI build
 
-Build from [`docs/cli-spec.md`](docs/cli-spec.md).
-
 - [x] Go CLI for macOS and Linux.
 - [x] Install paths that `setup.md` and the site promise: GitHub releases of the binary, the `piazzatron/homebrew-tap`
       formula, and the `getrostr.sh/install` script.
@@ -82,8 +80,8 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       `presets`, `disband`.
 - [x] Agent commands: `draft`, `bench`, `task`.
 - [x] `config`, including the `cloud on` migration.
-- [x] Local storage ([`docs/local-storage.md`](docs/local-storage.md)).
-- [x] Server API and Postgres schema ([`docs/server-schema.md`](docs/server-schema.md)), with the HKDF-derived keys,
+- [x] Local storage ([`docs/storage.md`](docs/storage.md)).
+- [x] Server API and Postgres schema ([`docs/storage.md`](docs/storage.md)), with the HKDF-derived keys,
       task encryption, and repo fingerprints.
 - [x] The hidden `rostr hook claude-code …` command, the installed hooks that call it, the skill, and `/draft`.
 - [x] Make drafting and the title summary much faster: drafting happens before the first reply, and the summary
@@ -91,7 +89,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
 - [ ] Understand how Homebrew releases work (the tap, the formula GoReleaser pushes, `brew upgrade`); see
       `RELEASING.md`.
 - [x] Upgrading rostr refreshes the installed hooks: a session start that finds them out of date reinstalls them in
-      the background (`docs/cli-spec.md`, Upgrading).
+      the background (`docs/hooks.md`, Upgrading).
 - [x] Upgrading rostr refreshes the skill and /draft text too (a /draft of the user's own is left alone).
 - [x] A Remote Control host's own first session has no `claude-code-remote` title tool (only sessions started from the
       app or claude.ai get it); the instruction now tells the agent to skip titling without it.
@@ -99,7 +97,7 @@ Build from [`docs/cli-spec.md`](docs/cli-spec.md).
       anthropics/claude-code#104473 (the app and the `remote-control` host both ignore the engine's title report).
 - [x] Archived desktop and cloud sessions never fire SessionEnd, so their names stayed drafted (♟️ Ron, Gimli, Merry).
       Sessions now rest 15 minutes after their turn ends, and a draft that finds no free name takes the longest-resting
-      one before handing out copies (`docs/cli-spec.md`, Resting).
+      one before handing out copies (`docs/keepalive.md`, Resting).
 - [x] Check that the `Stop` hook fires in the Mac desktop app: it does in Local sessions (🌱 Samwise, Oct 23), except
       after a first turn the title hook ends, which records the turn's end itself.
 - [x] Detect headless `claude -p` runs in the hooks and skip drafting for them.
