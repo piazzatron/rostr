@@ -28,6 +28,18 @@ make check   # golangci-lint and unit tests for every Go module; starts the comp
 
 `make e2e` runs the end-to-end tests against the full Docker Compose stack. CI runs all of it, plus `make vuln`.
 
+## Deploys
+
+| Piece | Where | How it deploys | Check it |
+|---|---|---|---|
+| CLI (`cli/`) | GitHub releases, `piazzatron/homebrew-tap` | Push a `v*` tag from `main`; see [RELEASING.md](RELEASING.md) | `gh run list --workflow release.yml` |
+| API server (`server/`), `api.getrostr.sh` | Railway: project `rostr`, service `server`, environment `production` | On its own from `main`, skipping commits that don't touch the server. Migrations run on startup | `railway deployment list -s server` |
+| Site (`site/`), `getrostr.sh` | Vercel: project `rostr` in `piazzatrons-projects`, root directory `site` | On its own: production from `main`, previews from branches | `vercel ls rostr --scope piazzatrons-projects` |
+| Live counts Worker (`live/`), `live.getrostr.sh` | Cloudflare Worker `rostr-live` with the `LiveCounts` Durable Object | By hand: `cd live && npx wrangler deploy`; see [live/README.md](live/README.md#deploy) | `npx wrangler deployments list` |
+
+DNS for `getrostr.sh` is on Cloudflare. The variables that connect the API server, Worker, and site are in
+[live-counts.md](docs/live-counts.md#configuration).
+
 ## Conventions
 
 - When a command or flag changes, update `site/src/pages/cli.astro`. Schema changes go in a new migration under
