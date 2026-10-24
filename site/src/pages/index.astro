@@ -13,9 +13,6 @@ const HOME_GRID_ROSTERS = [
   ...PRESET_ROSTERS.filter((roster) => "featuredTag" in roster),
 ];
 
-// Assembling from a preset takes its first six members unless you pick another team size; the popovers highlight them
-const DEFAULT_TEAM_SIZE = 6;
-
 // On phones the grid is trimmed to these presets plus the "Your own" tile
 const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires"];
 
@@ -276,11 +273,8 @@ const LIST_JSON_EXAMPLE = `{
             <div class="roster-members" role="tooltip">
               <b>{roster.members.length} members</b>
               <div class="chips">
-                {roster.members.map((member, index) => (
-                  <span class:list={["chip", { "chip-a": index < DEFAULT_TEAM_SIZE }]}>{member}</span>
-                ))}
+                {roster.members.map((member) => <span class="chip">{member}</span>)}
               </div>
-              <p class="roster-members-note">Your team starts with the first {DEFAULT_TEAM_SIZE}.</p>
             </div>
           </li>
         ))}
@@ -293,10 +287,9 @@ const LIST_JSON_EXAMPLE = `{
           <div class="roster-members" role="tooltip">
             <b>As many as you like</b>
             <div class="chips">
-              <span class="chip chip-a">⭐ Your favorites first</span>
+              <span class="chip">⭐ Your favorites</span>
               <span class="chip">🪑 Everyone else</span>
             </div>
-            <p class="roster-members-note">Drafted in the order you list them.</p>
           </div>
         </li>
       </ul>
@@ -308,8 +301,8 @@ const LIST_JSON_EXAMPLE = `{
         <div class="card">
           <h3>🎚️ Pick your team size</h3>
           <p>
-            Twenty names are too many to get to know. Start with a small team of a roster's best-known names (4, 6, or
-            10), or take everyone. Then swap in any player you'd rather have.
+            Twenty names are too many to get to know. Start with a team of a roster's best-known names (4, 8, or 16), or
+            take everyone. Then pick anyone else you'd rather have.
           </p>
         </div>
         <div class="card">

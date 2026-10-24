@@ -37,7 +37,7 @@ type assembleOptions struct {
 type cast struct {
 	presetID string
 	members  []roster.Member
-	// from is everyone on the preset the cast was picked from, so the cast editor can swap others in
+	// from is everyone the cast can be picked from: a preset, or the cast itself plus names added to it
 	from []roster.Member
 }
 
@@ -567,7 +567,7 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		}
 		return roster.ValidateCast(f.chosenCast().members, mode)
 	}
-	emoji := huh.NewSelect[roster.EmojiMode]().Title("Agents show up as").Inline(true).Value(&f.emoji).Validate(validateEmoji)
+	emoji := huh.NewSelect[roster.EmojiMode]().Title("Emojis").Inline(true).Value(&f.emoji).Validate(validateEmoji)
 	link := huh.NewSelect[bool]().Inline(true).TitleFunc(func() string {
 		return fmt.Sprintf("Use it for %s", f.repo)
 	}, nil).Options(
@@ -598,7 +598,7 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 
 	// An edited roster's last page: the cast, its emoji mode, and a button to save it
 	editSummary := huh.NewNote()
-	editEmoji := huh.NewSelect[roster.EmojiMode]().Title("Agents show up as").Inline(true).Value(&f.emoji).Validate(validateEmoji)
+	editEmoji := huh.NewSelect[roster.EmojiMode]().Title("Emojis").Inline(true).Value(&f.emoji).Validate(validateEmoji)
 	save := huh.NewConfirm().Affirmative("Save").Negative("").Value(&confirmed)
 	editReview := screenStep{field: editSummary, more: []huh.Field{editEmoji, save}, shown: func() bool { return f.shows(stepEditReview) }}
 
@@ -639,6 +639,15 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 				return ""
 			}
 			return teamPreview(presetTeam(f.pickedPreset(), n), width)
+		},
+	}, {
+		field:     castPage,
+		formWidth: 46,
+		render: func(width int) string {
+			if castPage.cast == nil {
+				return ""
+			}
+			return teamPreview(*castPage.cast, width)
 		},
 	}}
 
@@ -685,21 +694,34 @@ func (f *assembleFlow) prepareSize(size *huh.Select[int]) {
 		}
 	}
 	options = append(options, huh.NewOption(fmt.Sprintf("All %d", len(p.Members)), 0))
-	if !slices.ContainsFunc(options, func(o huh.Option[int]) bool { return o.Value == f.size }) {
+	// A size of everyone on it is the "All" option
+	inOptions := func(n int) bool {
+		return slices.ContainsFunc(options, func(o huh.Option[int]) bool { return o.Value == n })
+	}
+	if f.size >= len(p.Members) {
+		f.size = 0
+	}
+	if !inOptions(f.size) {
 		f.size = presets.DefaultTeamSize
+		if !inOptions(f.size) {
+			f.size = 0
+		}
 	}
 	from := p.Name
 	if p.ID == presets.FreeAgentsID {
 		from = "this random mix"
 	}
-	size.Description(fmt.Sprintf("Your team is the first few of %s. You can swap anyone for someone else from it next.", from))
+	size.Description(fmt.Sprintf("Your team is the first few of %s. You can pick anyone else from it next.", from))
 
 	// huh scrolls a list to its selected option, hiding the ones above it, so this selects the first option and moves
 	// down to the size wanted
 	want := f.size
 	f.size = options[0].Value
 	size.Options(options...)
-	for f.size != want {
+	for range options {
+		if f.size == want {
+			break
+		}
 		size.Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 }
@@ -710,7 +732,11 @@ func (f *assembleFlow) prepareCast(page *castEditor) {
 	base := f.baseCast() // first, since it can draw the Free Agents the key names
 	if key := f.castKey(); key != f.castFor || page.cast == nil {
 		f.castFor = key
-		f.edited = cast{presetID: base.presetID, members: slices.Clone(base.members), from: base.from}
+		from := base.from
+		if len(from) == 0 {
+			from = base.members
+		}
+		f.edited = cast{presetID: base.presetID, members: slices.Clone(base.members), from: slices.Clone(from)}
 		page.reset(&f.edited)
 	}
 	// Replacing a cast, or a new roster whose emoji mode came from --emoji, saves without a page to check it on
@@ -720,9 +746,11 @@ func (f *assembleFlow) prepareCast(page *castEditor) {
 	} else if f.action == actionNew && !f.asksSetting(settingEmoji) {
 		page.validate = func(c cast) error { return roster.ValidateCast(c.members, f.emoji) }
 	}
+	page.description = "Space picks who's on your team, and a adds your own."
 	switch {
 	case f.action == actionEdit:
 		page.title = fmt.Sprintf("Edit the %s roster", f.roster)
+		page.description = "Space takes someone off the roster or puts them back, and a adds someone."
 	case f.build == buildNames && f.action != actionReplace:
 		page.title = "Who's on your roster?"
 	default:
@@ -862,18 +890,18 @@ func presetPreview(p presets.Preset, width int) string {
 	)
 }
 
-// teamPreview shows who's on a team, one per line, and how many more there are to swap in.
+// teamPreview shows who's on a team, one per line.
 func teamPreview(c cast, width int) string {
 	wrap := lipgloss.NewStyle().Width(width)
 	members := make([]string, len(c.members))
 	for i, m := range c.members {
 		members[i] = roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)
 	}
-	lines := []string{styleMuted.Render("Your team"), wrap.Render(strings.Join(members, "\n"))}
-	if more := len(c.from) - len(c.members); more > 0 {
-		lines = append(lines, "", wrap.Inherit(styleFaint).Render(fmt.Sprintf("%d more to swap in", more)))
+	if len(members) == 0 {
+		members = []string{styleFaint.Render("no one yet")}
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return lipgloss.JoinVertical(lipgloss.Left,
+		styleMuted.Render(fmt.Sprintf("Your team · %d", len(c.members))), wrap.Render(strings.Join(members, "\n")))
 }
 
 // changedHooks reports whether an install's list of what it wrote includes hooks.

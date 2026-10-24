@@ -47,7 +47,7 @@ answers as flags. Ask all of them, in one go if you can, using your question too
 1. **Which roster?** Run `rostr presets` and offer a handful, for example The Fellowship, Hogwarts, Smash Bros, NBA
    Legends, The Office, or Free Agents (a random mix). Or they can use their own list of names, each optionally with
    an emoji (`🧮 Ada, Grace, Linus`), drafted in the order they list them.
-2. **How big a team?** Only for a pre-built roster: 4, 6 (the default), 10, or everyone on it. Their team is that many
+2. **How big a team?** Only for a pre-built roster: 4, 8, 16 (the default), or everyone on it. Their team is that many
    from the top of the roster's list (see https://getrostr.sh/rosters), and they can change members later with
    `rostr edit`.
 3. **What should the roster be called?** Default: `work`. People often keep one roster for work and another for side
@@ -63,7 +63,7 @@ answers as flags. Ask all of them, in one go if you can, using your question too
 Run `rostr assemble` with their answers:
 
 ```sh
-rostr assemble <name> --preset <id> --size <4|6|10|all> --emoji <on|off|only>
+rostr assemble <name> --preset <id> --size <4|8|16|all> --emoji <on|off|only>
 ```
 
 - Use `--names "<comma-separated names>"` instead of `--preset` and `--size` for their own names.

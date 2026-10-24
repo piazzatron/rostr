@@ -39,7 +39,7 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	}
 
 	l := m.list()
-	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Bench) != 6 {
+	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Bench) != 16 {
 		t.Fatalf("list: %+v", l)
 	}
 	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" {
@@ -596,7 +596,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 
-	// Fellowship's team of six as it comes, then the defaults on the last page: its name, emoji on, the cloud,
+	// Fellowship's team of 16 as it comes, then the defaults on the last page: its name, emoji on, the cloud,
 	// auto-draft on
 	out, code := m.runTTY([]ttyStep{
 		{"How do you want to build your roster?", keyEnter},
@@ -604,7 +604,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"How big is your team?", keyEnter},
 		{"Who's on the roster?", keyEnter},
 		{"Ready to assemble?", keyEnter}, // roster name
-		{"Agents show up as", keyEnter},
+		{"Emojis", keyEnter},
 		{"rostr lives on", keyEnter},
 		{"Name new sessions", keyEnter},
 		{"Assemble", keyEnter},
@@ -619,7 +619,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 	if _, err := os.Stat(m.databasePath()); !os.IsNotExist(err) {
 		t.Fatalf("rostr.db: %v", err)
 	}
-	if l := m.list(); len(l.Rosters) != 1 || l.Rosters[0].Name != "fellowship" || len(l.Rosters[0].Bench) != 6 {
+	if l := m.list(); len(l.Rosters) != 1 || l.Rosters[0].Name != "fellowship" || len(l.Rosters[0].Bench) != 16 {
 		t.Fatalf("list: %+v", l)
 	}
 
@@ -632,7 +632,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", "hogwarts"},
 		{"hogwarts", keyEnter},
-		{"How big is your team?", keyDown}, // 10
+		{"How big is your team?", keyUp}, // 8
 		{"How big is your team?", keyEnter},
 		{"Who's on the roster?", keyEnter},
 	}, "assemble")
@@ -640,7 +640,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)
 	}
 	l := m.list()
-	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || len(l.Rosters[0].Bench) != 10 ||
+	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || len(l.Rosters[0].Bench) != 8 ||
 		l.Rosters[0].Bench[0].Name != "Harry" {
 		t.Fatalf("after replacing the cast: %+v", l)
 	}
@@ -720,7 +720,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 	out, code = m.runTTY([]ttyStep{
 		{"Edit the play roster", "a"},
-		{"Add someone", "🐧 Linus"},
+		{"Add your own", "🐧 Linus"},
 		{"Linus", keyEnter},
 		{"Linus", keyEsc},
 		{"Linus", keyUp},                   // Grace

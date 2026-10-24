@@ -51,6 +51,8 @@ export const PRESET_ROSTERS = [
       "🐺 Lupin",
       "🎆 Fred",
       "🎇 George",
+      "🧦 Dobby",
+      "🐍 Draco",
     ],
   },
   {
@@ -73,6 +75,8 @@ export const PRESET_ROSTERS = [
       "🎤 Jigglypuff",
       "👸 Peach",
       "🐢 Bowser",
+      "🔺 Zelda",
+      "🐗 Ganondorf",
     ],
   },
   {
@@ -95,6 +99,8 @@ export const PRESET_ROSTERS = [
       "🃏 Jokić",
       "🦌 Giannis",
       "🦩 Dirk",
+      "🌪️ Hakeem",
+      "🦒 Durant",
     ],
   },
   {
@@ -117,6 +123,8 @@ export const PRESET_ROSTERS = [
       "🪖 Finn",
       "✈️ Poe",
       "💜 Mace",
+      "🛡️ Mando",
+      "🥚 Grogu",
     ],
   },
   {
@@ -139,6 +147,8 @@ export const PRESET_ROSTERS = [
       "💅 Kelly",
       "🔥 Ryan",
       "🥲 Toby",
+      "🎹 Darryl",
+      "🌻 Erin",
     ],
   },
   {
@@ -161,6 +171,8 @@ export const PRESET_ROSTERS = [
       "👜 Arnault",
       "🎈 Branson",
       "🥚 Andreessen",
+      "🔍 Page",
+      "📈 Bloomberg",
     ],
   },
   {
@@ -183,6 +195,8 @@ export const PRESET_ROSTERS = [
       "🖥️ von Neumann",
       "🌐 Berners-Lee",
       "🧵 Thompson",
+      "🖱️ Engelbart",
+      "🎮 Carmack",
     ],
   },
   {
@@ -205,6 +219,8 @@ export const PRESET_ROSTERS = [
       "👼 Benjamin",
       "🎭 Butler",
       "🌿 Deleuze",
+      "🪜 Wittgenstein",
+      "🕯️ Plato",
     ],
   },
   {
@@ -227,6 +243,8 @@ export const PRESET_ROSTERS = [
       "🧭 Ro",
       "🎭 Barclay",
       "🃏 Q",
+      "🐈 Spot",
+      "😈 Lore",
     ],
   },
   {
@@ -249,6 +267,8 @@ export const PRESET_ROSTERS = [
       "🐜 Ant-Man",
       "🦅 Falcon",
       "🐝 Wasp",
+      "🌟 Captain Marvel",
+      "👁️ Nick Fury",
     ],
   },
   {
@@ -271,6 +291,8 @@ export const PRESET_ROSTERS = [
       "📜 Samwell",
       "🕷️ Varys",
       "🚪 Hodor",
+      "🪙 Littlefinger",
+      "🐕 The Hound",
     ],
   },
   {
@@ -293,6 +315,8 @@ export const PRESET_ROSTERS = [
       "🦌 Ashitaka",
       "🐷 Porco",
       "🎭 No-Face",
+      "🚌 Catbus",
+      "💰 Yubaba",
     ],
   },
   {
@@ -315,6 +339,8 @@ export const PRESET_ROSTERS = [
       "🍇 Dionysus",
       "💀 Hades",
       "🌸 Persephone",
+      "🔥 Prometheus",
+      "🦁 Heracles",
     ],
   },
   {
@@ -337,6 +363,8 @@ export const PRESET_ROSTERS = [
       "🪨 Onix",
       "🐟 Magikarp",
       "🐲 Dragonite",
+      "💗 Mew",
+      "🌊 Lapras",
     ],
   },
   {
@@ -359,6 +387,8 @@ export const PRESET_ROSTERS = [
       "🔧 Tyrol",
       "💃 Six",
       "🎸 Anders",
+      "✊ Zarek",
+      "🪛 Cally",
     ],
   },
   {
@@ -381,6 +411,8 @@ export const PRESET_ROSTERS = [
       "💎 Annie",
       "🐒 Zeke",
       "🌋 Bertholdt",
+      "🕊️ Falco",
+      "🎯 Gabi",
     ],
   },
   {
@@ -403,6 +435,8 @@ export const PRESET_ROSTERS = [
       "👁️ Neji",
       "🍖 Choji",
       "🌼 Ino",
+      "💛 Minato",
+      "🐍 Orochimaru",
     ],
   },
   {
@@ -425,6 +459,8 @@ export const PRESET_ROSTERS = [
       "🪵 Williams",
       "🦾 Ripken",
       "🚪 Rivera",
+      "🍑 Cobb",
+      "🧒 Griffey",
     ],
   },
   {
@@ -447,6 +483,8 @@ export const PRESET_ROSTERS = [
       "🎉 Gronk",
       "🐦‍⬛ Lewis",
       "⛪ White",
+      "🐬 Marino",
+      "🐴 Elway",
     ],
   },
   {
@@ -469,6 +507,8 @@ export const PRESET_ROSTERS = [
       "💇 Jágr",
       "⚡ Selänne",
       "🧠 Lidström",
+      "🥅 Brodeur",
+      "🎯 Bossy",
     ],
   },
   {
@@ -493,6 +533,8 @@ export const PRESET_ROSTERS = [
       "⚡ Zeus",
       "🛁 Chihiro",
       "🚀 Han",
+      "🐐 Jordan",
+      "🍩 Leia",
     ],
   },
 ];

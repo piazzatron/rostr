@@ -43,7 +43,7 @@ const COMMAND_GROUPS: CommandGroup[] = [
           "Interactive setup: answer a few questions and you're done. It's the only command you need to run, and your agent can run it for you with flags.",
         options: [
           { flag: "--preset <id>", description: "Skip the preset question. See them all with rostr presets." },
-          { flag: "--size <n>|all", description: "How many of the preset's members are on your team, from the top of its list. Defaults to 6; all takes everyone. Only with --preset." },
+          { flag: "--size <n>|all", description: "How many of the preset's members are on your team, from the top of its list. Defaults to 16; all takes everyone. Only with --preset." },
           { flag: "--names <list>", description: "Use your own comma-separated names, in draft order, with an emoji in front if you like. Names without an emoji get a random one." },
           { flag: "--emoji on|off|only", description: "How agents show up. Defaults to on." },
           { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr cloud on." },
@@ -254,8 +254,8 @@ $ rostr config emoji only
       </dd>
       <dt>Team size</dt>
       <dd>
-        A pre-built roster is a big cast to pick from. When you assemble one, your team is its first six, or pick 4,
-        10, or everyone. Then swap any player for someone else on that roster in the cast editor.
+        A pre-built roster is a big cast to pick from. When you assemble one, your team is its first 16, or pick 4,
+        8, or everyone. Then pick anyone else on that roster, or add your own, in the cast editor.
       </dd>
       <dt>Local or cloud</dt>
       <dd>

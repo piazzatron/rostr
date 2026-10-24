@@ -28,8 +28,8 @@ A roster is a named list of members, each a name and an emoji, in draft order. A
   emoji, members), each with more members than anyone needs, the best-known first. Free Agents is a new random draw
   from the other presets each time it's used, the same size as the listed one, with no two members sharing a name or
   emoji.
-- **Team size.** A roster made from a preset takes its first few members: 4, 6 (the default), 10, or everyone. The
-  rest of the preset can be swapped in for anyone on the team while assembling.
+- **Team size.** A roster made from a preset takes its first few members: 4, 8, 16 (the default), or everyone. Every
+  preset has at least 16. Anyone else on the preset can be picked while assembling.
 - **Names match loosely.** Member and roster names match ignoring case and accents, so `rostr bench eowyn`
   finds Éowyn. A roster can't have two members whose names match this way, and you can't have two rosters whose
   names do.
@@ -116,14 +116,14 @@ rostr assemble [<roster>] [--preset <id> [--size <n>|all] | --names <list>] [--e
 
 Interactive setup. The wizard runs full-screen: how to build the roster (a pre-built roster, with a preview of its
 cast; Free Agents, a random mix from every roster; or your own names), then for a pre-built roster or Free Agents how
-big a team to take (4, 6, 10, or everyone, with a preview of who that is), then the cast editor, then one last page that shows the cast and confirms every setting with its default: roster name, emoji, and,
+big a team to take (4, 8, 16, or everyone, with a preview of who that is), then the cast editor, then one last page that shows the cast and confirms every setting with its default: roster name, emoji, and,
 on the first run, where rostr lives (the cloud by default, or this machine) and whether to draft every session
 automatically. Nothing is saved until the last page is done; shift+tab goes back, and esc cancels. Each question can be
 skipped with a flag, so an agent can run it non-interactively. Making a cloud setup at a terminal ends by printing the
 new rostr key and how to use it on other machines and in cloud environments.
 
 - `--preset <id>`: use a pre-built roster.
-- `--size <n>|all`: how many of the preset's members to take, from the top of its list. Defaults to 6; more than the
+- `--size <n>|all`: how many of the preset's members to take, from the top of its list. Defaults to 16; more than the
   preset has takes everyone. Only with `--preset`.
 - `--names <list>`: comma-separated names, each optionally with an emoji (`"🧮 Ada, Grace"`), in draft order. Names
   without an emoji get a random one.
@@ -182,12 +182,14 @@ Opens the roster in the cast editor (see below) to add, rename, and remove membe
 page for the roster's emoji mode and a Save button. Terminal only. To swap in a
 whole new cast, run `rostr assemble` and choose to replace the roster's cast.
 
-- **The cast editor** is one list, in draft order. ↑/↓ moves, `s` (or space) swaps the highlighted member for
-  someone else from the preset the cast came from (a list of everyone on it who isn't on the team; only while
-  assembling from a preset or Free Agents), `a` adds to the end (one name, or several separated by commas, each with
-  an optional emoji in front; a preset member's name alone gets their emoji), `r` renames (and changes the emoji, if
-  one is typed), `x` removes, and enter finishes. Names without an emoji get one no one else on the roster has. It starts adding straight away for an empty
-  cast. `rostr assemble` uses the same editor for every new cast, prefilled from the preset or Free Agents.
+- **The cast editor** lists everyone the cast can come from (the whole preset, or the roster being edited) with a
+  checkbox each, and the team picked so far beside it (when the terminal is wide enough). ↑/↓ moves, space (or `x`)
+  picks or unpicks the highlighted member, `a` adds your own (one name, or several separated by commas, each with an
+  optional emoji in front; they join the end of the list, picked, and a name already on the list is just picked), `r`
+  renames (and changes the emoji, if one is typed), and enter finishes. The team is everyone picked, in the list's
+  order. Names without an emoji get one no one else on the list has. It starts adding straight away for an empty
+  list. `rostr assemble` uses the same editor for every new cast, with the team size's members picked; in
+  `rostr edit`, unpicking someone removes them.
 
 - Refuses to save an edit that renames or removes a drafted member. Wait for their session to end, or release them
   first.

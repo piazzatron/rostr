@@ -172,16 +172,16 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	}
 	s.ok(s.home, nil, "create", "play", "--names", "🧮 Ada, Grace", "--emoji", "off")
 	s.fails(s.home, nil, `already have a roster named "work"`, "assemble", "WORK", "--preset", "hogwarts")
-	s.ok(s.home, nil, "assemble", "--preset", "hogwarts", "--size", "all")
+	s.ok(s.home, nil, "assemble", "--preset", "hogwarts", "--size", "4")
 	s.fails(s.home, nil, "--preset", "assemble")
 	s.fails(s.home, nil, "rostr cloud on", "assemble", "x", "--preset", "kanto", "--cloud")
 	s.fails(s.home, nil, "--size must be a number", "assemble", "x", "--preset", "kanto", "--size", "lots")
 	s.fails(s.home, nil, "needs --preset", "assemble", "x", "--size", "4")
 
-	// A preset's team is its first six unless --size says otherwise
+	// A preset's team is its first 16 unless --size says otherwise
 	listing := s.list()
-	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Bench) != 6 ||
-		len(listing.Rosters[2].Bench) != 14 {
+	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Bench) != 16 ||
+		len(listing.Rosters[2].Bench) != 4 {
 		t.Fatalf("list: %+v", listing)
 	}
 	if text := s.ok(s.home, nil, "stats", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {

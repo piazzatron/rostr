@@ -22,7 +22,7 @@ body:
     id: members
     attributes:
       label: Members
-      description: One per line, each with an emoji, the best-known first. A team of six takes the first six.
+      description: At least 16, one per line, each with an emoji, the best-known first. A team of n takes the first n.
       placeholder: |
         🧙 Gandalf
         💍 Frodo

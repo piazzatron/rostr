@@ -37,9 +37,9 @@ func TestPresetsAreValidRosters(t *testing.T) {
 		if err := roster.ValidateCast(p.Members, roster.EmojiOnly); err != nil {
 			t.Errorf("%s: %v", p.ID, err)
 		}
-		// Every team size assemble offers leaves someone to swap in
-		if largest := slices.Max(presets.TeamSizes); len(p.Members) <= largest {
-			t.Errorf("%s: %d members, no more than the largest team size (%d)", p.ID, len(p.Members), largest)
+		// Every team size assemble offers fits
+		if largest := slices.Max(presets.TeamSizes); len(p.Members) < largest {
+			t.Errorf("%s: %d members, fewer than the largest team size (%d)", p.ID, len(p.Members), largest)
 		}
 	}
 	if _, ok := presets.ByID("fellowship"); !ok {

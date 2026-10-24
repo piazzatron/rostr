@@ -5,8 +5,8 @@ Thanks for helping out. Bug reports, fixes, and new rosters are all welcome.
 ## Submitting a roster
 
 The easiest contribution: [open a roster submission](https://github.com/piazzatron/rostr/issues/new?template=roster-submission.yml)
-with the roster's name, where it's from, and its members, each with an emoji, the best-known first: a team of six takes
-the first six.
+with the roster's name, where it's from, and its members, each with an emoji, at least 16, the best-known first: a team of n takes
+the first n.
 
 To add one yourself, edit [`site/src/data/rosters.ts`](site/src/data/rosters.ts), then regenerate the CLI's copy:
 

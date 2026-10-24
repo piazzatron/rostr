@@ -53,6 +53,8 @@ var all = []Preset{
 			{Name: "Lupin", Emoji: "🐺"},
 			{Name: "Fred", Emoji: "🎆"},
 			{Name: "George", Emoji: "🎇"},
+			{Name: "Dobby", Emoji: "🧦"},
+			{Name: "Draco", Emoji: "🐍"},
 		},
 	},
 	{
@@ -75,6 +77,8 @@ var all = []Preset{
 			{Name: "Jigglypuff", Emoji: "🎤"},
 			{Name: "Peach", Emoji: "👸"},
 			{Name: "Bowser", Emoji: "🐢"},
+			{Name: "Zelda", Emoji: "🔺"},
+			{Name: "Ganondorf", Emoji: "🐗"},
 		},
 	},
 	{
@@ -97,6 +101,8 @@ var all = []Preset{
 			{Name: "Jokić", Emoji: "🃏"},
 			{Name: "Giannis", Emoji: "🦌"},
 			{Name: "Dirk", Emoji: "🦩"},
+			{Name: "Hakeem", Emoji: "🌪️"},
+			{Name: "Durant", Emoji: "🦒"},
 		},
 	},
 	{
@@ -119,6 +125,8 @@ var all = []Preset{
 			{Name: "Finn", Emoji: "🪖"},
 			{Name: "Poe", Emoji: "✈️"},
 			{Name: "Mace", Emoji: "💜"},
+			{Name: "Mando", Emoji: "🛡️"},
+			{Name: "Grogu", Emoji: "🥚"},
 		},
 	},
 	{
@@ -141,6 +149,8 @@ var all = []Preset{
 			{Name: "Kelly", Emoji: "💅"},
 			{Name: "Ryan", Emoji: "🔥"},
 			{Name: "Toby", Emoji: "🥲"},
+			{Name: "Darryl", Emoji: "🎹"},
+			{Name: "Erin", Emoji: "🌻"},
 		},
 	},
 	{
@@ -163,6 +173,8 @@ var all = []Preset{
 			{Name: "Arnault", Emoji: "👜"},
 			{Name: "Branson", Emoji: "🎈"},
 			{Name: "Andreessen", Emoji: "🥚"},
+			{Name: "Page", Emoji: "🔍"},
+			{Name: "Bloomberg", Emoji: "📈"},
 		},
 	},
 	{
@@ -185,6 +197,8 @@ var all = []Preset{
 			{Name: "von Neumann", Emoji: "🖥️"},
 			{Name: "Berners-Lee", Emoji: "🌐"},
 			{Name: "Thompson", Emoji: "🧵"},
+			{Name: "Engelbart", Emoji: "🖱️"},
+			{Name: "Carmack", Emoji: "🎮"},
 		},
 	},
 	{
@@ -207,6 +221,8 @@ var all = []Preset{
 			{Name: "Benjamin", Emoji: "👼"},
 			{Name: "Butler", Emoji: "🎭"},
 			{Name: "Deleuze", Emoji: "🌿"},
+			{Name: "Wittgenstein", Emoji: "🪜"},
+			{Name: "Plato", Emoji: "🕯️"},
 		},
 	},
 	{
@@ -229,6 +245,8 @@ var all = []Preset{
 			{Name: "Ro", Emoji: "🧭"},
 			{Name: "Barclay", Emoji: "🎭"},
 			{Name: "Q", Emoji: "🃏"},
+			{Name: "Spot", Emoji: "🐈"},
+			{Name: "Lore", Emoji: "😈"},
 		},
 	},
 	{
@@ -251,6 +269,8 @@ var all = []Preset{
 			{Name: "Ant-Man", Emoji: "🐜"},
 			{Name: "Falcon", Emoji: "🦅"},
 			{Name: "Wasp", Emoji: "🐝"},
+			{Name: "Captain Marvel", Emoji: "🌟"},
+			{Name: "Nick Fury", Emoji: "👁️"},
 		},
 	},
 	{
@@ -273,6 +293,8 @@ var all = []Preset{
 			{Name: "Samwell", Emoji: "📜"},
 			{Name: "Varys", Emoji: "🕷️"},
 			{Name: "Hodor", Emoji: "🚪"},
+			{Name: "Littlefinger", Emoji: "🪙"},
+			{Name: "The Hound", Emoji: "🐕"},
 		},
 	},
 	{
@@ -295,6 +317,8 @@ var all = []Preset{
 			{Name: "Ashitaka", Emoji: "🦌"},
 			{Name: "Porco", Emoji: "🐷"},
 			{Name: "No-Face", Emoji: "🎭"},
+			{Name: "Catbus", Emoji: "🚌"},
+			{Name: "Yubaba", Emoji: "💰"},
 		},
 	},
 	{
@@ -317,6 +341,8 @@ var all = []Preset{
 			{Name: "Dionysus", Emoji: "🍇"},
 			{Name: "Hades", Emoji: "💀"},
 			{Name: "Persephone", Emoji: "🌸"},
+			{Name: "Prometheus", Emoji: "🔥"},
+			{Name: "Heracles", Emoji: "🦁"},
 		},
 	},
 	{
@@ -339,6 +365,8 @@ var all = []Preset{
 			{Name: "Onix", Emoji: "🪨"},
 			{Name: "Magikarp", Emoji: "🐟"},
 			{Name: "Dragonite", Emoji: "🐲"},
+			{Name: "Mew", Emoji: "💗"},
+			{Name: "Lapras", Emoji: "🌊"},
 		},
 	},
 	{
@@ -361,6 +389,8 @@ var all = []Preset{
 			{Name: "Tyrol", Emoji: "🔧"},
 			{Name: "Six", Emoji: "💃"},
 			{Name: "Anders", Emoji: "🎸"},
+			{Name: "Zarek", Emoji: "✊"},
+			{Name: "Cally", Emoji: "🪛"},
 		},
 	},
 	{
@@ -383,6 +413,8 @@ var all = []Preset{
 			{Name: "Annie", Emoji: "💎"},
 			{Name: "Zeke", Emoji: "🐒"},
 			{Name: "Bertholdt", Emoji: "🌋"},
+			{Name: "Falco", Emoji: "🕊️"},
+			{Name: "Gabi", Emoji: "🎯"},
 		},
 	},
 	{
@@ -405,6 +437,8 @@ var all = []Preset{
 			{Name: "Neji", Emoji: "👁️"},
 			{Name: "Choji", Emoji: "🍖"},
 			{Name: "Ino", Emoji: "🌼"},
+			{Name: "Minato", Emoji: "💛"},
+			{Name: "Orochimaru", Emoji: "🐍"},
 		},
 	},
 	{
@@ -427,6 +461,8 @@ var all = []Preset{
 			{Name: "Williams", Emoji: "🪵"},
 			{Name: "Ripken", Emoji: "🦾"},
 			{Name: "Rivera", Emoji: "🚪"},
+			{Name: "Cobb", Emoji: "🍑"},
+			{Name: "Griffey", Emoji: "🧒"},
 		},
 	},
 	{
@@ -449,6 +485,8 @@ var all = []Preset{
 			{Name: "Gronk", Emoji: "🎉"},
 			{Name: "Lewis", Emoji: "🐦\u200d⬛"},
 			{Name: "White", Emoji: "⛪"},
+			{Name: "Marino", Emoji: "🐬"},
+			{Name: "Elway", Emoji: "🐴"},
 		},
 	},
 	{
@@ -471,6 +509,8 @@ var all = []Preset{
 			{Name: "Jágr", Emoji: "💇"},
 			{Name: "Selänne", Emoji: "⚡"},
 			{Name: "Lidström", Emoji: "🧠"},
+			{Name: "Brodeur", Emoji: "🥅"},
+			{Name: "Bossy", Emoji: "🎯"},
 		},
 	},
 	{
@@ -493,6 +533,8 @@ var all = []Preset{
 			{Name: "Zeus", Emoji: "⚡"},
 			{Name: "Chihiro", Emoji: "🛁"},
 			{Name: "Han", Emoji: "🚀"},
+			{Name: "Jordan", Emoji: "🐐"},
+			{Name: "Leia", Emoji: "🍩"},
 		},
 	},
 }

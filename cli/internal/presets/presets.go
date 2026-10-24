@@ -21,10 +21,11 @@ type Preset struct {
 }
 
 // TeamSizes are the team sizes `rostr assemble` offers for a preset, besides everyone on it.
-var TeamSizes = []int{4, 6, 10}
+var TeamSizes = []int{4, 8, 16}
 
-// DefaultTeamSize is how many of a preset's members a new roster takes unless you pick another size.
-const DefaultTeamSize = 6
+// DefaultTeamSize is how many of a preset's members a new roster takes unless you pick another size. Every preset has
+// at least this many.
+const DefaultTeamSize = 16
 
 // FreeAgentsID is the preset that mixes everyone else's characters.
 const FreeAgentsID = "free-agents"

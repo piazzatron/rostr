@@ -2,18 +2,14 @@
 import Layout from "../layouts/Layout.astro";
 import { SUBMIT_ROSTER_URL } from "../consts";
 import { PRESET_ROSTERS } from "../data/rosters";
-
-// Assembling from a preset takes its first six members unless you pick another team size; they're highlighted below
-const DEFAULT_TEAM_SIZE = 6;
 ---
 
 <Layout title="rostr pre-built rosters" description="Every pre-built rostr roster and all its members.">
   <section class="rosters-hero">
     <h1>Pre-built rosters</h1>
     <p class="lede">
-      Pick one with <code>rostr assemble --preset &lt;id&gt;</code>, or let <code>rostr assemble</code> walk you
-      through it. Your team starts as the first six, highlighted below: pick a smaller or bigger team, or swap in
-      anyone else on the roster. Made one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
+      Set one up with <code>rostr assemble</code>. Teams default to 16 members, but you can pick another size. Made
+      one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
     </p>
     <nav class="franchises" aria-label="Franchises">
       {PRESET_ROSTERS.map((roster) => (
@@ -36,9 +32,7 @@ const DEFAULT_TEAM_SIZE = 6;
           </header>
           <b class="members-label">{roster.members.length} members</b>
           <div class="chips">
-            {roster.members.map((member, index) => (
-              <span class:list={["chip", index < DEFAULT_TEAM_SIZE ? "chip-a" : "chip-rest"]}>{member}</span>
-            ))}
+            {roster.members.map((member) => <span class="chip">{member}</span>)}
           </div>
         </article>
       ))}
@@ -116,13 +110,6 @@ const DEFAULT_TEAM_SIZE = 6;
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-  }
-
-  /* Members past the default team of six are gray, like on the home page */
-  .chip-rest {
-    border-color: color-mix(in srgb, var(--muted) 30%, transparent);
-    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
-    color: var(--muted);
   }
 
   @media (max-width: 640px) {
