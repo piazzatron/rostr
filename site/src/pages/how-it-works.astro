@@ -78,8 +78,12 @@ import Rostr from "../components/Rostr.astro";
       and Slack messages. After compaction, it's told again.
     </p>
     <p>
-      Commands the agent runs, like <code>rostr task</code>, find their session through <code>ROSTR_SESSION</code>,
-      which the start hook sets to the Claude Code session's ID. In Codex, they use <code>CODEX_THREAD_ID</code>.
+      Commands the agent runs, like <code>rostr task</code>, need to know which session they're in. In Claude Code, the
+      start hook appends <code>export ROSTR_SESSION=&lt;session ID&gt;</code> to the session's env file (the path Claude
+      Code passes in <code>CLAUDE_ENV_FILE</code>), and Claude Code loads that file before every shell command the agent
+      runs. Codex sets <code>CODEX_THREAD_ID</code> in its commands' environment itself, so <Rostr /> reads that. The
+      <code>rostr task</code> command the agent is told to run also names the session with <code>--session</code>, so
+      it works even where neither variable is set.
     </p>
   </section>
 
