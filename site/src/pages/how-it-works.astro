@@ -196,8 +196,9 @@ import Rostr from "../components/Rostr.astro";
         then ends the turn, so your answer stays the last message.
       </li>
       <li>
-        <strong>Remote Control and cloud sessions:</strong> the agent sets the title first, then answers. Setting it last
-        doesn't work there, because those apps can show the answer twice.
+        <strong>Remote Control and cloud sessions:</strong> the agent sets the title first, then answers. Those apps
+        show text written just before a tool call as a progress update, so an answer followed by a title call would show
+        up once as an update, then again in full.
       </li>
     </ul>
   </section>
