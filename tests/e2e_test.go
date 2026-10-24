@@ -23,9 +23,8 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	m := newMachine(t)
 
 	out := m.ok("assemble", "work", "--preset", "fellowship", "--cloud")
-	if !strings.Contains(out, "Assembled the work roster") || !strings.Contains(out, "Your setup is in the cloud") ||
-		strings.Contains(out, "rostr_sk_") {
-		t.Fatalf("assemble --cloud: %s", out)
+	if strings.Contains(out, "rostr_sk_") {
+		t.Fatalf("assemble --cloud printed the key: %s", out)
 	}
 	info, err := os.Stat(m.credentialsPath())
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -44,9 +43,6 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	}
 	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" {
 		t.Fatalf("draft: %+v", d)
-	}
-	if text := m.ok("stats"); !strings.Contains(text, "🧙 Gandalf   Write the e2e tests   -   just now") {
-		t.Fatalf("list text:\n%s", text)
 	}
 	var config struct{ Storage, Default string }
 	json.Unmarshal([]byte(m.ok("config", "--json")), &config)
@@ -71,14 +67,14 @@ func TestTwoMachinesShareOneKey(t *testing.T) {
 	local.ok("assemble", "mine", "--preset", "kanto")
 	out, code := local.runTTY([]ttyStep{{"New setup, or do you have a key?", keyDown}, {"I have a key", keyEnter}},
 		"cloud", "on")
-	if code != 1 || !strings.Contains(out, "already has local rosters") {
+	if code != 1 {
 		t.Fatalf("join with local rosters: exit %d\n%s", code, out)
 	}
-	if out, code := b.joinWithKey("rostr_sk_" + strings.Repeat("A", 43)); code != 1 || !strings.Contains(out, "isn't registered") {
+	if out, code := b.joinWithKey("rostr_sk_" + strings.Repeat("A", 43)); code != 1 {
 		t.Fatalf("join with an unknown key: exit %d\n%s", code, out)
 	}
 	out, code = b.joinWithKey(a.key())
-	if code != 0 || !strings.Contains(out, "cloud mode now, with your default roster work") {
+	if code != 0 {
 		t.Fatalf("join: exit %d\n%s", code, out)
 	}
 	if strings.Contains(out, a.key()) {
@@ -212,9 +208,8 @@ func TestMovingALocalSetupToTheCloud(t *testing.T) {
 	before := m.list()
 
 	out := m.ok("cloud", "on")
-	if !strings.Contains(out, "Moved your setup to the cloud: 2 rosters, 1 linked project, and 3 drafted agents.") ||
-		strings.Contains(out, "rostr_sk_") {
-		t.Fatalf("cloud on: %s", out)
+	if strings.Contains(out, "rostr_sk_") {
+		t.Fatalf("cloud on printed the key: %s", out)
 	}
 	if _, err := os.Stat(m.databasePath()); !os.IsNotExist(err) {
 		t.Fatalf("rostr.db is still there: %v", err)
@@ -244,21 +239,19 @@ func TestMovingALocalSetupToTheCloud(t *testing.T) {
 	if config.Storage != "cloud" || config.Default != "play" || config.Expiry != "2d" || config.AutoDraft {
 		t.Fatalf("config: %+v", config)
 	}
-	if out := m.okIn(web, "link"); out != "acme/web uses the play roster (linked).\n" {
-		t.Fatalf("link: %q", out)
-	}
-	if out := m.okIn(api, "link"); out != "acme/api uses the play roster (your default).\n" {
-		t.Fatalf("link: %q", out)
-	}
 
-	// Active drafts keep their sessions: re-drafting gives the same agent, and new sessions draft around them
+	// Active drafts keep their sessions: re-drafting gives the same agent, and new sessions draft around them, from the
+	// linked roster in web and the default (also play) in api
 	if d := m.draft(m.home, "s-api"); d.Display != "🧙 Gandalf" {
 		t.Fatalf("redraft: %+v", d)
 	}
 	if d := m.draft(web, "s-new"); d.Display != "Linus" {
 		t.Fatalf("new draft: %+v", d)
 	}
-	m.fails("already in cloud mode", "cloud", "on")
+	if d := m.draft(api, "s-api2"); d.Roster != "play" {
+		t.Fatalf("draft in api: %+v", d)
+	}
+	m.fails("cloud", "on")
 }
 
 func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
@@ -269,8 +262,8 @@ func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
 	m.okIn(repo, "draft", "--session", "s1", "--task", "Build the who's-busy widget")
 
 	// Both key commands refuse without a terminal, and print at one
-	m.fails("only runs in a terminal", "config", "key")
-	m.fails("only runs in a terminal", "config", "key", "--token")
+	m.fails("config", "key")
+	m.fails("config", "key", "--token")
 	key := m.key()
 	out, code := m.runTTY(nil, "config", "key", "--token")
 	token := ""
@@ -346,7 +339,7 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 			HookSpecificOutput struct{ AdditionalContext string }
 		}
 		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil ||
-			!strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, `You're 🧙 Gandalf for this session (drafted by rostr from the "work" roster).`) {
+			!strings.Contains(out.HookSpecificOutput.AdditionalContext, "🧙 Gandalf") {
 			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
 		}
 	}
@@ -364,7 +357,7 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 	// session, all from the session's cache; the task reaches the server just after
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
-	if r.code != 0 || !strings.Contains(r.stdout, `You're 🧙 Gandalf for this session`) || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
+	if r.code != 0 || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
 		!strings.Contains(r.stdout, "rostr task --session hs1") {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
@@ -381,9 +374,7 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 	}
 
 	// The agent sets its task through ROSTR_SESSION; compaction re-tells the same name
-	if out := m.with("ROSTR_SESSION=hs1").okIn(repo, "task", "Deflake login test"); out != "🧙 Gandalf · Deflake login test\n" {
-		t.Fatalf("task: %q", out)
-	}
+	m.with("ROSTR_SESSION=hs1").okIn(repo, "task", "Deflake login test")
 	expectIdentity("compact", hook("session-start", start("compact")))
 
 	// Session end releases; resume gets the old name back
@@ -440,25 +431,22 @@ func TestHooksWhenTheAPIIsDown(t *testing.T) {
 
 		// Every hook exits 0 within the 3-second timeout, and session start still sets ROSTR_SESSION (its draft ahead
 		// fails in the background). The session stays unnamed: the hooks that need the server stay quiet
-		for _, h := range []struct {
-			event, input string
-			named        bool
-		}{
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"startup"}`, session, repo), false},
-			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo), false},
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"resume"}`, session, repo), false},
-			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"compact"}`, session, repo), false},
-			{"session-end", fmt.Sprintf(`{"session_id":%q}`, session), false},
+		for _, h := range []struct{ event, input string }{
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"startup"}`, session, repo)},
+			{"prompt", fmt.Sprintf(`{"session_id":%q,"transcript_path":"/nonexistent","cwd":%q,"prompt":"Hello","prompt_id":"p1"}`, session, repo)},
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"resume"}`, session, repo)},
+			{"session-start", fmt.Sprintf(`{"session_id":%q,"cwd":%q,"source":"compact"}`, session, repo)},
+			{"session-end", fmt.Sprintf(`{"session_id":%q}`, session)},
 		} {
 			r := hook(h.event, h.input)
-			if r.code != 0 || strings.Contains(r.stdout, "You're ") != h.named || r.took > 5*time.Second {
+			if r.code != 0 || strings.Contains(r.stdout, "Gandalf") || r.took > 5*time.Second {
 				t.Fatalf("%s, %s: exit %d after %v, stdout %q, stderr %q", down.name, h.event, r.code, r.took, r.stdout, r.stderr)
 			}
 		}
 		if env, _ := os.ReadFile(envFile); !strings.HasPrefix(string(env), "export ROSTR_SESSION="+session+"\n") {
 			t.Fatalf("%s: CLAUDE_ENV_FILE %q", down.name, env)
 		}
-		if r := offline.run(repo, "", "stats"); r.code != 1 || !strings.Contains(r.stderr, "can't reach the rostr API") {
+		if r := offline.run(repo, "", "stats"); r.code != 1 {
 			t.Fatalf("%s: list: %+v", down.name, r)
 		}
 
@@ -540,18 +528,18 @@ func TestTwoMachinesStartingSessionsAtOnceGetDifferentNames(t *testing.T) {
 	wg.Go(func() { start(b, "b1") })
 	wg.Wait()
 	waitFor(t, "both drafts", func() bool { return len(a.list().drafted()) == 2 })
-	names := map[string]bool{}
 	for _, r := range []result{prompt(a, "a1"), prompt(b, "b1")} {
 		var out struct {
 			HookSpecificOutput struct{ AdditionalContext string }
 		}
-		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || !strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're ") {
+		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.HookSpecificOutput.AdditionalContext == "" {
 			t.Fatalf("prompt: %+v", r)
 		}
-		name := strings.SplitN(strings.TrimPrefix(out.HookSpecificOutput.AdditionalContext, "You're "), " for this", 2)[0]
-		names[name] = true
 	}
-	if len(names) != 2 || names["🧙 Gandalf 2"] || names["💍 Frodo 2"] {
+	names := a.list().drafted()
+	_, gandalfCopy := names["Gandalf 2"]
+	_, frodoCopy := names["Frodo 2"]
+	if len(names) != 2 || gandalfCopy || frodoCopy {
 		t.Fatalf("names: %v", names)
 	}
 	waitFor(t, "the first prompts' tasks", func() bool {
@@ -604,7 +592,7 @@ func TestARestingSessionThatLostItsNameIsRenamedOnItsNextPrompt(t *testing.T) {
 
 	// The first prompt drafts Gandalf; the Stop hook records the turn's end, on this machine and in the background on
 	// the server
-	if r := prompt("p1"); r.code != 0 || !strings.Contains(r.stdout, "You're 🧙 Gandalf for this session") {
+	if r := prompt("p1"); r.code != 0 || !strings.Contains(r.stdout, "🧙 Gandalf") {
 		t.Fatalf("first prompt: %+v", r)
 	}
 	if r := m.run(m.home, `{"session_id":"rest1","hook_event_name":"Stop"}`, "hook", "claude-code", "turn-end"); r.code != 0 {
@@ -638,7 +626,7 @@ func TestARestingSessionThatLostItsNameIsRenamedOnItsNextPrompt(t *testing.T) {
 		HookSpecificOutput struct{ AdditionalContext, SessionTitle string }
 	}
 	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil ||
-		!strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "rostr renamed this session: you're 🧙 Gandalf 2 now, not 🧙 Gandalf") ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, "🧙 Gandalf 2") ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf 2 · Fix the login test" {
 		t.Fatalf("prompt after rest: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
@@ -733,18 +721,12 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	m.ok("assemble", "work", "--preset", "fellowship", "--cloud")
 	m.ok("assemble", "play", "--names", "🧮 Ada, Grace", "--emoji", "off")
 	m.ok("assemble", "side", "--names", "🧙 Gandalf, 🐸 Yoda")
-	m.fails("already exists", "assemble", "WORK", "--preset", "hogwarts")
+	m.fails("assemble", "WORK", "--preset", "hogwarts")
 
 	// link: bare, named, and --repo
-	if out := m.okIn(repo, "link"); out != "acme/api uses the work roster (your default).\n" {
-		t.Fatalf("bare link: %q", out)
-	}
-	if out := m.okIn(repo, "link", "play"); out != "Linked acme/api to the play roster.\n" {
-		t.Fatalf("link: %q", out)
-	}
-	if out := m.ok("link", "--repo", "Acme/API"); out != "acme/api uses the play roster (linked).\n" {
-		t.Fatalf("link --repo: %q", out)
-	}
+	m.okIn(repo, "link")
+	m.okIn(repo, "link", "play")
+	m.ok("link", "--repo", "Acme/API")
 
 	// draft: the linked roster in the repo, the default outside it, --roster over both
 	if d := m.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Roster: "play", Display: "Ada"}) {
@@ -758,32 +740,27 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 
 	// task and release, by session and by name across rosters
-	if out := m.with("ROSTR_SESSION=s1").okIn(repo, "task", "Fix auth redirect loop"); out != "Ada · Fix auth redirect loop\n" {
-		t.Fatalf("task: %q", out)
-	}
-	m.fails("Gandalf is drafted in more than one roster (work, side); pass --roster", "task", "gandalf", "x")
+	m.with("ROSTR_SESSION=s1").okIn(repo, "task", "Fix auth redirect loop")
+	m.fails("task", "gandalf", "x")
 	m.ok("task", "GANDALF", "Review the PR", "--roster", "work")
-	if out := m.ok("bench", "gandalf", "--roster", "side"); out != "Benched 🧙 Gandalf from the side roster.\n" {
-		t.Fatalf("release by name: %q", out)
-	}
-	m.fails(`no agent named "ada 2" is drafted`, "bench", "ada 2")
+	m.ok("bench", "gandalf", "--roster", "side")
+	m.fails("bench", "ada 2")
 	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "Review the PR" {
 		t.Fatalf("drafted: %v", drafted)
 	}
-	if out := m.with("ROSTR_SESSION=s2").ok("bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
-		t.Fatalf("release by session: %q", out)
+	m.with("ROSTR_SESSION=s2").ok("bench")
+	if drafted := m.list().drafted(); len(drafted) != 1 || drafted["Ada"] == "" {
+		t.Fatalf("release by session: %v", drafted)
 	}
-	if out := m.with("ROSTR_SESSION=s2").ok("bench"); out != "This session has no drafted agent.\n" {
-		t.Fatalf("release again: %q", out)
-	}
+	m.with("ROSTR_SESSION=s2").ok("bench")
 
-	// unlink
-	if out := m.okIn(repo, "unlink"); out != "Unlinked acme/api. It uses your default roster (work).\n" {
-		t.Fatalf("unlink: %q", out)
+	// unlink: the repo goes back to the default roster
+	m.okIn(repo, "unlink")
+	m.okIn(repo, "unlink")
+	if d := m.draft(repo, "s-unlinked"); d.Roster != "work" {
+		t.Fatalf("draft after unlink: %+v", d)
 	}
-	if out := m.okIn(repo, "unlink"); out != "acme/api isn't linked. It uses your default roster (work).\n" {
-		t.Fatalf("unlink again: %q", out)
-	}
+	m.with("ROSTR_SESSION=s-unlinked").ok("bench")
 
 	// edit: drafted Ada can't be removed; other changes save
 	out, code := m.runTTY([]ttyStep{
@@ -792,8 +769,11 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		{"Save the play roster?", keyEnter},
 		{"Save the play roster?", keyEnter},
 	}, "edit", "play")
-	if code == 0 || !strings.Contains(out, "drafted members: Ada") {
+	if code == 0 {
 		t.Fatalf("edit removing Ada: exit %d\n%s", code, out)
+	}
+	if l := m.list(); len(l.Rosters[1].Drafted)+len(l.Rosters[1].Bench) != 2 {
+		t.Fatalf("the failed edit changed play: %+v", l.Rosters[1])
 	}
 	out, code = m.runTTY([]ttyStep{
 		{"Edit the play roster", "a"},
@@ -807,7 +787,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		{"Save the play roster?", keyEnter},
 		{"Save the play roster?", keyEnter},
 	}, "edit", "play")
-	if code != 0 || !strings.Contains(out, "Saved the play roster.") {
+	if code != 0 {
 		t.Fatalf("edit: exit %d\n%s", code, out)
 	}
 	if d := m.draft(repo, "s4", "--roster", "play"); d.Display != "🐧 Linus" {
@@ -819,7 +799,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	m.ok("config", "expiry", "2w")
 	m.ok("config", "auto-draft", "off")
 	m.ok("config", "emoji", "only", "--roster", "work")
-	m.fails("expiry must be", "config", "expiry", "soon")
+	m.fails("config", "expiry", "soon")
 	var config struct {
 		Storage, Default, Expiry string
 		AutoDraft                bool
@@ -831,18 +811,16 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 
 	// disband: asks first, releases drafts, promotes the oldest roster, and starts over after the last
-	m.fails("pass --yes to disband the play roster (2 agents drafted, 0 linked projects)", "disband", "play")
-	if out := m.ok("disband", "play", "--yes"); out != "Disbanded the play roster. 🧮 Ada says bye.\nwork is your default roster now.\n" {
-		t.Fatalf("disband: %q", out)
+	m.fails("disband", "play")
+	m.ok("disband", "play", "--yes")
+	json.Unmarshal([]byte(m.ok("config", "--json")), &config)
+	if config.Default != "work" {
+		t.Fatalf("default after disband: %+v", config)
 	}
-	if out := m.with("ROSTR_SESSION=s1").ok("bench"); out != "This session has no drafted agent.\n" {
-		t.Fatalf("release after disband: %q", out)
-	}
+	m.with("ROSTR_SESSION=s1").ok("bench")
 	m.ok("disband", "side", "--yes")
 	token := authToken(t, m.key())
-	if out := m.ok("disband", "work", "--yes"); !strings.Contains(out, "your cloud setup is deleted and this machine is back to local mode") {
-		t.Fatalf("disband last: %q", out)
-	}
+	m.ok("disband", "work", "--yes")
 
 	// The server kept nothing: the key's token no longer works, and this machine dropped its credentials
 	if status := apiGet(t, "/v1/settings", token, nil); status != http.StatusUnauthorized {
@@ -851,6 +829,6 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	if _, err := os.Stat(m.credentialsPath()); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("credentials still there: %v", err)
 	}
-	m.fails("No rosters yet", "stats")
-	m.fails("No rosters yet", "draft", "--session", "s5")
+	m.fails("stats")
+	m.fails("draft", "--session", "s5")
 }

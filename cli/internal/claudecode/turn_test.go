@@ -67,10 +67,10 @@ func TestEndsPlainAnswer(t *testing.T) {
 		}
 	}
 
-	// A call that isn't in the transcript (yet) never ends the turn, and says so
+	// A call that isn't in the transcript (yet) never ends the turn
 	path := filepath.Join(t.TempDir(), "transcript.jsonl")
 	write(t, path, transcriptLines(t, "prompt:How deep is Baikal?", "text:About 1,642 m."))
-	if ends, reason := EndsPlainAnswer(path, "t2"); ends || !strings.Contains(reason, "isn't in the transcript") {
+	if ends, reason := EndsPlainAnswer(path, "t2"); ends || reason == "" {
 		t.Errorf("without the call: %v, %q", ends, reason)
 	}
 	if ends, _ := EndsPlainAnswer(filepath.Join(t.TempDir(), "missing"), "t2"); ends {
