@@ -576,19 +576,153 @@ func TestASessionOpenedButNeverPromptedGivesUpItsName(t *testing.T) {
 	waitFor(t, "the draft ahead", func() bool { return m.list().drafted()["Gandalf"] == "" && len(m.list().drafted()) == 1 })
 
 	// Twenty minutes with no prompt: the session is resting, so another session takes Gandalf rather than a copy
-	key, err := os.ReadFile(m.credentialsPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.Exec(context.Background(), `
+	_, err := db.Exec(context.Background(), `
 		update drafts set turn_ended_at = turn_ended_at - interval '20 minutes', drafted_at = drafted_at - interval '20 minutes'
-		where session_id = 'idle1' and owner_id = encode(sha256(decode(translate($1, '-_', '+/') || '=', 'base64')), 'hex')`,
-		authToken(t, strings.TrimSpace(string(key))))
+		where owner_id = $1 and session_id = 'idle1'`, m.ownerID())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if d := m.draft(m.home, "other"); d.Name != "Gandalf" {
 		t.Fatalf("other session drafted %+v, want Gandalf", d)
+	}
+}
+
+func TestARestingSessionThatLostItsNameIsRenamedOnItsNextPrompt(t *testing.T) {
+	t.Parallel()
+	m := newMachine(t)
+	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
+	prompt := func(promptID string) result {
+		input := fmt.Sprintf(`{"session_id":"rest1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the login test","prompt_id":%q}`, m.home, promptID)
+		return m.run(m.home, input, "hook", "claude-code", "prompt")
+	}
+	turnEnded := func() bool {
+		var ended *time.Time
+		db.QueryRow(context.Background(), "select turn_ended_at from drafts where owner_id = $1 and session_id = 'rest1' and benched_at is null",
+			m.ownerID()).Scan(&ended)
+		return ended != nil
+	}
+
+	// The first prompt drafts Gandalf; the Stop hook records the turn's end, on this machine and in the background on
+	// the server
+	if r := prompt("p1"); r.code != 0 || !strings.Contains(r.stdout, "You're 🧙 Gandalf for this session") {
+		t.Fatalf("first prompt: %+v", r)
+	}
+	if r := m.run(m.home, `{"session_id":"rest1","hook_event_name":"Stop"}`, "hook", "claude-code", "turn-end"); r.code != 0 {
+		t.Fatalf("turn end: %+v", r)
+	}
+	waitFor(t, "the turn's end to reach the server", turnEnded)
+
+	// Twenty minutes pass with no prompt, on both clocks: the session is resting, so a new session takes Gandalf
+	// rather than a copy
+	if _, err := db.Exec(context.Background(), "update drafts set turn_ended_at = turn_ended_at - interval '20 minutes' where owner_id = $1 and session_id = 'rest1'",
+		m.ownerID()); err != nil {
+		t.Fatal(err)
+	}
+	turnFile := filepath.Join(m.home, ".cache", "rostr", "turns", "rest1")
+	var end map[string]any
+	data, _ := os.ReadFile(turnFile)
+	if err := json.Unmarshal(data, &end); err != nil {
+		t.Fatalf("turn file %q: %v", data, err)
+	}
+	at, _ := time.Parse(time.RFC3339Nano, end["at"].(string))
+	end["at"] = at.Add(-20 * time.Minute)
+	data, _ = json.Marshal(end)
+	os.WriteFile(turnFile, data, 0o600)
+	if d := m.draft(m.home, "rest2"); d.Name != "Gandalf" {
+		t.Fatalf("new session drafted %+v, want Gandalf", d)
+	}
+
+	// The next prompt finds the name taken, drafts the session a copy, and tells the agent and the title
+	r := prompt("p2")
+	var out struct {
+		HookSpecificOutput struct{ AdditionalContext, SessionTitle string }
+	}
+	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil ||
+		!strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "rostr renamed this session: you're 🧙 Gandalf 2 now, not 🧙 Gandalf") ||
+		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf 2 · Fix the login test" {
+		t.Fatalf("prompt after rest: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	if _, err := os.Stat(turnFile); err == nil {
+		t.Fatal("the turn file outlived the reported start")
+	}
+	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Gandalf 2"] != "Fix the login test" {
+		t.Fatalf("drafted: %v", drafted)
+	}
+}
+
+func TestThePromptHookKeepsADraftAliveAtMostOnceAnHour(t *testing.T) {
+	t.Parallel()
+	m := newMachine(t)
+	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
+	m.ok("config", "expiry", "1d")
+	prompt := func(promptID string) {
+		t.Helper()
+		input := fmt.Sprintf(`{"session_id":"alive1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the login test","prompt_id":%q}`, m.home, promptID)
+		if r := m.run(m.home, input, "hook", "claude-code", "prompt"); r.code != 0 {
+			t.Fatalf("prompt %s: %+v", promptID, r)
+		}
+	}
+	unseenForTwoDays := func() {
+		t.Helper()
+		if _, err := db.Exec(context.Background(), "update drafts set last_seen_at = now() - interval '2 days' where owner_id = $1 and session_id = 'alive1'",
+			m.ownerID()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lastSeen := func() time.Duration {
+		t.Helper()
+		var seen time.Time
+		if err := db.QueryRow(context.Background(), "select last_seen_at from drafts where owner_id = $1 and session_id = 'alive1'",
+			m.ownerID()).Scan(&seen); err != nil {
+			t.Fatal(err)
+		}
+		return time.Since(seen)
+	}
+	markFile := filepath.Join(m.home, ".cache", "rostr", "keepalive", "alive1")
+
+	prompt("p1")
+	if _, err := os.Stat(markFile); err != nil {
+		t.Fatalf("drafting didn't mark the keep-alive: %v", err)
+	}
+
+	// Within the hour, a prompt makes no call, so the draft's last-seen time stays where it was
+	unseenForTwoDays()
+	prompt("p2")
+	if lastSeen() < 47*time.Hour {
+		t.Fatal("a prompt within the hour bumped the draft")
+	}
+
+	// An hour after the last bump, the next prompt bumps it, so the session outlives the expiry: a new session gets a
+	// copy rather than Gandalf
+	twoHoursAgo := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(markFile, twoHoursAgo, twoHoursAgo)
+	prompt("p3")
+	if lastSeen() > time.Minute {
+		t.Fatal("the prompt an hour later didn't bump the draft")
+	}
+	if info, _ := os.Stat(markFile); time.Since(info.ModTime()) > time.Minute {
+		t.Fatal("the bump didn't move the keep-alive mark")
+	}
+	if d := m.draft(m.home, "alive2"); d.Name != "Gandalf 2" {
+		t.Fatalf("new session drafted %+v, want Gandalf 2", d)
+	}
+
+	// Unbumped past the expiry, the server's sweep (run here rather than waiting for its 15-minute tick) benches the
+	// draft, and a new session takes Gandalf; the next due bump then leaves the session unnamed rather than drafting it
+	// someone else
+	unseenForTwoDays()
+	if _, err := db.Exec(context.Background(), `
+		update drafts d set benched_at = now() from owners o
+		where o.id = d.owner_id and d.benched_at is null and d.last_seen_at < now() - o.draft_expiry and o.id = $1`, m.ownerID()); err != nil {
+		t.Fatal(err)
+	}
+	if d := m.draft(m.home, "alive3"); d.Name != "Gandalf" {
+		t.Fatalf("new session drafted %+v, want the expired Gandalf", d)
+	}
+	os.Chtimes(markFile, twoHoursAgo, twoHoursAgo)
+	prompt("p4")
+	if drafted := m.list().drafted(); len(drafted) != 2 {
+		t.Fatalf("drafted %v, want only the two other sessions", drafted)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -383,6 +384,17 @@ func decrypt(t *testing.T, rostrKey, value string) string {
 // authToken is the bearer token derived from a key by the recipe.
 func authToken(t *testing.T, rostrKey string) string {
 	return base64.RawURLEncoding.EncodeToString(derivedKey(t, rostrKey, "auth"))
+}
+
+// ownerID is the server's ID for the machine's cloud setup: the SHA-256 of its auth token.
+func (m *machine) ownerID() string {
+	m.t.Helper()
+	key, err := os.ReadFile(m.credentialsPath())
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	sum := sha256.Sum256(derivedKey(m.t, strings.TrimSpace(string(key)), "auth"))
+	return hex.EncodeToString(sum[:])
 }
 
 // apiGet calls the API with a bearer token and decodes the JSON response.
