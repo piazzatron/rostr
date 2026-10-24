@@ -27,7 +27,7 @@ API server write ──▶ POST /update ──▶ Stats Durable Object ──▶
    counts up or down to each new pair. If the socket fails or closes, it retries after 5s, 10s, 30s, then every 60s.
    With no drafted agents (or no counts yet), the bar stays hidden.
 
-A draft that passes its owner's expiry stops counting when the sweep benches it, within a minute.
+A draft that passes its owner's expiry stops counting when the sweep benches it, within 15 minutes.
 
 ## Configuration
 

@@ -135,7 +135,11 @@ func draftSession(ctx context.Context, db *pgxpool.Pool, ownerID string, in draf
 		resp, err := tryDraft(ctx, db, ownerID, in, newMember)
 		if attempt < draftAttempts && lostRace(err) {
 			// A random wait, so two instances drafting in step don't keep picking the same name
-			time.Sleep(time.Duration(rand.IntN(5*attempt)+1) * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return draftResponse{}, ctx.Err()
+			case <-time.After(time.Duration(rand.IntN(5*attempt)+1) * time.Millisecond):
+			}
 			continue
 		}
 		return resp, err

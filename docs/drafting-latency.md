@@ -58,7 +58,7 @@ The server decides every name, and the slow part is moved off the first prompt i
    database lock: unique indexes on active drafts stop two drafts taking one name, and the loser starts over. See
    [server-schema.md](server-schema.md#drafting).
 4. **No auth lookup.** The owner's ID is the hash of their auth token, so a request knows its owner without a query.
-5. **Expiry moved to a background sweep** that runs every minute, so requests don't do it.
+5. **Expiry moved to a background sweep** that runs every 15 minutes, so requests don't do it.
 6. **Auto-draft is per machine,** in a local file (or `ROSTR_AUTO_DRAFT`), so checking it needs no call.
 
 The session's own draft is still cached (`~/.cache/rostr/cloud/sessions/`), so later prompts, `rostr task`, and

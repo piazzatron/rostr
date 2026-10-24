@@ -112,7 +112,7 @@ Every other write (edits, links, settings, benches) runs in a transaction holdin
 
 ## Expiry
 
-A background sweep in each server instance runs every minute: it benches drafts whose `last_seen_at` is older than
+A background sweep in each server instance runs every 15 minutes: it benches drafts whose `last_seen_at` is older than
 their owner's `draft_expiry` (the backstop for sessions that die without running the release hook), and deletes drafts
 benched more than 7 days ago, past the window a resumed session can ask for its old name back. Running on several
 instances at once is harmless. Until the sweep benches an expired draft, it still counts as active.

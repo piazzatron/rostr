@@ -344,6 +344,11 @@ func (c *Cloud) SetAutoDraft(ctx context.Context, on bool) error {
 	return os.WriteFile(c.AutoDraftFile, []byte(onOff(on)+"\n"), 0o600)
 }
 
+// AutoDraftOn is this machine's auto-draft setting, read without a call.
+func (c *Cloud) AutoDraftOn() bool {
+	return c.autoDraft()
+}
+
 // autoDraft is this machine's auto-draft setting: ROSTR_AUTO_DRAFT if it's set, else AutoDraftFile, else on.
 func (c *Cloud) autoDraft() bool {
 	if on, ok := autoDraftOverride(); ok {

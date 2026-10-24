@@ -266,7 +266,7 @@ Every roster with its cast, drafted agents, and idle members, in the shape of `r
   least 15 minutes ago and no new one has started. It's `null` while the agent is working or rested less than that.
   A draft takes a resting agent's name only when no name is free (see `POST /v1/agents/draft`).
 - A draft not seen within its owner's `draftExpiry` is benched by the server's background sweep, which runs every
-  minute, so it can still be listed for up to a minute past its expiry.
+  15 minutes, so it can still be listed for up to 15 minutes past its expiry.
 - `drafted` and `idle` are `[]` when empty, never `null`.
 - `task` and `repo` are ciphertext; everything else is plaintext, so a "who's busy" widget needs no key.
 
@@ -305,8 +305,6 @@ names and stored emoji until their sessions end; new sessions draft from the new
 Disbands a roster, deleting its drafts and project links. If it was the default, the oldest remaining roster becomes
 the default. If it was the owner's **last** roster, the owner is deleted too (settings and all), so nothing of theirs
 is left; the auth token gets `401 unauthorized` from then on, and registering it again starts a fresh, empty owner.
-(Each server instance caches which owner a token belongs to for up to a minute, so for that long another instance may
-answer the token's reads with the deleted owner's empty data; its writes get `401`.)
 
 ```json
 { "name": "work", "benchedDrafts": 2, "unlinkedProjects": 1, "newDefault": "home", "ownerDeleted": false }

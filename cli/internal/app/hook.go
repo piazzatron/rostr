@@ -139,8 +139,8 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	var d store.Draft
 	if known != nil {
 		// Drafted when the session started: the turn starting now stops the draft counting as idle (a session idle long
-		// enough to lose its name gets a new one), and the task goes to the server in the background
-		st.Close()
+		// enough to lose its name gets a new one), and the task goes to the server in the background ("--" so a prompt
+		// starting with "-" isn't read as flags)
 		d = *known
 		renamed, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 		if err != nil {
@@ -149,7 +149,9 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		if renamed != nil {
 			d = *renamed
 		}
-		_ = spawnHook(nil, "task", "--session", input.SessionID, placeholder)
+		if placeholder != "" {
+			_ = spawnHook(nil, "task", "--session", input.SessionID, "--", placeholder)
+		}
 	} else {
 		drafted, ok, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), placeholder)
 		if err != nil || !ok {
@@ -157,7 +159,9 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		}
 		d = drafted
 	}
-	markAnnounced(input.SessionID)
+	if cloud, ok := st.(*store.Cloud); ok {
+		cloud.MarkAnnounced(input.SessionID)
+	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
 	pane.Label(ctx, d.Display())
 
@@ -475,18 +479,6 @@ func knownSessionDraft(ctx context.Context, st store.Store, sessionID string) (d
 	return d, d != nil, err
 }
 
-// markAnnounced records, in cloud mode, that the agent has been told its session's name.
-func markAnnounced(sessionID string) {
-	st, err := openStore()
-	if err != nil {
-		return
-	}
-	defer st.Close()
-	if cloud, ok := st.(*store.Cloud); ok {
-		cloud.MarkAnnounced(sessionID)
-	}
-}
-
 // hookDraftSession drafts the session in dir.
 func hookDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (store.Draft, error) {
 	repo, _ := project.Identify(dir)
@@ -513,7 +505,15 @@ type draftAheadInput struct {
 // in the session's cache by the time its first prompt comes. Local mode drafts without a network call, so it drafts on
 // the first prompt as before.
 func draftAhead(sessionID, dir string) {
-	if hasCloudKey() {
+	if !hasCloudKey() {
+		return
+	}
+	st, err := openStore()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+	if cloud, ok := st.(*store.Cloud); ok && cloud.AutoDraftOn() {
 		_ = spawnHook(draftAheadInput{SessionID: sessionID, Dir: dir}, "hook", "draft-ahead")
 	}
 }
@@ -543,6 +543,16 @@ func newHookDraftAheadCommand() *cobra.Command {
 				if !errors.Is(err, store.ErrAutoDraftOff) {
 					logBackground("drafting session %s ahead of its first prompt: %v", in.SessionID, err)
 				}
+				return nil
+			}
+			// Unless the first prompt got there first (it drafted, and the server returned its draft): then the session's
+			// turn is already under way, or its Stop hook has recorded a newer end
+			if cloud, ok := st.(*store.Cloud); ok {
+				if _, told := cloud.CachedSessionDraft(in.SessionID); told {
+					return nil
+				}
+			}
+			if _, recorded := keepalive.LoadTurnEnd(paths.TurnDir(), in.SessionID); recorded {
 				return nil
 			}
 			end := keepalive.TurnEnd{At: d.DraftedAt, Display: d.Display(), Task: d.Task}

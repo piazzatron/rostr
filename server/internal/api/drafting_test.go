@@ -386,7 +386,7 @@ func TestDraftResponseMatchesTheStoredDraft(t *testing.T) {
 	}
 }
 
-// sweep runs the background sweep once, as the server does every minute.
+// sweep runs the background sweep once, as the server does every 15 minutes.
 func sweep(t *testing.T) {
 	t.Helper()
 	if _, err := sweepDrafts(context.Background(), testDB); err != nil {
