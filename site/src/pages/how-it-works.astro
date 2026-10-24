@@ -189,6 +189,15 @@ import Rostr from "../components/Rostr.astro";
   </section>
 
   <section class="section">
+    <h2>Privacy and security</h2>
+    <p>
+      Local mode makes no network calls. In cloud mode, tasks and repo names are encrypted on your machine before
+      they're sent, and the server never sees your <Rostr /> key, prompts, or code.
+    </p>
+    <p class="docs-link"><a href="/privacy">Learn more about privacy →</a></p>
+  </section>
+
+  <section class="section">
     <h2>The hooks</h2>
     <p>
       Both agents get the same five hooks. Each one is a one-liner that runs <code>rostr hook</code> only if <Rostr /> is
