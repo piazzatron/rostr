@@ -127,6 +127,21 @@ import Rostr from "../components/Rostr.astro";
       The summary is recorded as the session's task, which <code>rostr stats</code> shows. When the task changes, later
       prompts retitle the session to match.
     </p>
+    <h3>Why the agent writes the summary</h3>
+    <p>
+      A hook can only set a title when the session starts or a prompt arrives, before the agent has done anything, and
+      a hook's title doesn't reach Remote Control or cloud sessions at all. The desktop app writes its own summary, but
+      too late for the first-prompt hook to read it. The agent already knows what the task is, and it has a title tool
+      that works everywhere in the app, so <Rostr /> asks it to write the summary.
+    </p>
+    <h3>Why the call's position changes</h3>
+    <p>
+      Any tool call normally makes Claude reply again, so a title call would leave one more message after your answer.
+      In Local sessions, the agent makes the call at the end of its answer, and <Rostr />'s PostToolUse hook ends the
+      turn right after it. Remote Control and cloud sessions show Claude's progress updates, and an answer written just
+      before a tool call can show up there twice, so the agent makes the call first and the answer ends the turn as
+      usual.
+    </p>
   </section>
 
   <section class="section">
