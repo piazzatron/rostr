@@ -58,14 +58,22 @@ Same shape, with Codex's limits (`hook_codex.go`):
 - A "first prompt" is one whose rollout has no earlier `user_message`, so threads from before rostr aren't drafted
   mid-conversation.
 - `/draft` is the `$rostr-draft` skill (Codex removed custom prompts). New hooks need approving in Codex's `/hooks`.
-- No tmux or herdr labels: Codex runs hooks in a shared daemon whose pane variables belong to whichever terminal
-  started it.
+- Codex runs hooks in a shared app-server daemon whose pane variables belong to whichever terminal started it, so a
+  hook trusts `HERDR_PANE_ID` and `TMUX_PANE` only when the nearest `codex` process above it is the TUI, not an
+  `app-server` (`codex --no-daemon`). Otherwise it finds its pane by title (see below).
 
 ## tmux and herdr
 
-Claude Code only, best-effort with a 1-second limit per command (`cli/internal/pane`). Whenever the agent is drafted,
-re-told, or renamed, rostr reports the display name to herdr (`herdr pane report-metadata --display-agent`), or in
-tmux sets the pane option `@rostr` and renames a single-pane window. `SessionEnd` undoes both.
+Best-effort with a 1-second limit per command (`cli/internal/pane`). Whenever the agent is drafted, re-told, or
+renamed, rostr reports the display name to herdr (`herdr pane report-metadata --agent <claude|codex>
+--display-agent`), or in tmux sets the pane option `@rostr` and renames a single-pane window. `SessionEnd` undoes
+both.
+
+A Codex hook run by the daemon doesn't know its pane, and the app-server protocol doesn't tie threads to clients. But
+rostr has just named the thread, and Codex's default terminal title is `<thread name> | <project>`. So rostr labels
+the one Codex pane in `herdr pane list` (else `tmux list-panes -a`) whose title shows the name as a whole word,
+retrying for up to a second while the title catches up. No match, or more than one, and it labels nothing.
+`SessionEnd` clears the pane labeled with the released name. A custom `tui.terminal_title` needs `thread-name`.
 
 ## Upgrading
 

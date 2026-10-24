@@ -2,10 +2,10 @@ package claudecode
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"github.com/piazzatron/rostr/cli/internal/proc"
 )
 
 // IsHeadless reports whether the Claude Code process running this hook is a headless `claude -p` run: one a script or
@@ -42,7 +42,7 @@ func isPrintRun(args []string) bool {
 func claudeArgs() []string {
 	pid := os.Getppid()
 	for range 2 {
-		ppid, args := processInfo(pid)
+		ppid, args := proc.Info(pid)
 		if len(args) == 0 {
 			return nil
 		}
@@ -62,26 +62,4 @@ func isShellCommand(args []string) bool {
 			strings.Contains(args[1], "c")
 	}
 	return false
-}
-
-// processInfo returns a process's parent and arguments (split on spaces, which is enough to find flags), using ps so
-// it works on macOS and Linux alike. -ww keeps ps from cutting the arguments at the terminal's width (a COLUMNS
-// inherited from a terminal does it otherwise), which would drop the flags that come after --print.
-func processInfo(pid int) (int, []string) {
-	if pid <= 1 {
-		return 0, nil
-	}
-	out, err := exec.Command("ps", "-ww", "-o", "ppid=", "-o", "args=", "-p", strconv.Itoa(pid)).Output()
-	if err != nil {
-		return 0, nil
-	}
-	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
-		return 0, nil
-	}
-	ppid, err := strconv.Atoi(fields[0])
-	if err != nil {
-		return 0, nil
-	}
-	return ppid, fields[1:]
 }

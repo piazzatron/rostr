@@ -11,6 +11,7 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
 	"github.com/piazzatron/rostr/cli/internal/codex"
 	"github.com/piazzatron/rostr/cli/internal/keepalive"
+	"github.com/piazzatron/rostr/cli/internal/pane"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
@@ -41,6 +42,7 @@ func hookCodexSessionStart(ctx context.Context, input codex.HookInput, stdout, s
 	if input.Source == "fork" {
 		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
 	}
+	pane.Label(ctx, pane.Codex, d.Display())
 	fmt.Fprintln(stdout, codex.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
@@ -65,11 +67,12 @@ func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr 
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
 	_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(d))
+	pane.Label(ctx, pane.Codex, d.Display())
 	fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
 
-// hookCodexSessionEnd releases the session's member, within Codex's SessionEnd timeout.
+// hookCodexSessionEnd releases the session's member and clears its pane's label, within Codex's SessionEnd timeout.
 func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, codexSessionEndBudget)
 	defer cancel()
@@ -81,7 +84,10 @@ func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, std
 		return err
 	}
 	defer st.Close()
-	_, err = st.Bench(ctx, input.SessionID)
+	d, err := st.Bench(ctx, input.SessionID)
+	if d != nil {
+		pane.Clear(ctx, pane.Codex, d.Display())
+	}
 	return err
 }
 
@@ -112,6 +118,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			_ = codex.SetThreadName(cmd.Context(), session, codexThreadName(d))
+			pane.Label(cmd.Context(), pane.Codex, d.Display())
 			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
 			return nil
 		},
@@ -137,6 +144,7 @@ func codexLaterPrompt(ctx context.Context, input codex.HookInput, stdout io.Writ
 	}
 	if d != nil {
 		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
+		pane.Label(ctx, pane.Codex, d.Display())
 		fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.RenamedAfterRest(d.Display(), from)))
 	}
 	return keepDraftAlive(ctx, input.SessionID)

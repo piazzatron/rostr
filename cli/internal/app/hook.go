@@ -102,7 +102,7 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	pane.Label(ctx, d.Display())
+	pane.Label(ctx, pane.Claude, d.Display())
 	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
@@ -163,7 +163,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		cloud.MarkAnnounced(input.SessionID)
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	pane.Label(ctx, d.Display())
+	pane.Label(ctx, pane.Claude, d.Display())
 
 	// The agent titles the session with its summary where it has a title tool; in a terminal, rostr summarizes the
 	// prompt in the background and the next prompt's hook puts it in the title
@@ -200,6 +200,7 @@ func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, 
 	if err != nil || d == nil {
 		return "", err
 	}
+	pane.Label(ctx, pane.Claude, d.Display())
 	note = claudecode.RenamedAfterRest(d.Display(), from)
 	if where := titleWhere(input.SessionID); where.TitlesFirst() {
 		note += "\n" + claudecode.TitleInstruction(d.Display(), input.SessionID, where)
@@ -276,7 +277,6 @@ func wakeAfterRest(ctx context.Context, sessionID, dir string, check bool) (rena
 	if d.Display() == end.Display {
 		return nil, "", nil
 	}
-	pane.Label(ctx, d.Display())
 	return d, end.Display, nil
 }
 
@@ -381,7 +381,7 @@ func recordTurnEnd(ctx context.Context, sessionID string) error {
 func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
 	keepalive.Forget(paths.TurnDir(), input.SessionID)
-	pane.Clear(ctx)
+	pane.Clear(ctx, pane.Claude, "")
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -417,7 +417,7 @@ func newHookDraftCommand() *cobra.Command {
 				return nil
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
-			pane.Label(cmd.Context(), d.Display())
+			pane.Label(cmd.Context(), pane.Claude, d.Display())
 			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
 			if instruction := claudecode.TitleInstruction(d.Display(), session, titleWhere(session)); instruction != "" {
 				fmt.Fprintf(out, "\n%s\n", instruction)
