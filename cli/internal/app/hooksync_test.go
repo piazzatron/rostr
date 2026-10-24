@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func TestSyncUpgradesInstalledHooksOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncHooks(); err != nil {
+	if err := syncHooks(io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	settings, _ := os.ReadFile(settingsPath)

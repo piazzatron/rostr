@@ -14,7 +14,6 @@ import (
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
 	"github.com/piazzatron/rostr/cli/internal/codex"
-	"github.com/piazzatron/rostr/cli/internal/crypto"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/presets"
 	"github.com/piazzatron/rostr/cli/internal/project"
@@ -144,14 +143,13 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 
 	// Save: in the cloud, as a new setup holding just this roster; otherwise in this machine's store
 	created := store.Roster{Name: strings.TrimSpace(name), EmojiMode: mode, ATeam: chosen.aTeam, BTeam: chosen.bTeam}
-	var newKey crypto.Key
 	if cloud {
 		if err := roster.ValidateCast(created.ATeam, created.BTeam, created.EmojiMode); err != nil {
 			return err
 		}
 		st.Close()
 		setup := store.Setup{Rosters: []store.Roster{created}, Settings: store.Settings{AutoDraft: autoDraft}}
-		if newKey, err = registerInCloud(ctx, setup); err != nil {
+		if err := registerInCloud(ctx, setup); err != nil {
 			return err
 		}
 	} else {
@@ -200,9 +198,7 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 		}
 		if cloud {
 			fmt.Fprintln(out, "Your setup is in the cloud.")
-			if !interactive {
-				printKeySaved(out)
-			}
+			printKeySaved(out)
 		}
 	} else if link {
 		fmt.Fprintf(out, "Linked %s to it.\n", repo)
@@ -222,9 +218,6 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	}
 	if changedHooks(installedCodex) {
 		fmt.Fprintln(out, "Codex only runs hooks you've approved: open /hooks in Codex and trust rostr's.")
-	}
-	if cloud && interactive {
-		printNewKey(out, newKey)
 	}
 	return nil
 }

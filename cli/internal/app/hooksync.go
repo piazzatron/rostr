@@ -1,8 +1,11 @@
 package app
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -19,30 +22,27 @@ import (
 // hookSet is one agent's hooks.
 type hookSet struct {
 	agent       string
+	name        string // how output names the agent
 	fingerprint string
 	installed   func() bool // whether rostr's hooks are installed for the agent at all
-	install     func() error
+	install     func() ([]string, error)
 }
 
 func hookSets() []hookSet {
 	return []hookSet{
 		{
 			agent:       "claude-code",
+			name:        "Claude Code",
 			fingerprint: claudecode.Fingerprint(),
 			installed:   func() bool { return claudecode.Installed(paths.ClaudeDir()) },
-			install: func() error {
-				_, err := claudecode.Install(paths.ClaudeDir())
-				return err
-			},
+			install:     func() ([]string, error) { return claudecode.Install(paths.ClaudeDir()) },
 		},
 		{
 			agent:       "codex",
+			name:        "Codex",
 			fingerprint: codex.Fingerprint(),
 			installed:   func() bool { return codex.Installed(paths.CodexDir()) },
-			install: func() error {
-				_, err := codex.Install(paths.CodexDir(), paths.AgentsSkillsDir())
-				return err
-			},
+			install:     func() ([]string, error) { return codex.Install(paths.CodexDir(), paths.AgentsSkillsDir()) },
 		},
 	}
 }
@@ -60,14 +60,14 @@ func syncHooksIfStale() {
 }
 
 // newHookSyncCommand is `rostr hook sync`, which a session start runs in the background when the hooks are out of
-// date, and the install script runs after an upgrade. It prints nothing.
+// date, and the install script runs after an upgrade. It prints a line per agent saying what changed.
 func newHookSyncCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
 		Short: "Bring the installed Claude Code and Codex hooks and skills up to date",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return syncHooks()
+			return syncHooks(cmd.OutOrStdout())
 		},
 	}
 }
@@ -75,13 +75,22 @@ func newHookSyncCommand() *cobra.Command {
 // syncHooks reinstalls each agent's hooks and skills where rostr's hooks are installed already, never adding them for
 // an agent that doesn't have them, and records the stamps. A failed install is logged and leaves its stamp out of date, so the
 // next session start tries again.
-func syncHooks() error {
+func syncHooks(out io.Writer) error {
 	for _, set := range hookSets() {
 		if set.installed() {
-			if err := set.install(); err != nil {
+			changed, err := set.install()
+			if err != nil {
 				logBackground("reinstalling the %s hooks: %v", set.agent, err)
+				fmt.Fprintf(out, "%s: updating the hooks failed: %v\n", set.name, err)
 				continue
 			}
+			if len(changed) == 0 {
+				fmt.Fprintf(out, "%s: up to date.\n", set.name)
+			} else {
+				fmt.Fprintf(out, "%s: updated %s.\n", set.name, strings.Join(changed, ", "))
+			}
+		} else {
+			fmt.Fprintf(out, "%s: not installed, skipped.\n", set.name)
 		}
 		path := paths.HooksStamp(set.agent)
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

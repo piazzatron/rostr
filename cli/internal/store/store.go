@@ -31,6 +31,8 @@ var (
 	ErrNameTaken    = errors.New("name taken")
 	ErrNoRosters    = errors.New("No rosters yet. Run `rostr assemble`.")
 	ErrAutoDraftOff = errors.New("auto-draft is off")
+	// ErrUnauthorized is the API not recognizing the key, which is what happens once its cloud setup is deleted
+	ErrUnauthorized = errors.New("unauthorized")
 )
 
 // Store is everything the CLI reads and writes.

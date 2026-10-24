@@ -11,6 +11,7 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
 	"github.com/piazzatron/rostr/cli/internal/codex"
 	"github.com/piazzatron/rostr/cli/internal/paths"
+	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
 // newUninstallCommand undoes `assemble` completely: it deletes every roster (in the cloud, that deletes the whole
@@ -55,6 +56,12 @@ func newUninstallCommand() *cobra.Command {
 				}
 			}
 			st.Close()
+
+			// A key the API doesn't recognize has no cloud setup left to delete, so there's only this machine to clean up
+			deadKey := errors.Is(err, store.ErrUnauthorized)
+			if deadKey {
+				rosters, err = nil, nil
+			}
 			if err != nil {
 				return err
 			}
@@ -84,13 +91,16 @@ func newUninstallCommand() *cobra.Command {
 			if len(rosters) > 0 {
 				fmt.Fprintf(out, "Deleted %s.\n", plural(len(rosters), "roster", "rosters"))
 			}
+			if deadKey {
+				fmt.Fprintln(out, "The rostr API didn't recognize your key, so there was no cloud setup left to delete.")
+			}
 			for _, piece := range removed {
 				fmt.Fprintf(out, "Removed %s\n", piece)
 			}
 			for _, piece := range removedCodex {
 				fmt.Fprintf(out, "Removed %s (Codex)\n", piece)
 			}
-			if len(rosters) == 0 && len(removed) == 0 && len(removedCodex) == 0 {
+			if !deadKey && len(rosters) == 0 && len(removed) == 0 && len(removedCodex) == 0 {
 				fmt.Fprintln(out, "Nothing to remove: rostr isn't set up here.")
 				return nil
 			}
