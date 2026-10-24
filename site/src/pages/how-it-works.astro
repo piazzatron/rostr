@@ -152,8 +152,8 @@ import Rostr from "../components/Rostr.astro";
         <tr>
           <th scope="row">Terminal</th>
           <td>
-            <Rostr /> summarizes your first prompt in the background (a headless Claude Code run with Haiku, on your own
-            login) and puts the summary in the terminal title on your next prompt
+            <Rostr /> summarizes your first prompt in the background with <code>claude -p --model haiku</code>, on your own
+            login, and puts the summary in the terminal title on your next prompt
           </td>
         </tr>
         <tr>
@@ -218,8 +218,8 @@ import Rostr from "../components/Rostr.astro";
         title tool.
       </li>
       <li>
-        <strong>Terminal sessions.</strong> No title call. Instead, a headless Claude Code run with Haiku summarizes up
-        to the first 4,000 characters of your first prompt, on your own login.
+        <strong>Terminal sessions.</strong> No title call. Instead, <code>claude -p --model haiku</code> summarizes up to the
+        first 4,000 characters of your first prompt, on your own login.
       </li>
       <li>
         <strong>Now and then.</strong> After compaction, or when a resting session is renamed, the agent is told its
