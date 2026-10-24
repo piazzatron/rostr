@@ -204,7 +204,9 @@ There's no plugin. Inside the existing `rostr hook claude-code …` handlers:
   in the background with a short timeout, ignoring failures. Optionally add `--title "<display> · <task>"`.
 - **Session end:** run the same command with `--clear-display-agent --clear-title`.
 - **Codex:** skip until #48500 is fixed, unless Codex runs with `--no-daemon`. Document the sidebar row option
-  instead.
+  instead. (Done: rostr labels with `--agent codex` when the nearest `codex` ancestor of the hook isn't an
+  `app-server`. Checked against Codex 0.164: a daemon that a TUI auto-starts stays that TUI's child, so "the pane's
+  shell is an ancestor" alone would label the first pane with every other pane's names.)
 
 ## tmux
 

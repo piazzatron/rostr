@@ -1102,7 +1102,7 @@ func TestAssembleInstallsCodexOnlyWhereItsInstalled(t *testing.T) {
 	}
 }
 
-func TestClaudeCodeHooksLabelTheHerdrPane(t *testing.T) {
+func TestHooksLabelTheHerdrPane(t *testing.T) {
 	s := newSandbox(t)
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 
@@ -1131,7 +1131,8 @@ func TestClaudeCodeHooksLabelTheHerdrPane(t *testing.T) {
 		t.Fatalf("herdr calls:\n%s", calls)
 	}
 
-	// Codex hooks never label panes: their environment belongs to Codex's shared daemon
+	// A Codex hook that the Codex TUI didn't run (here, the test did) leaves panes alone: its environment may be the
+	// shared daemon's, which names another pane
 	os.Remove(herdrCalls)
 	r = s.run(s.home, `{"session_id":"t1","transcript_path":null,"prompt":"Fix it"}`, env, "hook", "codex", "prompt")
 	if r.code != 0 || !strings.Contains(r.stdout, "You're 💍 Frodo") {
@@ -1139,7 +1140,27 @@ func TestClaudeCodeHooksLabelTheHerdrPane(t *testing.T) {
 	}
 	s.run(s.home, `{"session_id":"t1"}`, env, "hook", "codex", "session-end")
 	if _, err := os.Stat(herdrCalls); err == nil {
-		t.Fatal("a Codex hook called herdr")
+		t.Fatal("a Codex hook outside Codex called herdr")
+	}
+
+	// Run by the Codex TUI itself (`codex --no-daemon`), it labels the pane as Codex's. A copy of sh named codex stands
+	// in for the TUI, and the trailing ":" keeps sh from exec'ing rostr in its place.
+	fakeCodex := filepath.Join(t.TempDir(), "codex")
+	shell, _ := os.ReadFile("/bin/sh")
+	os.WriteFile(fakeCodex, shell, 0o755)
+	byCodex := func(stdin, event string) {
+		cmd := exec.Command(fakeCodex, "-c", binary+" hook codex "+event+"; :")
+		cmd.Dir, cmd.Env, cmd.Stdin = s.home, append(s.baseEnv(), env...), strings.NewReader(stdin)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("codex %s: %v\n%s", event, err, out)
+		}
+	}
+	byCodex(`{"session_id":"t2","transcript_path":null,"prompt":"Fix it"}`, "prompt")
+	byCodex(`{"session_id":"t2"}`, "session-end")
+	want = "pane report-metadata w1:p3 --source rostr --agent codex --display-agent 🌱 Samwise\n" +
+		"pane report-metadata w1:p3 --source rostr --agent codex --clear-display-agent\n"
+	if calls, _ := os.ReadFile(herdrCalls); string(calls) != want {
+		t.Fatalf("herdr calls from Codex:\n%s", calls)
 	}
 }
 

@@ -420,19 +420,24 @@ Findings behind this are in [integrations-research.md](integrations-research.md#
   skills only if unmodified.
 - **Approval.** Codex runs a non-managed hook only once the user trusts it in `/hooks`. The one-line commands never
   change, so one approval survives rostr upgrades.
-- **No tmux or herdr.** Codex runs hooks in a shared app-server daemon whose environment belongs to whichever
-  terminal started it, so `TMUX_PANE` and `HERDR_PANE_ID` point at the wrong pane. Codex sessions rely on the
-  terminal title instead.
+- **tmux and herdr only without the daemon.** By default Codex runs hooks in a shared app-server daemon whose
+  environment belongs to whichever terminal started it, so `TMUX_PANE` and `HERDR_PANE_ID` can name another pane
+  ([openai/codex#48500](https://github.com/openai/codex/issues/48500)). So a Codex hook labels its pane (see
+  [tmux and herdr](#tmux-and-herdr)) only when the Codex process that ran it is the TUI rather than an app-server:
+  rostr walks up its parent processes (with `ps`) to the nearest `codex` and skips the label if its arguments include
+  `app-server`. That means `codex --no-daemon`, or `daemon_auto_start = false` under `[features]`. With the daemon,
+  Codex sessions rely on the terminal title instead.
 - Failures never block a session: every `rostr hook codex` exits 0.
 
 ### tmux and herdr
 
-Claude Code hooks only (Codex: see above). Best-effort: each command has a 1-second timeout, and failures are ignored.
-The pane is labeled whenever the agent is drafted or re-told (the draft step, resume, compaction, `/draft`) and
-cleared at `SessionEnd`.
+Claude Code hooks, and Codex hooks run without the daemon (see above). Best-effort: each command has a 1-second
+timeout, and failures are ignored. The pane is labeled whenever the agent is drafted or re-told (the draft step,
+resume, compaction, `/draft` or `$rostr-draft`) and cleared at `SessionEnd`.
 
-- **herdr** (`HERDR_ENV=1`): `herdr pane report-metadata "$HERDR_PANE_ID" --source rostr --agent claude
-  --display-agent "<display>"` replaces "claude" in herdr's sidebar; session end sends `--clear-display-agent`.
+- **herdr** (`HERDR_ENV=1`): `herdr pane report-metadata "$HERDR_PANE_ID" --source rostr --agent <claude|codex>
+  --display-agent "<display>"` replaces "claude" or "codex" in herdr's sidebar; session end sends
+  `--clear-display-agent`.
   rostr runs `$HERDR_BIN_PATH`, or `herdr` on PATH. Inside herdr, tmux is left alone.
 - **tmux** (`TMUX` and `TMUX_PANE` set, outside herdr): every command targets `-t "$TMUX_PANE"`.
   - Tags the pane with the user option `@rostr` (the display), for `pane-border-format` or `status-right`

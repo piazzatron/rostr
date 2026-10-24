@@ -102,7 +102,7 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	pane.Label(ctx, d.Display())
+	pane.Label(ctx, pane.Claude, d.Display())
 	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
@@ -142,7 +142,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		// enough to lose its name gets a new one), and the task goes to the server in the background ("--" so a prompt
 		// starting with "-" isn't read as flags)
 		d = *known
-		renamed, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
+		renamed, _, err := wakeAfterRest(ctx, pane.Claude, input.SessionID, hookDir(input.Cwd), true)
 		if err != nil {
 			return err
 		}
@@ -163,7 +163,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		cloud.MarkAnnounced(input.SessionID)
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	pane.Label(ctx, d.Display())
+	pane.Label(ctx, pane.Claude, d.Display())
 
 	// The agent titles the session with its summary where it has a title tool; in a terminal, rostr summarizes the
 	// prompt in the background and the next prompt's hook puts it in the title
@@ -196,7 +196,7 @@ func laterPrompt(ctx context.Context, input claudecode.HookInput, stdout io.Writ
 // wakeSession is wakeAfterRest for Claude Code: note tells the agent its new name, if it has one, and in Remote
 // Control and cloud sessions, whose apps don't show a hook's title, asks it to retitle the session.
 func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, err error) {
-	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
+	d, from, err := wakeAfterRest(ctx, pane.Claude, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil || d == nil {
 		return "", err
 	}
@@ -220,7 +220,7 @@ func hookWorking(ctx context.Context, input claudecode.HookInput, stdout, stderr
 			return nil
 		}
 	}
-	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
+	_, _, err := wakeAfterRest(ctx, pane.Claude, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }
 
@@ -236,7 +236,7 @@ const wakeCheckAfter = store.RestAfter - 5*time.Minute
 // reported before going on: if the name was taken, the session gets its old one back if that's free, or a new one,
 // which wakeAfterRest returns with the name it had (from). Otherwise, and for a turn that ended recently, the start is
 // reported in the background.
-func wakeAfterRest(ctx context.Context, sessionID, dir string, check bool) (renamed *store.Draft, from string, err error) {
+func wakeAfterRest(ctx context.Context, agent pane.Agent, sessionID, dir string, check bool) (renamed *store.Draft, from string, err error) {
 	end, ok := keepalive.LoadTurnEnd(paths.TurnDir(), sessionID)
 	if !ok {
 		return nil, "", nil
@@ -276,7 +276,7 @@ func wakeAfterRest(ctx context.Context, sessionID, dir string, check bool) (rena
 	if d.Display() == end.Display {
 		return nil, "", nil
 	}
-	pane.Label(ctx, d.Display())
+	pane.Label(ctx, agent, d.Display())
 	return d, end.Display, nil
 }
 
@@ -381,7 +381,7 @@ func recordTurnEnd(ctx context.Context, sessionID string) error {
 func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
 	keepalive.Forget(paths.TurnDir(), input.SessionID)
-	pane.Clear(ctx)
+	pane.Clear(ctx, pane.Claude)
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -417,7 +417,7 @@ func newHookDraftCommand() *cobra.Command {
 				return nil
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
-			pane.Label(cmd.Context(), d.Display())
+			pane.Label(cmd.Context(), pane.Claude, d.Display())
 			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
 			if instruction := claudecode.TitleInstruction(d.Display(), session, titleWhere(session)); instruction != "" {
 				fmt.Fprintf(out, "\n%s\n", instruction)

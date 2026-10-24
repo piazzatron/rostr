@@ -87,7 +87,8 @@ It should show the new roster with everyone on the bench.
 - Names start with their **next new session**: hooks load when a session starts, so this one stays unnamed.
 - **If they use Codex:** Codex only runs hooks the user has approved, so they need to open `/hooks` in Codex and
   trust rostr's. In Codex, `$rostr-draft` takes the place of `/draft`. To see the name in tmux or herdr, they can set
-  `tui.terminal_title = ["spinner", "thread-name", "project"]` in `~/.codex/config.toml`.
+  `tui.terminal_title = ["spinner", "thread-name", "project"]` in `~/.codex/config.toml`. If they run
+  `codex --no-daemon` (or set `daemon_auto_start = false` under `[features]`), rostr labels the pane itself instead.
 - To give a project its own roster, they can run `rostr assemble` again for a second roster, then `rostr link` in
   that project.
 - **If they chose the cloud:** to use rostr in cloud environments, they should run `rostr config key` themselves in

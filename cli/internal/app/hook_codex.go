@@ -11,6 +11,7 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
 	"github.com/piazzatron/rostr/cli/internal/codex"
 	"github.com/piazzatron/rostr/cli/internal/keepalive"
+	"github.com/piazzatron/rostr/cli/internal/pane"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
@@ -41,6 +42,7 @@ func hookCodexSessionStart(ctx context.Context, input codex.HookInput, stdout, s
 	if input.Source == "fork" {
 		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
 	}
+	pane.Label(ctx, pane.Codex, d.Display())
 	fmt.Fprintln(stdout, codex.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
@@ -65,17 +67,19 @@ func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr 
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
 	_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(d))
+	pane.Label(ctx, pane.Codex, d.Display())
 	fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
 }
 
-// hookCodexSessionEnd releases the session's member, within Codex's SessionEnd timeout.
+// hookCodexSessionEnd releases the session's member and clears its pane's label, within Codex's SessionEnd timeout.
 func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, codexSessionEndBudget)
 	defer cancel()
 
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
 	keepalive.Forget(paths.TurnDir(), input.SessionID)
+	pane.Clear(ctx, pane.Codex)
 	st, err := openStore()
 	if err != nil {
 		return err
@@ -112,6 +116,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			_ = codex.SetThreadName(cmd.Context(), session, codexThreadName(d))
+			pane.Label(cmd.Context(), pane.Codex, d.Display())
 			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
 			return nil
 		},
@@ -131,7 +136,7 @@ func codexThreadName(d store.Draft) string {
 // codexLaterPrompt records that the thread's turn started and keeps its draft alive. When the thread lost its name
 // while resting, it renames the thread and tells the agent.
 func codexLaterPrompt(ctx context.Context, input codex.HookInput, stdout io.Writer) error {
-	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
+	d, from, err := wakeAfterRest(ctx, pane.Codex, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil {
 		return err
 	}
@@ -150,6 +155,6 @@ func hookCodexTurnEnd(ctx context.Context, input codex.HookInput, stdout, stderr
 // hookCodexWorking is Codex's PostToolUse hook: a tool call reports the turn's start in the background, if nothing
 // has since the last turn ended (see hookWorking).
 func hookCodexWorking(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
-	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
+	_, _, err := wakeAfterRest(ctx, pane.Codex, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }
