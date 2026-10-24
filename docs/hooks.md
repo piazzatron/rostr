@@ -3,6 +3,9 @@
 How rostr plugs into Claude Code and Codex. Installed hooks are one-liners,
 `if command -v rostr >/dev/null; then rostr hook <agent> <event>; fi`, so the logic and the text the agent is told
 live in the binary and change with an upgrade, and a repo's committed hooks do nothing for teammates without rostr.
+Codex's name rostr by path instead (`if [ -x /opt/homebrew/bin/rostr ]; then /opt/homebrew/bin/rostr hook codex
+<event>; fi`), since the Codex app runs hooks with its own PATH, which leaves out Homebrew's and `~/.local/bin`. The
+path is the `rostr` on PATH at install, so Homebrew's symlink, which outlives upgrades.
 Each handler reads the hook's JSON from stdin and prints the reply the agent expects. Handlers are in
 `cli/internal/app/hook.go` and `hook_codex.go`; the installers are `cli/internal/claudecode/install.go` and
 `cli/internal/codex/install.go`.
@@ -53,6 +56,11 @@ Same shape, with Codex's limits (`hook_codex.go`):
 - Codex hooks can't set env vars or titles, and have no `asyncRewake`. The first prompt drafts synchronously, and
   rostr names the thread itself through the Codex app-server (`codex app-server proxy`, `thread/name/set`, 2-second
   limit; no daemon, no name).
+- Codex's clients (the TUI and the app) title a thread themselves, but only one with no name, and drop their title if
+  the name changes meanwhile. So the first prompt leaves the thread unnamed and starts `rostr hook codex title` in the
+  background, which polls `thread/read` for up to 10 seconds for Codex's title, makes it the task (unless the agent
+  set one), then names the thread `<display> · <task>` and labels its pane. No title in time, and the placeholder
+  task stays.
 - `SessionStart` fires only when the first prompt is sent, so there's nothing to gain from drafting ahead. A `fork`
   gets its own member.
 - A "first prompt" is one whose rollout has no earlier `user_message`, so threads from before rostr aren't drafted
@@ -70,7 +78,8 @@ renamed, rostr reports the display name to herdr (`herdr pane report-metadata --
 named (a pane sharing its window shows the name in the title the agent sets). `SessionEnd` undoes both.
 
 A Codex hook run by the daemon doesn't know its pane, and the app-server protocol doesn't tie threads to clients. But
-rostr has just named the thread, and Codex's default terminal title is `<thread name> | <project>`. So rostr labels
+rostr has just named the thread (in the title step, on a first prompt), and Codex's default terminal title is
+`<thread name> | <project>`. So rostr labels
 the one Codex pane in `herdr pane list` (else `tmux list-panes -a`) whose title shows the name as a whole word,
 retrying for up to a second while the title catches up. It skips panes already labeled with the name, since a
 resting thread keeps its name in its title after the name is drafted again. No match, or more than one, and it labels
@@ -82,4 +91,5 @@ nothing.
 Each install records a fingerprint of what it wrote in `~/.cache/rostr/hooks/<agent>`. Every session start compares
 it with the binary's own, and if it differs, runs `rostr hook sync` in the background, which reinstalls for each agent
 that already has rostr's hooks. So after `brew upgrade` the first session brings everything up to date. Claude Code's
-install replaces outdated rostr entries; Codex's only adds missing ones.
+install replaces outdated rostr entries, and Codex's updates their commands in place. The fingerprint covers Codex's
+commands, so a moved binary reinstalls too.

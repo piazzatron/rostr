@@ -948,6 +948,16 @@ func TestCodexHooks(t *testing.T) {
 		}
 		os.Remove(codexCalls)
 	}
+	// The first prompt's title step reaches the app-server in the background
+	expectNamedInBackground := func(name string) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			if _, err := os.Stat(codexCalls); err == nil {
+				break
+			}
+		}
+		expectNamed(name)
+	}
 	firstPrompt := "Fix the login redirect loop\nmore"
 
 	// Before assemble, hooks never fail a session
@@ -957,9 +967,10 @@ func TestCodexHooks(t *testing.T) {
 
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 
-	// First prompt: drafts, names the thread, and tells the agent who it is before its first reply
+	// First prompt: drafts and tells the agent who it is before its first reply, and leaves the thread for Codex to
+	// title, which the title step then reads from the app-server in the background
 	expectIdentity("first prompt", hook("prompt", prompt("t1", "null", firstPrompt)), "UserPromptSubmit", "🧙 Gandalf")
-	expectNamed("first prompt")
+	expectNamedInBackground("first prompt")
 	if _, err := os.Stat(filepath.Join(keepAliveDir, "t1")); err != nil {
 		t.Fatalf("no keep-alive mark: %v", err)
 	}

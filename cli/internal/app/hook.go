@@ -48,6 +48,7 @@ func newHookCommand() *cobra.Command {
 		hookSubcommand("turn-end", codex.ReadHookInput, hookCodexTurnEnd),
 		hookSubcommand("working", codex.ReadHookInput, hookCodexWorking),
 		hookSubcommand("session-end", codex.ReadHookInput, hookCodexSessionEnd),
+		newHookCodexTitleCommand(),
 		newHookCodexDraftCommand(),
 	)
 	return hook

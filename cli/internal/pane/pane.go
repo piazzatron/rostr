@@ -34,7 +34,7 @@ const titleWait = time.Second
 // terminal title shows display, which is there because rostr names the Codex thread after the session. It skips panes
 // already labeled display: a resting thread keeps its name in its title and label after the name is drafted again.
 func Label(ctx context.Context, agent Agent, display string) {
-	if paneEnvTrusted(agent) {
+	if EnvTrusted(agent) {
 		switch multiplexer() {
 		case herdr:
 			herdrLabel(ctx, os.Getenv("HERDR_PANE_ID"), agent, display)
@@ -55,7 +55,7 @@ func Label(ctx context.Context, agent Agent, display string) {
 // Clear removes the label Label added, when the session ends. A Codex hook that its shared daemon ran looks for the
 // pane labeled display instead.
 func Clear(ctx context.Context, agent Agent, display string) {
-	if paneEnvTrusted(agent) {
+	if EnvTrusted(agent) {
 		switch multiplexer() {
 		case herdr:
 			herdrClear(ctx, os.Getenv("HERDR_PANE_ID"), agent)
@@ -117,11 +117,11 @@ func showsName(title, display string) bool {
 	return false
 }
 
-// paneEnvTrusted reports whether this hook's environment names the session's own pane. Claude Code runs hooks as its
+// EnvTrusted reports whether this hook's environment names the session's own pane. Claude Code runs hooks as its
 // own children, so it always does. Codex runs them in a shared app-server daemon by default, whose environment
 // belongs to whichever terminal started it (openai/codex#48500), so a Codex hook only trusts it when the Codex process
 // that ran the hook is the TUI itself (`codex --no-daemon`, or `daemon_auto_start = false`).
-func paneEnvTrusted(agent Agent) bool {
+func EnvTrusted(agent Agent) bool {
 	return agent != Codex || ranByCodexTUI(os.Getppid(), proc.Info)
 }
 

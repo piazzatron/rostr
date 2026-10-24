@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -47,9 +48,10 @@ func hookCodexSessionStart(ctx context.Context, input codex.HookInput, stdout, s
 	return nil
 }
 
-// hookCodexPrompt runs on every prompt. On a thread's first prompt (with auto-draft on) it drafts the session, names
-// the thread, and adds who the agent is to its context. Codex hooks can't wake the agent later, so this happens
-// before the first reply. On every other prompt it keeps the draft alive, at most once an hour.
+// hookCodexPrompt runs on every prompt. On a thread's first prompt (with auto-draft on) it drafts the session, adds
+// who the agent is to its context, and leaves naming the thread to `rostr hook codex title` in the background, so
+// Codex can title it first. Codex hooks can't wake the agent later, so this happens before the first reply. On every
+// other prompt it keeps the draft alive, at most once an hour.
 func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
 	if !codex.IsFirstPrompt(input) {
 		return codexLaterPrompt(ctx, input, stdout)
@@ -66,10 +68,71 @@ func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr 
 		return err
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
-	_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(d))
-	pane.Label(ctx, pane.Codex, d.Display())
+
+	// A hook the TUI ran itself knows its pane now; otherwise the title step finds the pane once the name is in its title
+	if pane.EnvTrusted(pane.Codex) {
+		pane.Label(ctx, pane.Codex, d.Display())
+	}
+	_ = spawnHook(codexTitleInput{SessionID: input.SessionID, Placeholder: d.Task}, "hook", "codex", "title")
 	fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
 	return nil
+}
+
+// codexTitleWait is how long the title step waits for Codex's own title, which usually takes a few seconds.
+const codexTitleWait = 10 * time.Second
+
+// codexTitleInput is what `rostr hook codex title` reads: the thread, and the placeholder task Codex's title replaces.
+type codexTitleInput struct {
+	SessionID   string `json:"session"`
+	Placeholder string `json:"placeholder"`
+}
+
+// newHookCodexTitleCommand is `rostr hook codex title`, which a thread's first prompt starts in the background. It
+// waits for Codex to title the thread, records the title as the task unless the agent has set one meanwhile, then
+// names the thread `<display> · <task>` and labels its pane. Without a title from Codex, the placeholder stays the
+// task. It prints nothing.
+func newHookCodexTitleCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:    "title",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var in codexTitleInput
+			if err := json.NewDecoder(cmd.InOrStdin()).Decode(&in); err != nil {
+				return nil
+			}
+			ctx := cmd.Context()
+			title, err := codex.WaitForThreadName(ctx, in.SessionID, codexTitleWait)
+			if err != nil {
+				logBackground("reading the Codex title for thread %s: %v", in.SessionID, err)
+				return nil
+			}
+
+			// Codex's title becomes the task, unless the agent has set one of its own meanwhile
+			st, err := openStore()
+			if err != nil {
+				return nil
+			}
+			defer st.Close()
+			d, err := st.SessionDraft(ctx, in.SessionID)
+			if err != nil || d == nil {
+				return nil
+			}
+			if title != "" && d.Task == in.Placeholder {
+				if updated, err := st.SetTask(ctx, d.Key(), title); err == nil {
+					d = &updated
+				}
+			}
+
+			// The name in the thread's title is how the pane is found
+			if err := codex.SetThreadName(ctx, in.SessionID, codexThreadName(*d)); err != nil {
+				logBackground("naming Codex thread %s: %v", in.SessionID, err)
+				return nil
+			}
+			pane.Label(ctx, pane.Codex, d.Display())
+			return nil
+		},
+	}
 }
 
 // hookCodexSessionEnd releases the session's member and clears its pane's label, within Codex's SessionEnd timeout.
