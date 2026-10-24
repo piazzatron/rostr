@@ -8,7 +8,7 @@ Every active draft carries three times, in both stores (see [storage.md](storage
 
 | Column | Set by | Decides |
 |---|---|---|
-| `last_seen_at` | A re-draft of the same session, `rostr task`, every turn report, the hourly keep-alive | **Expiry:** a draft unseen for longer than the owner's expiry (`rostr config expiry`, 7 days by default) is benched |
+| `last_seen_at` | A re-draft of the same session, `rostr task`, every turn report, the hourly keep-alive | **Expiry:** a draft unseen for longer than the owner's expiry (`rostr config expiry`, 24 hours by default) is benched |
 | `turn_ended_at` | The `Stop` hook, or a title call that ends the turn. In cloud mode a draft made ahead of the first prompt starts with it set | **Resting:** the session rests once this is at least 15 minutes old (`store.RestAfter`) and `turn_started_at` isn't later |
 | `turn_started_at` | The next prompt or tool call after a turn ended | Ends the rest |
 

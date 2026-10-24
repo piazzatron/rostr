@@ -17,7 +17,7 @@ import (
 )
 
 // DefaultExpiry is how long a draft can go unseen before it's released, until `rostr config expiry` changes it.
-const DefaultExpiry = "7d"
+const DefaultExpiry = "1d"
 
 // ReleasedRetention is how long released drafts are kept, so a resumed session can ask for its old name back.
 const ReleasedRetention = 7 * 24 * time.Hour

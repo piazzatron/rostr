@@ -32,7 +32,7 @@ func TestAuth(t *testing.T) {
 	if n := queryInt(t, `select count(*) from owners where id = $1`, owner.token); n != 0 {
 		t.Fatal("auth token stored in plaintext")
 	}
-	if got := call[settingsResponse](owner, "GET", "/v1/settings", nil, http.StatusOK); got.DraftExpiry != "7d" || got.DefaultRoster != nil {
+	if got := call[settingsResponse](owner, "GET", "/v1/settings", nil, http.StatusOK); got.DraftExpiry != "1d" || got.DefaultRoster != nil {
 		t.Fatalf("new owner settings: %+v", got)
 	}
 }
