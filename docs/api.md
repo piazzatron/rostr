@@ -88,8 +88,7 @@ sends CORS headers, so browsers can't call them.
 {
   "name": "work",
   "emojiMode": "on",
-  "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }],
-  "bTeam": [{ "name": "Boromir", "emoji": "🛡️" }],
+  "members": [{ "name": "Gandalf", "emoji": "🧙" }, { "name": "Boromir", "emoji": "🛡️" }],
   "isDefault": true,
   "activeDrafts": 2,
   "linkedProjects": 1,
@@ -98,7 +97,7 @@ sends CORS headers, so browsers can't call them.
 ```
 
 - `emojiMode` is `on`, `off`, or `only`. It defaults to `on` when a request leaves it out.
-- `aTeam` needs at least one member. A roster has at most 200 members.
+- `members` is the cast in draft order. It needs at least one member, and a roster has at most 200.
 - `activeDrafts` and `linkedProjects` are the counts `rostr disband` confirms with.
 
 **Draft**: an agent drafted for a session.
@@ -108,7 +107,6 @@ sends CORS headers, so browsers can't call them.
   "name": "Gandalf",
   "emoji": "🧙",
   "copy": 2,
-  "team": "a",
   "roster": "work",
   "emojiMode": "on",
   "session": "5f0c…",
@@ -120,8 +118,6 @@ sends CORS headers, so browsers can't call them.
 
 - `name` is the member's name. `copy` is 1, or 2 and up for numbered copies, displayed as `Gandalf 2`.
 - `emoji` is stored on the draft, so it survives a cast replacement.
-- `team` is `"a"` or `"b"`, or `null` when the member is no longer in the roster's cast (it was replaced while they
-  were drafted).
 - `emojiMode` is the roster's, so the CLI can build `display` without another call.
 
 **Settings**
@@ -186,8 +182,7 @@ Rate-limited per client IP.
       {
         "name": "work",
         "emojiMode": "on",
-        "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }],
-        "bTeam": [],
+        "members": [{ "name": "Gandalf", "emoji": "🧙" }],
         "createdAt": "2026-01-01T00:00:00Z"
       }
     ],
@@ -211,7 +206,7 @@ Rate-limited per client IP.
 }
 ```
 
-- `import` and every list in it are optional. In rosters, `emojiMode`, `bTeam`, and `createdAt` are optional.
+- `import` and every list in it are optional. In rosters, `emojiMode` and `createdAt` are optional.
   `createdAt` keeps the local order, which decides the "oldest roster" that `disband` promotes; without it, rosters
   are dated in the order they're listed.
 - `settings` fields are optional. Without `defaultRoster`, the oldest roster becomes the default.
@@ -233,33 +228,31 @@ Every roster with its cast, drafted agents, and idle members, in the shape of `r
     {
       "name": "work",
       "emojiMode": "on",
-      "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }, { "name": "Frodo", "emoji": "💍" }],
-      "bTeam": [],
+      "members": [{ "name": "Gandalf", "emoji": "🧙" }, { "name": "Frodo", "emoji": "💍" }],
       "isDefault": true,
       "createdAt": "2026-10-20T09:57:14Z",
       "drafted": [
         {
           "name": "Gandalf 2",
           "emoji": "🧙",
-          "team": "a",
           "task": "🔒 base64 | null",
           "repo": "🔒 base64 | null",
           "draftedAt": "2026-10-20T09:57:14Z",
           "restingSince": "2026-10-20T10:31:02Z | null"
         }
       ],
-      "idle": [{ "name": "Frodo", "emoji": "💍", "team": "a" }]
+      "idle": [{ "name": "Frodo", "emoji": "💍" }]
     }
   ]
 }
 ```
 
-- `aTeam`, `bTeam`, `isDefault`, and `createdAt` are as in the [Roster](#objects) object. `isDefault` is whether it's
+- `members`, `isDefault`, and `createdAt` are as in the [Roster](#objects) object. `isDefault` is whether it's
   the owner's default roster.
 - Rosters are oldest first. `drafted` is oldest draft first; `idle` is in draft order: the order the next drafts
-  take them (A team first, least recently drafted first).
-- In `drafted`, `name` includes the copy number (`Gandalf 2`), `emoji` is the one stored on the draft, and `team` is
-  `null` if the member has left the cast.
+  take them (least recently drafted first, then roster order).
+- In `drafted`, `name` includes the copy number (`Gandalf 2`), and `emoji` is the one stored on the draft. A drafted
+  agent is listed even if their member has since left the cast.
 - `idle` is the cast members whose name (copy 1) is free, which is who the next draft can pick. So with `Gandalf 2`
   drafted and copy 1 free, Gandalf is listed as idle too.
 - `restingSince` is when the agent's session finished its last turn, once it has been resting: the turn ended at
@@ -273,7 +266,7 @@ Every roster with its cast, drafted agents, and idle members, in the shape of `r
 ### `POST /v1/rosters`
 
 ```json
-{ "name": "work", "emojiMode": "on", "aTeam": [...], "bTeam": [...] }
+{ "name": "work", "emojiMode": "on", "members": [...] }
 ```
 
 **`201`** with the Roster. The owner's first roster becomes the default. Errors: `400`, `409 roster_exists`.
@@ -287,12 +280,12 @@ Every roster with its cast, drafted agents, and idle members, in the shape of `r
 Saves `rostr edit` (and `config emoji`, which sends the whole roster back with a new mode). The name can't change.
 
 ```json
-{ "emojiMode": "on", "aTeam": [...], "bTeam": [...] }
+{ "emojiMode": "on", "members": [...] }
 ```
 
-Every actively drafted member must still be in the cast with exactly the same name; their emoji and team can
-change. **`200`** with the Roster. Errors: `400`, `404 roster_not_found`, `409 member_drafted` (the message names
-them).
+Every actively drafted member must still be in the cast with exactly the same name; their emoji and place in the
+order can change. **`200`** with the Roster. Errors: `400`, `404 roster_not_found`, `409 member_drafted` (the message
+names them).
 
 ### `PUT /v1/rosters/{name}/cast`
 
@@ -373,7 +366,7 @@ server instance take turns.
 2. **Resume:** if the session had a draft before, its member is still in that roster's cast, and that member and
    copy are free, draft them again in the same roster, with the new `repo` and `task` if sent, or the old ones if not.
 3. **Otherwise**, pick the roster: `roster` if sent, else the project's link for `repoHash`, else the default.
-   - Draft the free member drafted least recently, A team first.
+   - Draft the free member drafted least recently (never drafted first, then roster order).
    - If all are busy, take the name (copy 1) of the member who has rested longest: their draft is benched and the new
      session gets the member, so the resting session loses the name (see `POST /v1/agents/turn`).
    - With no one resting, a free copy 2, then 3, and so on.

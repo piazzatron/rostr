@@ -67,7 +67,7 @@ func TestCloudEncryptsTasksAndReposOnTheWire(t *testing.T) {
 		switch r.path {
 		case "/v1/agents/draft":
 			json.NewEncoder(w).Encode(map[string]any{
-				"name": "Gandalf", "emoji": "🧙", "copy": 2, "team": "a", "roster": "work", "emojiMode": "on",
+				"name": "Gandalf", "emoji": "🧙", "copy": 2, "roster": "work", "emojiMode": "on",
 				"session": "s1", "task": r.body["task"], "repo": r.body["repo"], "draftedAt": time.Now(),
 			})
 		default:
@@ -79,7 +79,7 @@ func TestCloudEncryptsTasksAndReposOnTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Task != task || d.Repo != repo || d.Name() != "Gandalf 2" || d.Team != "A" || d.Display() != "🧙 Gandalf 2" {
+	if d.Task != task || d.Repo != repo || d.Name() != "Gandalf 2" || d.Display() != "🧙 Gandalf 2" {
 		t.Fatalf("decrypted draft: %+v", d)
 	}
 	if err := cloud.LinkProject(ctx, repo, "work"); err != nil {
@@ -89,7 +89,7 @@ func TestCloudEncryptsTasksAndReposOnTheWire(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = cloud.Register(ctx, Setup{
-		Rosters:  []Roster{{Name: "work", EmojiMode: "on", ATeam: members("Gandalf")}},
+		Rosters:  []Roster{{Name: "work", EmojiMode: "on", Members: members("Gandalf")}},
 		Settings: Settings{DefaultRoster: "work", AutoDraft: true, Expiry: "7d"},
 		Links:    []ProjectLink{{Repo: repo, Roster: "work"}},
 		Drafts:   []Draft{{Roster: "work", Member: "Gandalf", Emoji: "🧙", Copy: 1, SessionID: "s1", Repo: repo, Task: task}},
@@ -162,7 +162,7 @@ func TestCloudMapsAPIErrors(t *testing.T) {
 		t.Errorf("roster_not_found: %v", err)
 	}
 	respond(409, "roster_exists")
-	if _, err := cloud.CreateRoster(ctx, Roster{Name: "work", EmojiMode: "on", ATeam: members("A")}); !errors.Is(err, ErrNameTaken) {
+	if _, err := cloud.CreateRoster(ctx, Roster{Name: "work", EmojiMode: "on", Members: members("A")}); !errors.Is(err, ErrNameTaken) {
 		t.Errorf("roster_exists: %v", err)
 	}
 	respond(404, "no_rosters")
@@ -200,7 +200,7 @@ func TestCloudMapsAPIErrors(t *testing.T) {
 		t.Errorf("unauthorized: %v", err)
 	}
 	respond(409, "member_drafted")
-	if err := cloud.EditRoster(ctx, "work", "on", members("A"), nil); err == nil || err.Error() != "Message for member_drafted." {
+	if err := cloud.EditRoster(ctx, "work", "on", members("A")); err == nil || err.Error() != "Message for member_drafted." {
 		t.Errorf("member_drafted: %v", err)
 	}
 	respond(502, "")
@@ -247,9 +247,9 @@ func TestCloudRegisterKeepsRosterOrderWhenTimesTie(t *testing.T) {
 	api, cloud, _ := newFakeAPI(t, func(w http.ResponseWriter, r recordedRequest) { w.Write([]byte(`{}`)) })
 	second := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	err := cloud.Register(ctx, Setup{Rosters: []Roster{
-		{Name: "work", EmojiMode: "on", ATeam: members("A"), CreatedAt: second},
-		{Name: "play", EmojiMode: "on", ATeam: members("B"), CreatedAt: second},
-		{Name: "side", EmojiMode: "on", ATeam: members("C"), CreatedAt: second.Add(-time.Hour)},
+		{Name: "work", EmojiMode: "on", Members: members("A"), CreatedAt: second},
+		{Name: "play", EmojiMode: "on", Members: members("B"), CreatedAt: second},
+		{Name: "side", EmojiMode: "on", Members: members("C"), CreatedAt: second.Add(-time.Hour)},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -274,12 +274,12 @@ func TestCloudStatsIsOneCall(t *testing.T) {
 		task, _ := keys.Encrypt("Fix CI")
 		json.NewEncoder(w).Encode(map[string]any{"rosters": []map[string]any{
 			{"name": "work", "emojiMode": "on", "isDefault": true, "createdAt": time.Now(),
-				"aTeam": []map[string]any{{"name": "Gandalf", "emoji": "🧙"}, {"name": "Frodo", "emoji": "💍"}}, "bTeam": []any{},
-				"drafted": []map[string]any{{"name": "Gandalf 2", "emoji": "🧙", "team": "a", "task": task, "repo": nil,
+				"members": []map[string]any{{"name": "Gandalf", "emoji": "🧙"}, {"name": "Frodo", "emoji": "💍"}},
+				"drafted": []map[string]any{{"name": "Gandalf 2", "emoji": "🧙", "task": task, "repo": nil,
 					"draftedAt": time.Now(), "restingSince": nil}},
 				"idle": []any{}},
 			{"name": "home", "emojiMode": "only", "isDefault": false, "createdAt": time.Now(),
-				"aTeam": []map[string]any{{"name": "Sam", "emoji": "🥔"}}, "bTeam": []any{}, "drafted": []any{}, "idle": []any{}},
+				"members": []map[string]any{{"name": "Sam", "emoji": "🥔"}}, "drafted": []any{}, "idle": []any{}},
 		}})
 	})
 
@@ -290,36 +290,11 @@ func TestCloudStatsIsOneCall(t *testing.T) {
 	if len(api.requests) != 1 || api.requests[0].path != "/v1/stats" {
 		t.Fatalf("requests: %+v", api.requests)
 	}
-	if stats.DefaultRoster != "work" || len(stats.Rosters) != 2 || len(stats.Rosters[0].ATeam) != 2 ||
-		stats.Rosters[1].EmojiMode != "only" || stats.Rosters[1].BTeam == nil {
+	if stats.DefaultRoster != "work" || len(stats.Rosters) != 2 || len(stats.Rosters[0].Members) != 2 ||
+		stats.Rosters[1].EmojiMode != "only" || len(stats.Rosters[1].Members) != 1 {
 		t.Fatalf("stats: %+v", stats)
 	}
 	if len(stats.Drafts) != 1 || stats.Drafts[0].Member != "Gandalf" || stats.Drafts[0].Copy != 2 || stats.Drafts[0].Task != "Fix CI" {
 		t.Fatalf("drafts: %+v", stats.Drafts)
-	}
-}
-
-// A server from before the listing had casts leaves them out, so each cast and the default come from their own calls.
-func TestCloudStatsFromAnOlderServer(t *testing.T) {
-	api, cloud, _ := newFakeAPI(t, func(w http.ResponseWriter, r recordedRequest) {
-		switch r.path {
-		case "/v1/stats":
-			w.Write([]byte(`{"rosters": [{"name": "work", "emojiMode": "on", "drafted": [], "idle": []}]}`))
-		case "/v1/rosters/work":
-			w.Write([]byte(`{"name": "work", "emojiMode": "on", "aTeam": [{"name": "Gandalf", "emoji": "🧙"}], "bTeam": []}`))
-		case "/v1/settings":
-			w.Write([]byte(`{"defaultRoster": "work", "draftExpiry": "7d", "autoDraft": true}`))
-		}
-	})
-
-	stats, err := cloud.Stats(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stats.DefaultRoster != "work" || len(stats.Rosters) != 1 || stats.Rosters[0].ATeam[0].Name != "Gandalf" {
-		t.Fatalf("stats: %+v", stats)
-	}
-	if len(api.requests) != 3 {
-		t.Fatalf("requests: %+v", api.requests)
 	}
 }

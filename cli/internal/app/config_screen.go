@@ -48,7 +48,7 @@ func runConfigScreen(ctx context.Context, out io.Writer, st store.Store, setting
 		Description("Hours, days, or weeks: 48h, 7d, 2w.").Value(&expiry).
 		Validate(func(s string) error { _, err := store.ParseExpiry(s); return err })
 	var mode roster.EmojiMode
-	pickEmoji := huh.NewSelect[roster.EmojiMode]().Title("How should this roster's agents show up?").Value(&mode)
+	pickEmoji := huh.NewSelect[roster.EmojiMode]().Title("Emojis for this roster's agents").Value(&mode)
 	moveToCloud := true
 	confirmCloud := huh.NewConfirm().Title("Move your whole setup to the cloud?").
 		Description("Your rosters and settings move to the rostr API, so other machines and cloud environments can share " +
@@ -76,8 +76,8 @@ func runConfigScreen(ctx context.Context, out io.Writer, st store.Store, setting
 			r := emojiRoster()
 			mode = r.EmojiMode
 			first := roster.Member{Emoji: "🧙", Name: "Gandalf"}
-			if len(r.ATeam) > 0 {
-				first = r.ATeam[0]
+			if len(r.Members) > 0 {
+				first = r.Members[0]
 			}
 			pickEmoji.Options(emojiModeOptions(first)...)
 		}
@@ -120,8 +120,8 @@ func runConfigScreen(ctx context.Context, out io.Writer, st store.Store, setting
 // emojiModeOptions previews each emoji mode with one member.
 func emojiModeOptions(m roster.Member) []huh.Option[roster.EmojiMode] {
 	return []huh.Option[roster.EmojiMode]{
-		huh.NewOption(roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)+"  (emoji and name)", roster.EmojiOn),
-		huh.NewOption(roster.Display(m.Emoji, m.Name, 1, roster.EmojiOff)+"  (name only)", roster.EmojiOff),
-		huh.NewOption(roster.Display(m.Emoji, m.Name, 1, roster.EmojiOnly)+"  (emoji only)", roster.EmojiOnly),
+		huh.NewOption("always  ("+roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)+")", roster.EmojiOn),
+		huh.NewOption("never  ("+roster.Display(m.Emoji, m.Name, 1, roster.EmojiOff)+")", roster.EmojiOff),
+		huh.NewOption("only  ("+roster.Display(m.Emoji, m.Name, 1, roster.EmojiOnly)+")", roster.EmojiOnly),
 	}
 }

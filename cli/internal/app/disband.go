@@ -77,10 +77,10 @@ func newDisbandCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// The roster's first A-teamer says goodbye
+			// The roster's first member says goodbye
 			farewell := ""
-			if len(r.ATeam) > 0 {
-				farewell = " " + roster.Display(r.ATeam[0].Emoji, r.ATeam[0].Name, 1, r.EmojiMode) + " says bye."
+			if len(r.Members) > 0 {
+				farewell = " " + roster.Display(r.Members[0].Emoji, r.Members[0].Name, 1, r.EmojiMode) + " says bye."
 			}
 			fmt.Fprintf(out, "Disbanded the %s roster.%s\n", r.Name, farewell)
 

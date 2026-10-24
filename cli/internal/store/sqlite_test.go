@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -53,9 +54,9 @@ func members(names ...string) []roster.Member {
 	return out
 }
 
-func createRoster(t *testing.T, st Store, name string, aTeam, bTeam []roster.Member) {
+func createRoster(t *testing.T, st Store, name string, cast []roster.Member) {
 	t.Helper()
-	if _, err := st.CreateRoster(ctx, Roster{Name: name, EmojiMode: roster.EmojiOn, ATeam: aTeam, BTeam: bTeam}); err != nil {
+	if _, err := st.CreateRoster(ctx, Roster{Name: name, EmojiMode: roster.EmojiOn, Members: cast}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -63,7 +64,7 @@ func createRoster(t *testing.T, st Store, name string, aTeam, bTeam []roster.Mem
 func createFellowship(t *testing.T, st Store, name string) {
 	t.Helper()
 	p, _ := presets.ByID("fellowship")
-	createRoster(t, st, name, p.ATeam, p.BTeam)
+	createRoster(t, st, name, p.Members)
 }
 
 func draft(t *testing.T, st Store, session, rosterName string) Draft {
@@ -82,7 +83,7 @@ func bench(t *testing.T, st Store, session string) {
 	}
 }
 
-func TestDraftsATeamInOrderThenBTeam(t *testing.T) {
+func TestDraftsInRosterOrder(t *testing.T) {
 	st, _ := openTestStore(t)
 	createFellowship(t, st, "work")
 
@@ -92,22 +93,18 @@ func TestDraftsATeamInOrderThenBTeam(t *testing.T) {
 		if d.Name() != name {
 			t.Fatalf("draft %d: got %s, want %s", i, d.Name(), name)
 		}
-		wantTeam := map[bool]string{true: "A", false: "B"}[i < 6]
-		if d.Team != wantTeam {
-			t.Errorf("%s: team %q, want %q", name, d.Team, wantTeam)
-		}
 	}
 
-	// A freed A-teamer is drafted before the next B-teamer
+	// The rest of the roster, never drafted, comes before Frodo again once he's freed
 	bench(t, st, "s1")
-	if d := draft(t, st, "s-next", "work"); d.Name() != "Frodo" {
-		t.Errorf("got %s, want Frodo back before more of the B team", d.Name())
+	if d := draft(t, st, "s-next", "work"); d.Name() != "Pippin" {
+		t.Errorf("got %s, want Pippin, who's never been drafted", d.Name())
 	}
 }
 
 func TestDraftsNumberedCopiesWhenEveryoneIsBusy(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "small", members("Gandalf", "Frodo"), nil)
+	createRoster(t, st, "small", members("Gandalf", "Frodo"))
 
 	var got []string
 	for i := range 5 {
@@ -170,7 +167,7 @@ func TestResumeGetsTheOldNameBackIfFree(t *testing.T) {
 
 func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 	createFellowship(t, st, "play")
 
 	draft(t, st, "s1", "work") // Gandalf
@@ -187,7 +184,7 @@ func TestResumeDraftsSomeoneElseFromTheSameRosterIfTheOldNameIsTaken(t *testing.
 
 func TestReclaimNeverDraftsANewMember(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf"), nil)
+	createRoster(t, st, "work", members("Gandalf"))
 
 	// No history: nothing
 	if d, err := st.Reclaim(ctx, "s1"); err != nil || d != nil {
@@ -216,7 +213,7 @@ func TestReclaimNeverDraftsANewMember(t *testing.T) {
 
 func TestExpiryReleasesStaleDrafts(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 
 	draft(t, st, "s1", "work") // Gandalf
 	clock.Advance(6 * 24 * time.Hour)
@@ -300,8 +297,8 @@ func TestBenchedDraftsAreKeptForSevenDays(t *testing.T) {
 
 func TestSessionRosterIsPinnedAtFirstDraft(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
-	createRoster(t, st, "play", members("Mario", "Link"), nil)
+	createRoster(t, st, "work", members("Gandalf", "Frodo"))
+	createRoster(t, st, "play", members("Mario", "Link"))
 
 	if _, err := st.Draft(ctx, DraftRequest{SessionID: "s1", Roster: "work", Repo: "acme/api"}); err != nil {
 		t.Fatal(err)
@@ -334,13 +331,13 @@ func TestReplaceCastWhileAgentsAreDrafted(t *testing.T) {
 	draft(t, st, "s1", "work") // Gandalf
 
 	hogwarts, _ := presets.ByID("hogwarts")
-	if err := st.ReplaceCast(ctx, "work", hogwarts.ATeam, hogwarts.BTeam); err != nil {
+	if err := st.ReplaceCast(ctx, "work", hogwarts.Members); err != nil {
 		t.Fatal(err)
 	}
 
 	// Gandalf keeps his name and emoji until his session ends, though he's left the cast
 	active, _ := st.ActiveDrafts(ctx)
-	if len(active) != 1 || active[0].Display() != "🧙 Gandalf" || active[0].Team != "" {
+	if len(active) != 1 || active[0].Display() != "🧙 Gandalf" {
 		t.Fatalf("active drafts %+v", active)
 	}
 
@@ -366,34 +363,34 @@ func TestReplaceCastWhileAgentsAreDrafted(t *testing.T) {
 
 func TestEditRefusesRenamingOrRemovingDraftedMembers(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"), members("Boromir"))
+	createRoster(t, st, "work", members("Gandalf", "Frodo", "Boromir"))
 	draft(t, st, "s1", "work") // Gandalf
 
 	renamed := []roster.Member{{Name: "Gandalf the White", Emoji: "🧙"}, {Name: "Frodo", Emoji: "💍"}}
-	if err := st.EditRoster(ctx, "work", roster.EmojiOn, renamed, nil); err == nil {
+	if err := st.EditRoster(ctx, "work", roster.EmojiOn, renamed); err == nil {
 		t.Fatal("renaming a drafted member was allowed")
 	}
 
-	// Moving Gandalf to the B team, changing his emoji, and removing idle Frodo are fine
-	edited := []roster.Member{{Name: "Boromir", Emoji: "🛡️"}}
-	if err := st.EditRoster(ctx, "work", roster.EmojiOff, edited, []roster.Member{{Name: "Gandalf", Emoji: "🪄"}}); err != nil {
+	// Moving Gandalf down the roster, changing his emoji, and removing idle Frodo are fine
+	edited := []roster.Member{{Name: "Boromir", Emoji: "🛡️"}, {Name: "Gandalf", Emoji: "🪄"}}
+	if err := st.EditRoster(ctx, "work", roster.EmojiOff, edited); err != nil {
 		t.Fatal(err)
 	}
 	r, _ := st.Roster(ctx, "work")
-	if r.EmojiMode != roster.EmojiOff || r.Team("Gandalf") != "B" || r.Team("Frodo") != "" {
+	if r.EmojiMode != roster.EmojiOff || !slices.Equal(r.Members, edited) {
 		t.Fatalf("edit not saved: %+v", r)
 	}
 	// The draft keeps the emoji it was drafted with
-	if d, _ := st.SessionDraft(ctx, "s1"); d.Emoji != "e0" || d.Team != "B" {
+	if d, _ := st.SessionDraft(ctx, "s1"); d.Emoji != "e0" {
 		t.Errorf("draft %+v", d)
 	}
 }
 
 func TestRosterNamesAreUniqueLoosely(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "Éowyn's", members("A"), nil)
+	createRoster(t, st, "Éowyn's", members("A"))
 
-	_, err := st.CreateRoster(ctx, Roster{Name: "eowyn's", EmojiMode: roster.EmojiOn, ATeam: members("B")})
+	_, err := st.CreateRoster(ctx, Roster{Name: "eowyn's", EmojiMode: roster.EmojiOn, Members: members("B")})
 	if !errors.Is(err, ErrNameTaken) {
 		t.Fatalf("got %v, want ErrNameTaken", err)
 	}
@@ -407,8 +404,8 @@ func TestRosterNamesAreUniqueLoosely(t *testing.T) {
 
 func TestFirstRosterBecomesDefault(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "work", members("A"), nil)
-	createRoster(t, st, "play", members("B"), nil)
+	createRoster(t, st, "work", members("A"))
+	createRoster(t, st, "play", members("B"))
 	settings, _ := st.Settings(ctx)
 	if settings.DefaultRoster != "work" || !settings.AutoDraft || settings.Expiry != "7d" {
 		t.Fatalf("settings %+v", settings)
@@ -417,11 +414,11 @@ func TestFirstRosterBecomesDefault(t *testing.T) {
 
 func TestDisband(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("A", "B"), nil)
+	createRoster(t, st, "work", members("A", "B"))
 	clock.Advance(time.Second)
-	createRoster(t, st, "play", members("C"), nil)
+	createRoster(t, st, "play", members("C"))
 	clock.Advance(time.Second)
-	createRoster(t, st, "side", members("D"), nil)
+	createRoster(t, st, "side", members("D"))
 	if err := st.LinkProject(ctx, "acme/api", "work"); err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +465,7 @@ func TestDisband(t *testing.T) {
 func TestEmojiOnlyNeedsUniqueEmoji(t *testing.T) {
 	st, _ := openTestStore(t)
 	cast := []roster.Member{{Name: "Pikachu", Emoji: "⚡"}, {Name: "Zeus", Emoji: "⚡"}}
-	createRoster(t, st, "mixed", cast, nil)
+	createRoster(t, st, "mixed", cast)
 	if err := st.SetEmojiMode(ctx, "mixed", roster.EmojiOnly); err == nil {
 		t.Fatal("only mode allowed duplicate emoji")
 	}
@@ -479,8 +476,8 @@ func TestEmojiOnlyNeedsUniqueEmoji(t *testing.T) {
 
 func TestLinks(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "work", members("A"), nil)
-	createRoster(t, st, "play", members("B"), nil)
+	createRoster(t, st, "work", members("A"))
+	createRoster(t, st, "play", members("B"))
 
 	if err := st.LinkProject(ctx, "acme/api", "PLAY"); err != nil {
 		t.Fatal(err)
@@ -529,7 +526,7 @@ func TestConcurrentDraftsNeverShareAMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createRoster(t, setup, "small", members("A", "B", "C"), members("D"))
+	createRoster(t, setup, "small", members("A", "B", "C", "D"))
 	setup.Close()
 
 	const workers, draftsEach = 8, 6
@@ -589,9 +586,9 @@ func TestFirstDraftUsesFlagThenLinkThenDefault(t *testing.T) {
 	if _, err := st.Draft(ctx, DraftRequest{SessionID: "s0"}); !errors.Is(err, ErrNoRosters) {
 		t.Fatalf("draft with no rosters: %v", err)
 	}
-	createRoster(t, st, "work", members("Gandalf"), nil)
-	createRoster(t, st, "play", members("Mario"), nil)
-	createRoster(t, st, "side", members("Ada"), nil)
+	createRoster(t, st, "work", members("Gandalf"))
+	createRoster(t, st, "play", members("Mario"))
+	createRoster(t, st, "side", members("Ada"))
 	if err := st.LinkProject(ctx, "acme/api", "play"); err != nil {
 		t.Fatal(err)
 	}
@@ -613,8 +610,8 @@ func TestFirstDraftUsesFlagThenLinkThenDefault(t *testing.T) {
 
 func TestExportReadsTheWholeSetup(t *testing.T) {
 	st, _ := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
-	createRoster(t, st, "play", members("Mario"), nil)
+	createRoster(t, st, "work", members("Gandalf", "Frodo"))
+	createRoster(t, st, "play", members("Mario"))
 	if err := st.LinkProject(ctx, "acme/api", "play"); err != nil {
 		t.Fatal(err)
 	}
@@ -646,6 +643,7 @@ func TestMigratesReleasedAtToBenchedAt(t *testing.T) {
 	draft(t, st, "s1", "work")
 
 	// Turn it back into a version 1 database
+	splitTeams(t, st, 6)
 	if _, err := st.db.Exec(`alter table drafts rename column benched_at to released_at;
 		alter table drafts drop column turn_started_at; alter table drafts drop column turn_ended_at;
 		pragma user_version = 1`); err != nil {
@@ -661,5 +659,54 @@ func TestMigratesReleasedAtToBenchedAt(t *testing.T) {
 	recordTurn(t, st, "s1", true, time.Now())
 	if d, err := st.Bench(ctx, "s1"); err != nil || d == nil {
 		t.Fatalf("bench after migrating: %v, %v", d, err)
+	}
+}
+
+// splitTeams turns a version 4 database's rosters back into version 3's A team and B team columns, the first n
+// members on the A team.
+func splitTeams(t *testing.T, st *SQLite, n int) {
+	t.Helper()
+	rosters, err := allRosters(ctx, st.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`alter table rosters rename column members to a_team;
+		alter table rosters add column b_team text not null default '[]'; pragma user_version = 3`); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rosters {
+		split := min(n, len(r.Members))
+		if _, err := st.db.Exec("update rosters set a_team = ?, b_team = ? where id = ?",
+			mustJSON(r.Members[:split]), mustJSON(r.Members[split:]), r.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMigratingMergesTheTeams(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rostr.db")
+	st, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createFellowship(t, st, "work")
+	createRoster(t, st, "small", members("Ada"))
+	draft(t, st, "s1", "work")
+	splitTeams(t, st, 6)
+	st.Close()
+
+	st, err = OpenSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	fellowship, _ := presets.ByID("fellowship")
+	work, _ := st.Roster(ctx, "work")
+	small, _ := st.Roster(ctx, "small")
+	if !slices.Equal(work.Members, fellowship.Members) || !slices.Equal(small.Members, members("Ada")) {
+		t.Fatalf("members after migrating: %v, %v", work.Members, small.Members)
+	}
+	if d, _ := st.SessionDraft(ctx, "s1"); d == nil || d.Name() != "Gandalf" {
+		t.Fatalf("draft after migrating: %+v", d)
 	}
 }

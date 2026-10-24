@@ -14,7 +14,7 @@ import (
 func newEditCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit [<roster>]",
-		Short: "Edit a roster's members, emoji, and A team (terminal only)",
+		Short: "Edit a roster's members and emoji (terminal only)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -53,11 +53,11 @@ func newEditCommand() *cobra.Command {
 	}
 }
 
-// saveEdit saves the roster as changed on the teams page and the last page. It refuses to drop or rename a member
+// saveEdit saves the roster as changed on the cast page and the last page. It refuses to drop or rename a member
 // who's drafted.
 func saveEdit(ctx context.Context, out io.Writer, st store.Store, flow *assembleFlow) error {
 	edited := flow.chosenCast()
-	if err := st.EditRoster(ctx, flow.roster, flow.emoji, edited.aTeam, edited.bTeam); err != nil {
+	if err := st.EditRoster(ctx, flow.roster, flow.emoji, edited.members); err != nil {
 		return fmt.Errorf("not saved: %w", err)
 	}
 	fmt.Fprintf(out, "Saved the %s roster.\n", flow.roster)

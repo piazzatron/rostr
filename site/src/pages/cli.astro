@@ -38,12 +38,13 @@ const COMMAND_GROUPS: CommandGroup[] = [
         id: "assemble",
         badge: "⭐ The only one you need",
         usage:
-          "rostr assemble [<roster>] [--preset <id> | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft] [--link]",
+          "rostr assemble [<roster>] [--preset <id> [--size <n>|all] | --names <list>] [--emoji on|off|only] [--cloud] [--no-auto-draft] [--link]",
         summary:
           "Interactive setup: answer a few questions and you're done. It's the only command you need to run, and your agent can run it for you with flags.",
         options: [
           { flag: "--preset <id>", description: "Skip the preset question. See them all with rostr presets." },
-          { flag: "--names <list>", description: "Use your own comma-separated names, with an emoji in front if you like. The first six are your A team, and names without an emoji get a random one." },
+          { flag: "--size <n>|all", description: "How many of the preset's members are on your team, from the top of its list. Defaults to 16; all takes everyone. Only with --preset." },
+          { flag: "--names <list>", description: "Use your own comma-separated names, in draft order, with an emoji in front if you like. Names without an emoji get a random one." },
           { flag: "--emoji on|off|only", description: "How agents show up. Defaults to on." },
           { flag: "--cloud", description: "Keep everything on the rostr API. Only for your first roster; after that, use rostr cloud on." },
           { flag: "--no-auto-draft", description: "Don't draft sessions automatically; use /draft instead." },
@@ -51,6 +52,7 @@ const COMMAND_GROUPS: CommandGroup[] = [
         ],
         example: `$ rostr assemble
 ✔ Pick a preset · 💍 The Fellowship
+✔ How big is your team? · 6
 ✔ Name your roster · work
 ✔ Emoji · On (🧙 Gandalf)
 ✔ Where should rostr live? · This machine
@@ -60,7 +62,7 @@ const COMMAND_GROUPS: CommandGroup[] = [
 💍 Assembled a roster named work. Start a new session to get drafted
 
 $ rostr assemble side --names "🧮 Ada, Grace, Linus, Margaret, Ken, Barbara"
-✏️ Assembled a roster named side with 6 members, all on the A team
+✏️ Assembled a roster named side with 6 members
    🧮 Ada, 🦋 Grace, 🐧 Linus, 🚀 Margaret, 🧵 Ken, 🌻 Barbara`,
       },
       {
@@ -107,14 +109,14 @@ bench: LeBron, Kobe, Magic, Bird, Curry, Shaq`,
       {
         id: "edit",
         usage: "rostr edit [<roster>]",
-        summary: "Add, rename, and remove a roster's members, change their emoji, and move them between the A and B teams, in a full-screen editor. To swap in a whole new cast, run rostr assemble and replace it.",
+        summary: "Add, rename, and remove a roster's members and change their emoji, in a full-screen editor. To swap in a whole new cast, run rostr assemble and replace it.",
         example: `$ rostr edit work
 Saved the work roster.`,
       },
       {
         id: "presets",
         usage: "rostr presets",
-        summary: "See all the pre-built rosters you can pass to --preset. They're also on the rosters page, with their full teams.",
+        summary: "See all the pre-built rosters you can pass to --preset. They're also on the rosters page, with all their members.",
         example:
           "$ rostr presets\n" +
           PRESET_ROSTERS.map((roster) => `${roster.id.padEnd(16)} ${roster.emoji} ${roster.name} (${roster.source})`).join("\n"),
@@ -142,7 +144,7 @@ Disbanded work. side is now your default roster`,
         badge: "⚙️ On session start and end",
         usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr bench [<name>, ... | all] [--session <id>]",
         summary:
-          "Draft the next free agent when a session starts, A team first, and send it back to the bench when the session ends. The same session always gets the same name back.",
+          "Draft the next free agent when a session starts, and send it back to the bench when the session ends. The same session always gets the same name back.",
         options: [
           { flag: "--task <description>", description: "What the agent is working on. Shown in rostr stats." },
           { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION." },
@@ -152,7 +154,7 @@ Disbanded work. side is now your default roster`,
 🧙 Gandalf is on it: Fix auth redirect loop
 
 $ rostr draft --json
-{"name": "Gandalf", "emoji": "🧙", "team": "A", "roster": "work", "display": "🧙 Gandalf"}
+{"name": "Gandalf", "emoji": "🧙", "roster": "work", "display": "🧙 Gandalf"}
 
 $ rostr bench gandalf
 Benched 🧙 Gandalf from the work roster.`,
@@ -244,8 +246,17 @@ $ rostr config emoji only
     <dl class="concepts">
       <dt>Roster</dt>
       <dd>A named list of agents you can draft from, like your Fellowship or your Smash Bros.</dd>
-      <dt>A team and B team</dt>
-      <dd>Every roster has a small A team, six by default. Drafting picks from the A team first and only calls up the B team when every starter is busy.</dd>
+      <dt>Drafting</dt>
+      <dd>
+        A roster's members are in draft order. Each session gets the free member drafted least recently: anyone who
+        hasn't been drafted yet goes first, in roster order. When no one's free, it takes the name of whoever has been
+        resting longest, or else a numbered copy like <code>🧙&nbsp;Gandalf&nbsp;2</code>.
+      </dd>
+      <dt>Team size</dt>
+      <dd>
+        A pre-built roster is a big cast to pick from. When you assemble one, your team is its first 16, or pick 4,
+        8, or everyone. Then pick anyone else on that roster, or add your own, in the cast editor.
+      </dd>
       <dt>Local or cloud</dt>
       <dd>
         Your whole setup lives in one place. Locally, everything is on disk. Once you turn on <a href="#config"

@@ -39,10 +39,10 @@ func TestFirstSetupInTheCloud(t *testing.T) {
 	}
 
 	l := m.list()
-	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Bench) != 20 {
+	if len(l.Rosters) != 1 || l.Rosters[0].Name != "work" || l.Rosters[0].EmojiMode != "on" || len(l.Rosters[0].Bench) != 16 {
 		t.Fatalf("list: %+v", l)
 	}
-	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" || d.Team != "A" {
+	if d := m.draft(m.home, "s1", "--task", "Write the e2e tests"); d.Display != "🧙 Gandalf" || d.Roster != "work" {
 		t.Fatalf("draft: %+v", d)
 	}
 	if text := m.ok("stats"); !strings.Contains(text, "🧙 Gandalf   Write the e2e tests   -   just now") {
@@ -293,12 +293,11 @@ func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
 			Drafted   []struct {
 				Name      string    `json:"name"`
 				Emoji     string    `json:"emoji"`
-				Team      *string   `json:"team"`
 				Task      *string   `json:"task"`
 				Repo      *string   `json:"repo"`
 				DraftedAt time.Time `json:"draftedAt"`
 			} `json:"drafted"`
-			Idle []struct{ Name, Emoji, Team string } `json:"idle"`
+			Idle []struct{ Name, Emoji string } `json:"idle"`
 		} `json:"rosters"`
 	}
 	if err := json.Unmarshal(raw, &listed); err != nil {
@@ -310,8 +309,8 @@ func TestPublicAPIWithTheTokenAndRecipe(t *testing.T) {
 		t.Fatalf("shape: %s", raw)
 	}
 	r, d := listed.Rosters[0], listed.Rosters[0].Drafted[0]
-	if r.Name != "work" || r.EmojiMode != "on" || d.Name != "Gandalf" || d.Emoji != "🧙" || d.Team == nil || *d.Team != "a" ||
-		d.Task == nil || d.Repo == nil || time.Since(d.DraftedAt) > time.Minute || r.Idle[0].Name != "Frodo" || r.Idle[0].Team != "a" {
+	if r.Name != "work" || r.EmojiMode != "on" || d.Name != "Gandalf" || d.Emoji != "🧙" ||
+		d.Task == nil || d.Repo == nil || time.Since(d.DraftedAt) > time.Minute || r.Idle[0].Name != "Frodo" {
 		t.Fatalf("shape: %s", raw)
 	}
 	for _, field := range []string{"Build the", "acme/dashboard"} {
@@ -597,13 +596,15 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 
-	// Fellowship as it comes, then the defaults on the last page: its name, emoji on, the cloud, auto-draft on
+	// Fellowship's team of 16 as it comes, then the defaults on the last page: its name, emoji on, the cloud,
+	// auto-draft on
 	out, code := m.runTTY([]ttyStep{
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", keyEnter},
+		{"How big is your team?", keyEnter},
 		{"Who's on the roster?", keyEnter},
 		{"Ready to assemble?", keyEnter}, // roster name
-		{"Agents show up as", keyEnter},
+		{"Emojis", keyEnter},
 		{"rostr lives on", keyEnter},
 		{"Name new sessions", keyEnter},
 		{"Assemble", keyEnter},
@@ -618,7 +619,7 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 	if _, err := os.Stat(m.databasePath()); !os.IsNotExist(err) {
 		t.Fatalf("rostr.db: %v", err)
 	}
-	if l := m.list(); len(l.Rosters) != 1 || l.Rosters[0].Name != "fellowship" {
+	if l := m.list(); len(l.Rosters) != 1 || l.Rosters[0].Name != "fellowship" || len(l.Rosters[0].Bench) != 16 {
 		t.Fatalf("list: %+v", l)
 	}
 
@@ -631,13 +632,16 @@ func TestAssembleWizardCloudOption(t *testing.T) {
 		{"How do you want to build your roster?", keyEnter},
 		{"Pick a roster: type to search", "hogwarts"},
 		{"hogwarts", keyEnter},
+		{"How big is your team?", keyUp}, // 8
+		{"How big is your team?", keyEnter},
 		{"Who's on the roster?", keyEnter},
 	}, "assemble")
 	if code != 0 || !strings.Contains(out, "Replaced the fellowship roster's cast") {
 		t.Fatalf("replace cast: exit %d\n%s", code, out)
 	}
 	l := m.list()
-	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || d[0].Team != "" || l.Rosters[0].Bench[0].Name != "Harry" {
+	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || len(l.Rosters[0].Bench) != 8 ||
+		l.Rosters[0].Bench[0].Name != "Harry" {
 		t.Fatalf("after replacing the cast: %+v", l)
 	}
 	if d := m.draft(m.home, "s2"); d.Name != "Harry" {
@@ -666,7 +670,7 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 
 	// draft: the linked roster in the repo, the default outside it, --roster over both
-	if d := m.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Team: "A", Roster: "play", Display: "Ada"}) {
+	if d := m.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Roster: "play", Display: "Ada"}) {
 		t.Fatalf("draft in repo: %+v", d)
 	}
 	if d := m.draft(m.home, "s2"); d.Display != "🧙 Gandalf" || d.Roster != "work" {
@@ -716,11 +720,11 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 	out, code = m.runTTY([]ttyStep{
 		{"Edit the play roster", "a"},
-		{"Add someone", "🐧 Linus"},
+		{"Add your own", "🐧 Linus"},
 		{"Linus", keyEnter},
 		{"Linus", keyEsc},
 		{"Linus", keyUp},                   // Grace
-		{"Linus", " "},                     // to the B team
+		{"Linus", "x"},                     // removed
 		{"Linus", keyEnter},                // done
 		{"Save the play roster?", keyLeft}, // emoji off to on
 		{"Save the play roster?", keyEnter},

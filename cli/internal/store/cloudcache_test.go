@@ -23,7 +23,7 @@ func (f *fakeRoster) respond(w http.ResponseWriter, r recordedRequest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	draft := func(name string, copy int, session string) map[string]any {
-		return map[string]any{"name": name, "emoji": "⭐", "copy": copy, "team": "a", "roster": "work", "emojiMode": "on",
+		return map[string]any{"name": name, "emoji": "⭐", "copy": copy, "roster": "work", "emojiMode": "on",
 			"session": session, "task": nil, "repo": nil, "draftedAt": time.Now()}
 	}
 	switch r.path {

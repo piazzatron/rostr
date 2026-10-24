@@ -46,19 +46,19 @@ func TestParseMember(t *testing.T) {
 	}
 }
 
-func TestParseNamesSplitsTeamsAndAssignsUniqueEmoji(t *testing.T) {
-	aTeam, bTeam, err := ParseNames("🧮 Ada, Grace, Alan, Margaret, Donald, Linus, Dennis, ,Barbara")
+func TestParseNamesKeepsOrderAndAssignsUniqueEmoji(t *testing.T) {
+	members, err := ParseNames("🧮 Ada, Grace, Alan, Margaret, Donald, Linus, Dennis, ,Barbara")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(aTeam) != 6 || len(bTeam) != 2 || aTeam[0] != (Member{Name: "Ada", Emoji: "🧮"}) || bTeam[1].Name != "Barbara" {
-		t.Fatalf("got %+v / %+v", aTeam, bTeam)
+	if len(members) != 8 || members[0] != (Member{Name: "Ada", Emoji: "🧮"}) || members[7].Name != "Barbara" {
+		t.Fatalf("got %+v", members)
 	}
-	if err := ValidateCast(aTeam, bTeam, EmojiOnly); err != nil {
+	if err := ValidateCast(members, EmojiOnly); err != nil {
 		t.Fatalf("assigned emoji aren't unique: %v", err)
 	}
 
-	if _, _, err := ParseNames(" , "); err == nil {
+	if _, err := ParseNames(" , "); err == nil {
 		t.Error("an empty list was accepted")
 	}
 }
@@ -74,7 +74,7 @@ func TestAssignMissingEmojiAvoidsTypedEmoji(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := ValidateCast(assigned, nil, EmojiOnly); err != nil {
+		if err := ValidateCast(assigned, EmojiOnly); err != nil {
 			t.Fatal(err)
 		}
 		if assigned[0].Emoji != "🦊" || members[2].Emoji != "" {
@@ -105,27 +105,27 @@ func TestEmojiPoolIsUniqueEmoji(t *testing.T) {
 
 func TestValidateCast(t *testing.T) {
 	ok := []Member{{Name: "Gandalf", Emoji: "🧙"}, {Name: "Frodo", Emoji: "💍"}}
-	if err := ValidateCast(ok, nil, EmojiOnly); err != nil {
+	if err := ValidateCast(ok, EmojiOnly); err != nil {
 		t.Fatal(err)
 	}
 	for name, tc := range map[string]struct {
-		aTeam, bTeam []Member
-		mode         EmojiMode
+		members []Member
+		mode    EmojiMode
 	}{
-		"empty A team":        {nil, ok, EmojiOn},
-		"loose duplicate":     {[]Member{{Name: "Éowyn", Emoji: "⚔️"}}, []Member{{Name: "eowyn", Emoji: "🗡️"}}, EmojiOn},
-		"missing name":        {[]Member{{Name: " ", Emoji: "⚔️"}}, nil, EmojiOn},
-		"missing emoji":       {[]Member{{Name: "Ada"}}, nil, EmojiOff},
-		"bad mode":            {ok, nil, "sometimes"},
-		"only, shared emoji":  {[]Member{{Name: "Pikachu", Emoji: "⚡"}, {Name: "Zeus", Emoji: "⚡"}}, nil, EmojiOnly},
-		"only, VS16 variants": {[]Member{{Name: "Boromir", Emoji: "🛡️"}}, []Member{{Name: "Cap", Emoji: "🛡"}}, EmojiOnly},
+		"no members":          {nil, EmojiOn},
+		"loose duplicate":     {[]Member{{Name: "Éowyn", Emoji: "⚔️"}, {Name: "eowyn", Emoji: "🗡️"}}, EmojiOn},
+		"missing name":        {[]Member{{Name: " ", Emoji: "⚔️"}}, EmojiOn},
+		"missing emoji":       {[]Member{{Name: "Ada"}}, EmojiOff},
+		"bad mode":            {ok, "sometimes"},
+		"only, shared emoji":  {[]Member{{Name: "Pikachu", Emoji: "⚡"}, {Name: "Zeus", Emoji: "⚡"}}, EmojiOnly},
+		"only, VS16 variants": {[]Member{{Name: "Boromir", Emoji: "🛡️"}, {Name: "Cap", Emoji: "🛡"}}, EmojiOnly},
 	} {
-		if err := ValidateCast(tc.aTeam, tc.bTeam, tc.mode); err == nil {
+		if err := ValidateCast(tc.members, tc.mode); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
 	// Shared emoji are fine outside "only" mode
-	if err := ValidateCast([]Member{{Name: "Pikachu", Emoji: "⚡"}, {Name: "Zeus", Emoji: "⚡"}}, nil, EmojiOn); err != nil {
+	if err := ValidateCast([]Member{{Name: "Pikachu", Emoji: "⚡"}, {Name: "Zeus", Emoji: "⚡"}}, EmojiOn); err != nil {
 		t.Error(err)
 	}
 }

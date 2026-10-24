@@ -47,9 +47,9 @@ type Store interface {
 	// another roster's name matches loosely.
 	CreateRoster(ctx context.Context, r Roster) (Roster, error)
 	// ReplaceCast swaps in a whole new cast. Drafted agents keep their names until their sessions end.
-	ReplaceCast(ctx context.Context, rosterName string, aTeam, bTeam []roster.Member) error
+	ReplaceCast(ctx context.Context, rosterName string, members []roster.Member) error
 	// EditRoster saves an edited emoji mode and cast, refusing to rename or remove a drafted member.
-	EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, aTeam, bTeam []roster.Member) error
+	EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, members []roster.Member) error
 	SetEmojiMode(ctx context.Context, rosterName string, mode roster.EmojiMode) error
 	// Usage counts a roster's active drafts and linked projects.
 	Usage(ctx context.Context, rosterName string) (Usage, error)
@@ -68,7 +68,7 @@ type Store interface {
 	SetExpiry(ctx context.Context, expiry string) error
 
 	// Draft gives a session its member: the same one if it has an active draft, its last one if that's free,
-	// otherwise the first free member (A team first, then numbered copies) of the session's pinned roster. A
+	// otherwise the free member drafted least recently (then numbered copies) of the session's pinned roster. A
 	// session's first draft uses req.Roster, else the linked roster of req.Repo, else the default; with none, the
 	// error is ErrNoRosters.
 	Draft(ctx context.Context, req DraftRequest) (Draft, error)
@@ -100,33 +100,12 @@ type Stats struct {
 	DefaultRoster string
 }
 
-// Roster is a named cast of members.
+// Roster is a named cast of members, in draft order.
 type Roster struct {
 	Name      string
 	EmojiMode roster.EmojiMode
-	ATeam     []roster.Member
-	BTeam     []roster.Member
+	Members   []roster.Member
 	CreatedAt time.Time
-}
-
-// Members is the whole cast in draft order, A team first.
-func (r Roster) Members() []roster.Member {
-	return append(append([]roster.Member{}, r.ATeam...), r.BTeam...)
-}
-
-// Team returns "A" or "B" for a member's team, or "" if they're not in the cast.
-func (r Roster) Team(memberName string) string {
-	for _, m := range r.ATeam {
-		if m.Name == memberName {
-			return "A"
-		}
-	}
-	for _, m := range r.BTeam {
-		if m.Name == memberName {
-			return "B"
-		}
-	}
-	return ""
 }
 
 // Settings are setup-wide.
@@ -194,7 +173,6 @@ type Draft struct {
 	Member     string
 	Emoji      string
 	Copy       int
-	Team       string // "A", "B", or "" when the member has left the cast
 	SessionID  string
 	Repo       string
 	Task       string
