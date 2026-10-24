@@ -236,6 +236,14 @@ import Rostr from "../components/Rostr.astro";
       When a session is drafted or renamed, <Rostr /> labels its pane: herdr shows the name as the pane's agent, and in
       tmux a window with a single pane is renamed to it. The label is cleared when the session ends.
     </p>
+    <p>
+      Claude Code runs its hooks inside the session's own pane, so <Rostr /> knows which pane to label. Codex runs hooks
+      in a shared background process, whose pane is whichever terminal started it, and nothing ties a thread to the
+      terminal showing it. So <Rostr /> works from the title instead: it has just named the thread, and Codex puts the
+      thread's name in its terminal title. <Rostr /> labels the one Codex pane whose title shows the new name, and labels
+      nothing if it finds none or more than one. If you set a custom <code>tui.terminal_title</code> in Codex, include{" "}
+      <code>thread-name</code>.
+    </p>
   </section>
 
   <section class="section">
