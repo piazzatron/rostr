@@ -1,0 +1,28 @@
+# Lint config for every Go module here (cli, server, tests). Run it with `make lint`.
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - misspell
+    - unconvert
+  exclusions:
+    presets:
+      - std-error-handling # unchecked Close, fmt.Fprint*, os.Remove*, and the like
+      - common-false-positives
+    rules:
+      # Test setup ignores errors the assertions after it would catch
+      - path: _test\.go
+        linters: [errcheck]
+      # Error strings here are messages shown to users, so they're sentences
+      - linters: [staticcheck]
+        text: ST1005
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/piazzatron/rostr

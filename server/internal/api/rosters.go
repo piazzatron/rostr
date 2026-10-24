@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -137,6 +138,7 @@ func (s *Server) handleCreateRoster(w http.ResponseWriter, r *http.Request, owne
 	if err != nil {
 		return err
 	}
+	logAttrs(r.Context(), slog.String("roster", name), slog.Int("members", len(c.Members)))
 	writeJSON(w, http.StatusCreated, resp)
 	return nil
 }
@@ -224,6 +226,7 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 	if err != nil {
 		return err
 	}
+	logAttrs(r.Context(), slog.String("roster", r.PathValue("name")), slog.Int("members", len(c.Members)))
 	writeJSON(w, http.StatusOK, resp)
 	return nil
 }
@@ -279,6 +282,8 @@ func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, own
 	if err != nil {
 		return err
 	}
+	logAttrs(r.Context(), slog.String("roster", resp.Name), slog.Int("benched", resp.BenchedDrafts),
+		slog.Bool("ownerDeleted", resp.OwnerDeleted))
 	writeJSON(w, http.StatusOK, resp)
 	return nil
 }

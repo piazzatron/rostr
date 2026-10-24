@@ -12,6 +12,16 @@ Environment:
   per auth token).
 - `LIVE_URL` and `LIVE_SECRET` (optional): the live Worker's URL and shared secret. With both set, the server pushes
   fresh home-page counts to it after writes; see [docs/live-counts.md](../docs/live-counts.md).
+- `LOG_LEVEL` (default `info`): `debug`, `info`, `warn`, or `error`.
+
+## Logs
+
+The server logs JSON to stderr, one object per line. Every request gets one `request` line with its `route` (the
+matched pattern, like `PUT /v1/rosters/{name}`), `status`, `ms`, and `owner` (the first 8 characters of the owner ID),
+plus what it did: the `roster` it created, edited, or disbanded, or the `roster`, `member`, and `copy` it drafted or
+benched. 4xx responses log at warn and 5xx at error, with the `error`. Health checks log only when they fail. The
+draft sweep logs how many drafts it benched and deleted. Auth tokens, session IDs, and the encrypted task and repo are
+never logged.
 
 ## Local development
 

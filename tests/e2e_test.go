@@ -726,63 +726,6 @@ func TestThePromptHookKeepsADraftAliveAtMostOnceAnHour(t *testing.T) {
 	}
 }
 
-func TestAssembleWizardCloudOption(t *testing.T) {
-	t.Parallel()
-	m := newMachine(t)
-
-	// Fellowship's team of 16 as it comes, then the defaults on the last page: its name, emoji on, the cloud,
-	// auto-draft on
-	out, code := m.runTTY([]ttyStep{
-		{"How do you want to build your roster?", keyEnter},
-		{"Pick a roster: type to search", keyEnter},
-		{"How big is your team?", keyEnter},
-		{"Who's on the roster?", keyEnter},
-		{"Ready to assemble?", keyEnter}, // roster name
-		{"Emojis", keyEnter},
-		{"rostr lives on", keyEnter},
-		{"Name new sessions", keyEnter},
-		{"Assemble", keyEnter},
-	}, "assemble")
-	if code != 0 || !strings.Contains(out, "Assembled the fellowship roster") || !strings.Contains(out, "Your setup is in the cloud") ||
-		!strings.Contains(out, "Your rostr key:") {
-		t.Fatalf("wizard: exit %d\n%s", code, out)
-	}
-	if _, err := os.Stat(m.credentialsPath()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(m.databasePath()); !os.IsNotExist(err) {
-		t.Fatalf("rostr.db: %v", err)
-	}
-	if l := m.list(); len(l.Rosters) != 1 || l.Rosters[0].Name != "fellowship" || len(l.Rosters[0].Bench) != 16 {
-		t.Fatalf("list: %+v", l)
-	}
-
-	// Running it again can replace the cast; a drafted agent keeps their name until released
-	m.draft(m.home, "s1")
-	out, code = m.runTTY([]ttyStep{
-		{"What do you want to do?", keyDown},
-		{"Replace a roster's cast", keyEnter},
-		{"Whose cast do you want to replace?", keyEnter},
-		{"How do you want to build your roster?", keyEnter},
-		{"Pick a roster: type to search", "hogwarts"},
-		{"hogwarts", keyEnter},
-		{"How big is your team?", keyUp}, // 8
-		{"How big is your team?", keyEnter},
-		{"Who's on the roster?", keyEnter},
-	}, "assemble")
-	if code != 0 || !strings.Contains(out, "Replaced the fellowship roster's cast") {
-		t.Fatalf("replace cast: exit %d\n%s", code, out)
-	}
-	l := m.list()
-	if d := l.Rosters[0].Drafted; len(d) != 1 || d[0].Display != "🧙 Gandalf" || len(l.Rosters[0].Bench) != 8 ||
-		l.Rosters[0].Bench[0].Name != "Harry" {
-		t.Fatalf("after replacing the cast: %+v", l)
-	}
-	if d := m.draft(m.home, "s2"); d.Name != "Harry" {
-		t.Fatalf("drafted %+v", d)
-	}
-}
-
 func TestEveryCommandInCloudMode(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)

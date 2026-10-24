@@ -38,6 +38,7 @@ func TestWritesPushLiveCounts(t *testing.T) {
 	pushes := fakeWorker(t)
 	c := &client{t: t, token: newToken(), handler: NewHandler(testDB, Config{
 		RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000, LiveURL: pushes.url, LiveSecret: "s3cret",
+		Logger: testLogger,
 	})}
 
 	// Registering, creating a roster, and drafting within half a second make one push

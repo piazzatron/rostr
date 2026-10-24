@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            server/go.sum
+            tests/go.sum
+      - name: golangci-lint (vet, staticcheck, gofmt, goimports, ...)
+        run: make lint
+      - name: govulncheck
+        run: make vuln
+
   cli:
     runs-on: ubuntu-latest
     defaults:
@@ -20,10 +36,6 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - name: go vet
-        run: go vet ./...
-      - name: gofmt
-        run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - name: Presets match site/src/data/rosters.ts
         run: go test -count=1 -run TestPresetsMatchSite -v ./internal/presets/gen/
       - name: go test
@@ -56,10 +68,6 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - name: go vet
-        run: go vet ./...
-      - name: gofmt
-        run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - name: go test
         run: go test -race ./...
 

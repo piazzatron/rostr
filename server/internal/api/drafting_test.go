@@ -383,7 +383,7 @@ func TestDraftResponseMatchesTheStoredDraft(t *testing.T) {
 // sweep runs the background sweep once, as the server does every 15 minutes.
 func sweep(t *testing.T) {
 	t.Helper()
-	if _, err := sweepDrafts(context.Background(), testDB); err != nil {
+	if _, _, err := sweepDrafts(context.Background(), testDB); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -394,7 +394,7 @@ func TestConcurrentDraftsAcrossInstancesNeverDraftAMemberTwice(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
 	createRoster(c, "work", members("Gandalf", "Frodo", "Sam", "Boromir", "Merry"))
-	instances := []*client{c, {t: t, handler: NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000}), token: c.token}}
+	instances := []*client{c, {t: t, handler: NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000, Logger: testLogger}), token: c.token}}
 
 	const sessions = 20
 	results := make([]draftResponse, sessions)

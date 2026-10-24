@@ -403,7 +403,7 @@ func TestPublicListCORS(t *testing.T) {
 
 func TestRateLimits(t *testing.T) {
 	t.Parallel()
-	limited := NewHandler(testDB, Config{RegistrationsPerHour: 2, RequestsPerMinute: 3})
+	limited := NewHandler(testDB, Config{RegistrationsPerHour: 2, RequestsPerMinute: 3, Logger: testLogger})
 
 	register := func(ip string) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(map[string]any{"authToken": newToken()})
