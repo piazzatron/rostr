@@ -1389,35 +1389,36 @@ const previewImageUrl = new URL("/og.png", Astro.site);
 
   .tip {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
-    width: fit-content;
-    max-width: 100%;
+    align-items: center;
+    gap: 16px;
+    max-width: 640px;
     margin: 40px 0 0;
-    padding: 12px 18px 12px 12px;
+    padding: 16px 20px;
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: 14px;
     background: var(--surface);
+  }
+
+  .tip-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    font-size: 20px;
+  }
+
+  .tip p {
+    margin: 0;
     color: var(--muted);
     font-size: 15px;
+    line-height: 1.5;
   }
 
-  .tip-label {
-    flex: none;
-    padding: 2px 10px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  @media (max-width: 640px) {
-    .tip {
-      border-radius: 14px;
-    }
+  .tip strong {
+    color: var(--text);
   }
 
   /* Inset by the page's side padding, so its top border lines up with the section dividers */
