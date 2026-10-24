@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"time"
@@ -46,6 +47,12 @@ func loadDraft(ctx context.Context, q querier, id int64) (draftResponse, error) 
 	_, d, err := scanDraft(q.QueryRow(ctx,
 		`select `+draftColumns+` from drafts d join rosters r on r.id = d.roster_id where d.id = $1`, id))
 	return d, err
+}
+
+// logDraft adds the drafted member to the request's log line. The session ID is left out: names and rosters are
+// enough to follow a session, and task and repo are ciphertext.
+func logDraft(ctx context.Context, d draftResponse) {
+	logAttrs(ctx, slog.String("roster", d.Roster), slog.String("member", d.Name), slog.Int("copy", d.Copy))
 }
 
 var errNotDrafted = &apiError{http.StatusNotFound, "not_drafted", "No active draft matches.", nil}
@@ -94,6 +101,7 @@ func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID str
 	if err != nil {
 		return err
 	}
+	logDraft(r.Context(), resp)
 	s.live.notify()
 	writeJSON(w, http.StatusOK, resp)
 	return nil
@@ -117,6 +125,7 @@ func (s *Server) handleKeepAlive(w http.ResponseWriter, r *http.Request, ownerID
 	if err != nil {
 		return err
 	}
+	logDraft(r.Context(), resp)
 	s.live.notify()
 	writeJSON(w, http.StatusOK, resp)
 	return nil
@@ -559,6 +568,7 @@ func (s *Server) handleBench(w http.ResponseWriter, r *http.Request, ownerID str
 	if err != nil {
 		return err
 	}
+	logDraft(r.Context(), resp)
 	writeJSON(w, http.StatusOK, resp)
 	return nil
 }

@@ -2,9 +2,10 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,9 +22,17 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// JSON logs, one object per line, at LOG_LEVEL (debug, info, warn, or error; default info)
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cmp.Or(os.Getenv("LOG_LEVEL"), "info"))); err != nil {
+		fatal("invalid LOG_LEVEL", err)
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(logger)
+
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("DATABASE_URL is required")
+		fatal("DATABASE_URL is required", nil)
 	}
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -33,11 +42,11 @@ func main() {
 	// Connect and migrate
 	db, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
-		log.Fatalf("connect: %v", err)
+		fatal("connect", err)
 	}
 	defer db.Close()
 	if err := api.Migrate(ctx, db); err != nil {
-		log.Fatalf("migrate: %v", err)
+		fatal("migrate", err)
 	}
 
 	// Serve until SIGINT or SIGTERM, then drain in-flight requests
@@ -49,6 +58,7 @@ func main() {
 			LiveURL:              os.Getenv("LIVE_URL"),
 			LiveSecret:           os.Getenv("LIVE_SECRET"),
 			SweepEvery:           15 * time.Minute,
+			Logger:               logger,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -59,12 +69,13 @@ func main() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		slog.Info("shutting down")
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("rostr API listening on :%s", port)
+	slog.Info("rostr API listening", "port", port, "liveCounts", os.Getenv("LIVE_URL") != "")
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("serve: %v", err)
+		fatal("serve", err)
 	}
 }
 
@@ -74,4 +85,13 @@ func envInt(name string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func fatal(msg string, err error) {
+	if err != nil {
+		slog.Error(msg, "error", err)
+	} else {
+		slog.Error(msg)
+	}
+	os.Exit(1)
 }

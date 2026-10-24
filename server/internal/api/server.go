@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -27,6 +27,7 @@ type Config struct {
 	LiveURL              string // the live Worker's base URL; nothing is pushed unless both it and LiveSecret are set
 	LiveSecret           string
 	SweepEvery           time.Duration // how often the background sweep expires and prunes drafts; 0 runs none
+	Logger               *slog.Logger  // where request and event logs go; nil uses slog.Default()
 }
 
 // Server serves the rostr API.
@@ -36,17 +37,23 @@ type Server struct {
 	requestLimiter      *rateLimiter
 	draftLocks          ownerLocks
 	live                *livePusher // nil when live counts are off
+	logger              *slog.Logger
 }
 
 // NewHandler returns the API's HTTP handler.
 func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	s := &Server{
+		logger:              logger,
 		db:                  db,
 		registrationLimiter: newRateLimiter(cfg.RegistrationsPerHour, time.Hour),
 		requestLimiter:      newRateLimiter(cfg.RequestsPerMinute, time.Minute),
 	}
 	if cfg.LiveURL != "" && cfg.LiveSecret != "" {
-		s.live = &livePusher{url: cfg.LiveURL, secret: cfg.LiveSecret, delay: 500 * time.Millisecond, db: db}
+		s.live = &livePusher{url: cfg.LiveURL, secret: cfg.LiveSecret, delay: 500 * time.Millisecond, db: db, logger: logger}
 	}
 	if cfg.SweepEvery > 0 {
 		go s.sweepEvery(cfg.SweepEvery)
@@ -84,7 +91,7 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &apiError{http.StatusNotFound, "not_found", "No such endpoint.", nil})
 	})
-	return mux
+	return withRequestLog(logger, mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +117,7 @@ func (s *Server) authed(h ownerHandler) http.Handler {
 		}
 
 		ownerID := hashAuthToken(token)
+		logOwner(r.Context(), ownerID)
 		if allowed, retryAfter := s.requestLimiter.allow(ownerID); !allowed {
 			writeRateLimited(w, retryAfter)
 			return
@@ -164,12 +172,15 @@ func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx
 // anything. A failed sweep is logged and tried again next time.
 func (s *Server) sweepEvery(interval time.Duration) {
 	for range time.Tick(interval) {
-		changed, err := sweepDrafts(context.Background(), s.db)
+		benched, deleted, err := sweepDrafts(context.Background(), s.db)
 		if err != nil {
-			log.Printf("sweep drafts: %v", err)
+			s.logger.Error("sweep drafts", "error", err)
 			continue
 		}
-		if changed {
+		if benched > 0 || deleted > 0 {
+			s.logger.Info("sweep drafts", "benched", benched, "deleted", deleted)
+		}
+		if benched > 0 {
 			s.live.notify()
 		}
 	}
@@ -177,19 +188,23 @@ func (s *Server) sweepEvery(interval time.Duration) {
 
 // sweepDrafts is the only cleanup: it benches drafts not seen within their owner's draft expiry, freeing their names,
 // and deletes drafts benched more than 7 days ago, past the window a resumed session can ask for its old name back.
-// Every instance sweeps; the statements are safe to run at once. changed reports whether it benched any draft.
-func sweepDrafts(ctx context.Context, db querier) (changed bool, err error) {
+// Every instance sweeps; the statements are safe to run at once. It reports how many drafts it benched and deleted.
+func sweepDrafts(ctx context.Context, db querier) (benched, deleted int64, err error) {
 	batch := &pgx.Batch{}
 	batch.Queue(`
 		update drafts d set benched_at = now() from owners o
 		where o.id = d.owner_id and d.benched_at is null and d.last_seen_at < now() - o.draft_expiry`).Exec(
 		func(tag pgconn.CommandTag) error {
-			changed = tag.RowsAffected() > 0
+			benched = tag.RowsAffected()
 			return nil
 		})
-	batch.Queue(`delete from drafts where benched_at < now() - interval '7 days'`)
+	batch.Queue(`delete from drafts where benched_at < now() - interval '7 days'`).Exec(
+		func(tag pgconn.CommandTag) error {
+			deleted = tag.RowsAffected()
+			return nil
+		})
 	err = db.SendBatch(ctx, batch).Close()
-	return changed, err
+	return benched, deleted, err
 }
 
 func withPublicCORS(h http.Handler) http.Handler {
@@ -230,7 +245,13 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.As(err, &pgErr) && pgErr.Code == "23505":
 		apiErr = &apiError{http.StatusConflict, "conflict", "Conflicts with existing data (" + pgErr.ConstraintName + ").", nil}
 	default:
-		log.Printf("internal error: %v", err)
+		if rec, ok := w.(*statusRecorder); ok {
+			rec.log.mu.Lock()
+			rec.log.err = err
+			rec.log.mu.Unlock()
+		} else {
+			slog.Error("internal error", "error", err)
+		}
 		apiErr = &apiError{http.StatusInternalServerError, "internal", "Internal server error.", nil}
 	}
 
@@ -250,7 +271,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("write response: %v", err)
+		slog.Warn("write response", "error", err)
 	}
 }
 

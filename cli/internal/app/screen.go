@@ -108,7 +108,7 @@ func (s *screen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 		typing, ok := s.focused.(interface{ capturesKeys() bool })
-		if key == "ctrl+c" || key == "esc" && !(ok && typing.capturesKeys()) {
+		if key == "ctrl+c" || key == "esc" && (!ok || !typing.capturesKeys()) {
 			s.cancelled = true
 			return s, tea.Quit
 		}

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -17,6 +17,7 @@ type livePusher struct {
 	secret string
 	delay  time.Duration
 	db     querier
+	logger *slog.Logger
 
 	mu        sync.Mutex
 	scheduled bool
@@ -51,25 +52,25 @@ func (p *livePusher) push() {
 
 	counts, err := queryLiveCounts(ctx, p.db)
 	if err != nil {
-		log.Printf("live push: %v", err)
+		p.logger.Error("live push", "error", err)
 		return
 	}
 
 	body, _ := json.Marshal(counts)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url+"/update", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("live push: %v", err)
+		p.logger.Error("live push", "error", err)
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+p.secret)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("live push: %v", err)
+		p.logger.Error("live push", "error", err)
 		return
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("live push: status %d", resp.StatusCode)
+		p.logger.Error("live push", "status", resp.StatusCode)
 	}
 }

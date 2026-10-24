@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -67,6 +68,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logOwner(r.Context(), hashAuthToken(token))
 	var resp settingsResponse
 	err := pgx.BeginFunc(r.Context(), s.db, func(tx pgx.Tx) error {
 		var ownerID string
@@ -93,6 +95,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	logAttrs(r.Context(), slog.Bool("imported", req.Import != nil))
 	s.live.notify()
 	writeJSON(w, http.StatusCreated, resp)
 }

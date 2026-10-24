@@ -42,10 +42,6 @@ const (
 	castRenaming
 )
 
-// castEditorFixedLines is every line of the editor that isn't a member: title, description, input, error, and the two
-// team headings with a blank line between them.
-const castEditorFixedLines = 8
-
 func newCastEditor() *castEditor {
 	input := textinput.New()
 	input.Prompt = "> "

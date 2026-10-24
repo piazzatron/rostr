@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -37,11 +37,6 @@ func scanRoster(row pgx.Row) (rosterRow, error) {
 	var r rosterRow
 	err := row.Scan(&r.ID, &r.Name, &r.EmojiMode, &r.ATeam, &r.BTeam, &r.CreatedAt)
 	return r, err
-}
-
-// members is the roster's cast in draft order, A team first.
-func (r rosterRow) members() []member {
-	return append(slices.Clone(r.ATeam), r.BTeam...)
 }
 
 // findMember finds a member by name, ignoring case and accents, and returns their team ("a" or "b").
@@ -159,6 +154,7 @@ func (s *Server) handleCreateRoster(w http.ResponseWriter, r *http.Request, owne
 	if err != nil {
 		return err
 	}
+	logAttrs(r.Context(), slog.String("roster", name), slog.Int("members", len(c.ATeam)+len(c.BTeam)))
 	writeJSON(w, http.StatusCreated, resp)
 	return nil
 }
@@ -246,6 +242,7 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 	if err != nil {
 		return err
 	}
+	logAttrs(r.Context(), slog.String("roster", r.PathValue("name")), slog.Int("members", len(c.ATeam)+len(c.BTeam)))
 	writeJSON(w, http.StatusOK, resp)
 	return nil
 }
@@ -301,6 +298,8 @@ func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, own
 	if err != nil {
 		return err
 	}
+	logAttrs(r.Context(), slog.String("roster", resp.Name), slog.Int("benched", resp.BenchedDrafts),
+		slog.Bool("ownerDeleted", resp.OwnerDeleted))
 	writeJSON(w, http.StatusOK, resp)
 	return nil
 }

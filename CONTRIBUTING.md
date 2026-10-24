@@ -29,16 +29,24 @@ CI fails if the two are out of sync.
 
 You need Go (the version in `cli/go.mod`), Docker for the server and end-to-end tests, and Node 22.22+ for the site.
 
+```sh
+make check   # lint and unit tests for every Go module; what CI runs, short of end-to-end
+make fmt     # fix formatting and imports
+make e2e     # end-to-end tests (below)
+```
+
+The [`Makefile`](Makefile) lists the rest (`make lint`, `make vuln`, `make test-server`, ...). Lint is golangci-lint,
+configured in [`.golangci.yml`](.golangci.yml); `make` runs a pinned version, so there's nothing to install.
+
 **CLI**
 
 ```sh
 cd cli
 go build -o bin/rostr ./cmd/rostr
-go vet ./... && gofmt -l .
 go test -race ./...
 ```
 
-**Server** (tests run against real Postgres)
+**Server** (tests run against real Postgres; `make test-server` starts it for you)
 
 ```sh
 docker compose up -d --wait postgres
@@ -73,7 +81,7 @@ To try the CLI against your local server, start it with `docker compose up` and 
 1. For anything bigger than a small fix, open an issue first so we can agree on the approach.
 2. If the change affects how the CLI behaves, update [`docs/cli-spec.md`](docs/cli-spec.md) along with the code, and
    the CLI docs at `site/src/pages/cli.astro` if a command or flag changes.
-3. Add or update tests, and make sure `go vet`, `gofmt`, and the tests pass. CI runs the CLI, server, and end-to-end
+3. Add or update tests, and make sure `make check` passes. CI runs the CLI, server, and end-to-end
    suites on every pull request.
 4. Open a pull request with a short title starting with `feat:`, `fix:`, `improve:`, `refactor:`, or `chore:`, and say
    how you verified it.
