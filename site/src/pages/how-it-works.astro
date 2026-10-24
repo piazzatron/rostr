@@ -88,6 +88,50 @@ import Rostr from "../components/Rostr.astro";
   </section>
 
   <section class="section">
+    <h2>The hooks</h2>
+    <p>
+      Both agents get the same five hooks. Each one is a one-liner that runs <code>rostr hook</code> only if <Rostr /> is
+      installed, so the logic lives in the binary and updates when you upgrade. After an upgrade, the first session
+      reinstalls the hooks if they've changed.
+    </p>
+    <dl class="rows">
+      <div class="row">
+        <dt><code>SessionStart</code></dt>
+        <dd>
+          Claude Code: records the session in <code>ROSTR_SESSION</code> and, in cloud mode, drafts ahead. Both: get the
+          old name back on resume, and re-tell the name after compaction. Codex: drafts a forked thread.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>UserPromptSubmit</code></dt>
+        <dd>
+          First prompt: drafts, tells the agent who it is, and sets the title. Later prompts: end a rest, keep the name
+          alive, and retitle the session if its task changed.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>PostToolUse</code></dt>
+        <dd>
+          Marks the session as working again. Claude Code: after a title call, records the summary as the task, and ends
+          the turn if the answer is already written.
+        </dd>
+      </div>
+      <div class="row">
+        <dt><code>Stop</code></dt>
+        <dd>Records that the turn ended, which starts the 15 minutes until the session rests.</dd>
+      </div>
+      <div class="row">
+        <dt><code>SessionEnd</code></dt>
+        <dd>Benches the name and clears the pane label.</dd>
+      </div>
+    </dl>
+    <p>
+      Hooks never block a session. Network calls time out after 3 seconds, and anything slow runs in the background. If{" "}
+      <Rostr /> can't draft, the session just starts unnamed.
+    </p>
+  </section>
+
+  <section class="section">
     <h2>Titles in Claude Code</h2>
     <p>
       The first-prompt hook sets the title to <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>,
@@ -196,50 +240,6 @@ import Rostr from "../components/Rostr.astro";
       they're sent, and the server never sees your <Rostr /> key, prompts, or code.
     </p>
     <p class="docs-link"><a href="/privacy">Learn more about privacy →</a></p>
-  </section>
-
-  <section class="section">
-    <h2>The hooks</h2>
-    <p>
-      Both agents get the same five hooks. Each one is a one-liner that runs <code>rostr hook</code> only if <Rostr /> is
-      installed, so the logic lives in the binary and updates when you upgrade. After an upgrade, the first session
-      reinstalls the hooks if they've changed.
-    </p>
-    <dl class="rows">
-      <div class="row">
-        <dt><code>SessionStart</code></dt>
-        <dd>
-          Claude Code: records the session in <code>ROSTR_SESSION</code> and, in cloud mode, drafts ahead. Both: get the
-          old name back on resume, and re-tell the name after compaction. Codex: drafts a forked thread.
-        </dd>
-      </div>
-      <div class="row">
-        <dt><code>UserPromptSubmit</code></dt>
-        <dd>
-          First prompt: drafts, tells the agent who it is, and sets the title. Later prompts: end a rest, keep the name
-          alive, and retitle the session if its task changed.
-        </dd>
-      </div>
-      <div class="row">
-        <dt><code>PostToolUse</code></dt>
-        <dd>
-          Marks the session as working again. Claude Code: after a title call, records the summary as the task, and ends
-          the turn if the answer is already written.
-        </dd>
-      </div>
-      <div class="row">
-        <dt><code>Stop</code></dt>
-        <dd>Records that the turn ended, which starts the 15 minutes until the session rests.</dd>
-      </div>
-      <div class="row">
-        <dt><code>SessionEnd</code></dt>
-        <dd>Benches the name and clears the pane label.</dd>
-      </div>
-    </dl>
-    <p>
-      Hooks never block a session. Network calls time out after 3 seconds, and anything slow runs in the background. If{" "}
-      <Rostr /> can't draft, the session just starts unnamed.
-    </p>
     <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
   </section>
 </Layout>
