@@ -84,7 +84,8 @@ is most of a request's server time.
 - **No head start without a gap.** A session started with its prompt (`claude "fix the bug"`), or a cloud session
   whose container starts with the prompt already typed, has little or no time between `SessionStart` and the first
   prompt, so the first prompt waits for the draft: one API call.
-- **Codex** drafts on its first prompt, as before, until it's known whether its `SessionStart` fires early enough.
+- **Codex** drafts on its first prompt, one API call: its `SessionStart` fires only when the first prompt is sent
+  (Codex 0.164.0, TUI and `codex exec`), so there's no head start to use.
 - **Sessions opened and never prompted** hold a name for 15 minutes, until they rest, unless their `SessionEnd` runs
   first.
 - **Connection setup** is still paid by every hook process that calls the API (DNS, TCP, and TLS to the nearest

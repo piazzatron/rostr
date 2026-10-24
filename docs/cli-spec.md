@@ -546,8 +546,9 @@ its first prompt, which reads it from the cache.
 - **Not there yet.** If the first prompt comes before the draft finishes (a session started with a prompt, say), the
   prompt hook drafts itself, and the server returns the same draft to both.
 - **Where it helps.** A terminal session has seconds between starting and its first prompt. A cloud session's prompt
-  is already typed when its container starts, so it gets less of a head start. Codex drafts on the first prompt, as
-  before: whether its `SessionStart` fires early enough to help is still open.
+  is already typed when its container starts, so it gets less of a head start. Codex drafts on the first prompt: its
+  `SessionStart` fires only when the first prompt is sent, a few milliseconds before `UserPromptSubmit`, in both the
+  TUI and `codex exec` (checked with Codex 0.164.0), so drafting at session start would gain nothing there.
 - Local mode drafts without a network call, so it drafts on the first prompt.
 
 

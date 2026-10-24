@@ -286,7 +286,8 @@ Codex gets no tmux code. It relies on `tui.terminal_title` with `thread-name`.
   `workspace-write` sandbox? If not, does rostr need `sandbox_workspace_write.writable_roots` and
   `network_access`, or should Codex task updates flow through a hook instead?
 - Does `/clear` fire `SessionEnd` for the old thread?
-- When does `SessionStart` `startup` fire relative to the first prompt?
+- ~~When does `SessionStart` `startup` fire relative to the first prompt?~~ Only when the first prompt is sent, about
+  5ms before `UserPromptSubmit`, even after the TUI has sat idle (Codex 0.164.0, TUI and `codex exec`).
 - Is `session_id` always equal to `CODEX_THREAD_ID`, including for subagents? (Subagent hooks use the parent's
   ID.)
 - Do Codex Cloud tasks run repo hooks?
