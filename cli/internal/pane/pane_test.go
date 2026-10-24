@@ -28,12 +28,12 @@ func TestTmuxLabelsThePaneAndRenamesALoneWindow(t *testing.T) {
 	Clear(ctx, Claude, "")
 	server.expect(t, first, "#{@rostr}|#{automatic-rename}|#{@rostr_renamed}", "|1|")
 
-	// A window the user named keeps its name
+	// A window the user named is renamed too
 	server.tmux(t, "rename-window", "-t", first, "mine")
 	Label(ctx, Claude, "🧙 Gandalf")
-	server.expect(t, first, "#{@rostr}|#{window_name}|#{@rostr_renamed}", "🧙 Gandalf|mine|")
+	server.expect(t, first, "#{@rostr}|#{window_name}|#{@rostr_renamed}", "🧙 Gandalf|🧙 Gandalf|1")
 	Clear(ctx, Claude, "")
-	server.expect(t, first, "#{@rostr}|#{window_name}|#{automatic-rename}", "|mine|0")
+	server.expect(t, first, "#{@rostr}|#{automatic-rename}|#{@rostr_renamed}", "|1|")
 
 	// A window shared with another pane isn't renamed; only the session's own pane is tagged
 	server.tmux(t, "new-window", "sh")
@@ -153,6 +153,13 @@ func TestCodexDaemonHooksFindTheTmuxPaneByItsTitle(t *testing.T) {
 	server.expect(t, first, "#{@rostr}", "")
 	Clear(context.Background(), Codex, "🌱 Samwise")
 	server.expect(t, second, "#{@rostr}", "")
+
+	// A resting thread still titled and labeled with the name is skipped
+	stale := server.tmux(t, "new-window", "-P", "-F", "#{pane_id}", "sh")
+	server.tmux(t, "select-pane", "-t", stale, "-T", "🌱 Samwise · Old work | proj")
+	server.tmux(t, "set-option", "-p", "-t", stale, "@rostr", "🌱 Samwise")
+	Label(context.Background(), Codex, "🌱 Samwise")
+	server.expect(t, second, "#{@rostr}", "🌱 Samwise")
 }
 
 func TestShowsName(t *testing.T) {
