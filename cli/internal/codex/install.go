@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -45,20 +46,20 @@ func Detected(codexDir string) bool {
 	return err == nil
 }
 
-// Fingerprint identifies what this version of rostr installs (hooks and skills), so an upgrade that changes any of it
-// can be noticed and the install redone.
+// Fingerprint identifies what this version of rostr installs (hooks, their commands, and skills), so an upgrade or a
+// moved binary that changes any of it can be noticed and the install redone.
 func Fingerprint() string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%v %s %s", hookEvents, skillContent, draftSkillContent))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%v %s %s %s", hookEvents, HookCommand(""), skillContent, draftSkillContent))
 	return hex.EncodeToString(sum[:8])
 }
 
 // Installed reports whether hooks.json in codexDir has any of rostr's hooks, current or not.
 func Installed(codexDir string) bool {
 	data, err := os.ReadFile(filepath.Join(codexDir, "hooks.json"))
-	return err == nil && strings.Contains(string(data), "rostr hook codex ")
+	return err == nil && strings.Contains(string(data), hookMarker)
 }
 
-// Install adds rostr's hooks to hooks.json in codexDir, skipping the ones already there, and writes the rostr and
+// Install adds rostr's hooks to hooks.json in codexDir, updating outdated ones, and writes the rostr and
 // rostr-draft skills to skillsDir (~/.agents/skills) unless they're current. It returns a description of each piece it
 // added or updated.
 func Install(codexDir, skillsDir string) ([]string, error) {
@@ -122,10 +123,39 @@ func Uninstall(codexDir, skillsDir string) ([]string, error) {
 	return removed, nil
 }
 
-// HookCommand is the installed command for a subcommand. It does nothing when rostr isn't installed, so hooks copied
-// to a machine (or committed to a repo) without rostr stay quiet.
+// HookCommand is the installed command for a subcommand. It runs rostr by its absolute path, since the Codex app runs
+// hooks with the app's own PATH, which leaves out where package managers put rostr (like /opt/homebrew/bin). It does
+// nothing when that rostr is gone, so hooks copied to a machine without rostr stay quiet.
 func HookCommand(subcommand string) string {
-	return "if command -v rostr >/dev/null; then rostr hook codex " + subcommand + "; fi"
+	rostr := shellQuote(rostrPath())
+	return "if [ -x " + rostr + " ]; then " + rostr + hookMarker + subcommand + "; fi"
+}
+
+// hookMarker is in every command HookCommand makes, whatever the path, which is how rostr's hooks are found.
+const hookMarker = " hook codex "
+
+// rostrPath is the rostr the hooks run: the one on PATH, so a package manager's symlink (which outlives upgrades) is
+// used rather than the versioned file behind it, else this process's own executable.
+func rostrPath() string {
+	if path, err := exec.LookPath("rostr"); err == nil {
+		if abs, err := filepath.Abs(path); err == nil {
+			return abs
+		}
+	}
+	if path, err := os.Executable(); err == nil {
+		return path
+	}
+	return "rostr"
+}
+
+var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_./-]+$`)
+
+// shellQuote single-quotes s for sh unless it's plainly safe.
+func shellQuote(s string) string {
+	if shellSafe.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 type skillFile struct {
@@ -147,7 +177,8 @@ func installHooks(path string) (bool, error) {
 		return false, err
 	}
 
-	// One entry per event, unless a rostr hook for that subcommand is already there
+	// One entry per event. A rostr hook for that subcommand already there gets the current command, which changes
+	// with the binary's path
 	changed := false
 	hooks, _ := config["hooks"].(map[string]any)
 	if hooks == nil {
@@ -155,7 +186,11 @@ func installHooks(path string) (bool, error) {
 	}
 	for _, h := range hookEvents {
 		groups, _ := hooks[h.event].([]any)
-		if hasRostrHook(groups, h.subcommand) {
+		if existing := rostrHook(groups, h.subcommand); existing != nil {
+			if existing["command"] != HookCommand(h.subcommand) {
+				existing["command"] = HookCommand(h.subcommand)
+				changed = true
+			}
 			continue
 		}
 		hook := map[string]any{"type": "command", "command": HookCommand(h.subcommand)}
@@ -195,7 +230,7 @@ func uninstallHooks(path string) (bool, error) {
 			for _, hook := range groupHooks {
 				hookMap, _ := hook.(map[string]any)
 				command, _ := hookMap["command"].(string)
-				if strings.Contains(command, "rostr hook codex ") {
+				if strings.Contains(command, hookMarker) {
 					changed = true
 					continue
 				}
@@ -219,19 +254,20 @@ func uninstallHooks(path string) (bool, error) {
 	return true, writeJSON(path, config)
 }
 
-func hasRostrHook(groups []any, subcommand string) bool {
+// rostrHook finds rostr's hook for subcommand among an event's groups, current or not, so it can be updated in place.
+func rostrHook(groups []any, subcommand string) map[string]any {
 	for _, group := range groups {
 		groupMap, _ := group.(map[string]any)
 		hooks, _ := groupMap["hooks"].([]any)
 		for _, hook := range hooks {
 			hookMap, _ := hook.(map[string]any)
 			command, _ := hookMap["command"].(string)
-			if strings.Contains(command, "rostr hook codex "+subcommand) {
-				return true
+			if strings.Contains(command, hookMarker+subcommand) {
+				return hookMap
 			}
 		}
 	}
-	return false
+	return nil
 }
 
 // readJSON reads a JSON object file; a missing file is empty, and an unreadable one is an error rather than being

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -94,7 +95,7 @@ func TestInstallIsIdempotentAndKeepsOtherHooks(t *testing.T) {
 	write(t, hooksPath, `{
   "description": "mine",
   "hooks": {
-    "Stop": [{"hooks": [{"type": "command", "command": "say done"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "say done >/dev/null"}]}],
     "SessionEnd": [{"hooks": [{"type": "command", "command": "rostr hook codex session-end", "timeout": 3}]}]
   }
 }`)
@@ -142,8 +143,11 @@ func TestInstallIsIdempotentAndKeepsOtherHooks(t *testing.T) {
 	if config.Description != "mine" || len(config.Hooks["Stop"]) != 2 || len(config.Hooks["SessionEnd"]) != 1 {
 		t.Errorf("other hooks lost or rostr's duplicated: %s", first)
 	}
-	if !strings.Contains(string(first), ">/dev/null") {
-		t.Error("the hook command was HTML-escaped")
+	if !strings.Contains(string(first), "say done >/dev/null") {
+		t.Error("a hook command was HTML-escaped")
+	}
+	if sessionEnd := config.Hooks["SessionEnd"][0].Hooks[0]; sessionEnd.Command != HookCommand("session-end") || sessionEnd.Timeout != 3 {
+		t.Errorf("an older rostr hook wasn't brought up to date: %+v", sessionEnd)
 	}
 	for event, subcommand := range map[string]string{"SessionStart": "session-start", "UserPromptSubmit": "prompt"} {
 		groups := config.Hooks[event]
@@ -157,6 +161,25 @@ func TestInstallIsIdempotentAndKeepsOtherHooks(t *testing.T) {
 		if err != nil || !strings.HasPrefix(string(data), "---\nname: "+name+"\n") {
 			t.Errorf("%s skill: %v %q", name, err, data)
 		}
+	}
+}
+
+func TestHookCommandRunsRostrByPath(t *testing.T) {
+	// The Codex app runs hooks with its own PATH, so the command names rostr's path, found on this PATH
+	bin := filepath.Join(t.TempDir(), "my bin")
+	write(t, filepath.Join(bin, "rostr"), "#!/bin/sh\n")
+	os.Chmod(filepath.Join(bin, "rostr"), 0o755)
+	t.Setenv("PATH", bin)
+	rostr := "'" + filepath.Join(bin, "rostr") + "'"
+	if got := HookCommand("prompt"); got != "if [ -x "+rostr+" ]; then "+rostr+" hook codex prompt; fi" {
+		t.Fatalf("got %q", got)
+	}
+
+	// Run with no rostr there, it stays quiet
+	os.Remove(filepath.Join(bin, "rostr"))
+	command := "if [ -x " + rostr + " ]; then " + rostr + " hook codex prompt; fi"
+	if out, err := exec.Command("/bin/sh", "-c", command).CombinedOutput(); err != nil || len(out) != 0 {
+		t.Fatalf("without rostr: %v %q", err, out)
 	}
 }
 
@@ -324,6 +347,49 @@ func TestSetThreadNameReportsErrors(t *testing.T) {
 	}
 	if err := setThreadName(conn, "nope", "🧙 Gandalf"); err == nil || !strings.Contains(err.Error(), "thread not found") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestWaitForThreadNameWaitsForCodexsTitle(t *testing.T) {
+	// The app-server reports no name for the first two reads, as while Codex is still generating its title
+	reads := 0
+	server := httptest.NewServer(websocket.Handler(func(ws *websocket.Conn) {
+		for {
+			var message map[string]any
+			if websocket.JSON.Receive(ws, &message) != nil {
+				return
+			}
+			switch message["method"] {
+			case "initialize":
+				websocket.JSON.Send(ws, map[string]any{"id": message["id"], "result": map[string]any{}})
+			case "thread/read":
+				reads++
+				var name any
+				if reads > 2 {
+					name = "Fix login redirect loop"
+				}
+				websocket.JSON.Send(ws, map[string]any{"method": "thread/status/changed", "params": map[string]any{}})
+				websocket.JSON.Send(ws, map[string]any{"id": message["id"], "result": map[string]any{"thread": map[string]any{"id": "t1", "name": name}}})
+			}
+		}
+	}))
+	defer server.Close()
+	dial := func() net.Conn {
+		conn, err := net.Dial("tcp", strings.TrimPrefix(server.URL, "http://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return conn
+	}
+
+	if name, err := waitForThreadName(dial(), "t1", 5*time.Second); err != nil || name != "Fix login redirect loop" || reads != 3 {
+		t.Fatalf("got %q, %v after %d reads", name, err, reads)
+	}
+
+	// A thread Codex doesn't title in time stays unnamed
+	reads = -100
+	if name, err := waitForThreadName(dial(), "t1", 300*time.Millisecond); err != nil || name != "" {
+		t.Fatalf("got %q, %v", name, err)
 	}
 }
 
