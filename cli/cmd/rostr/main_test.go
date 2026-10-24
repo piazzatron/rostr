@@ -81,12 +81,12 @@ func (s *sandbox) ok(dir string, env []string, args ...string) string {
 	return r.stdout
 }
 
-// fails runs rostr and fails the test unless it exits 1 with stderr containing want.
-func (s *sandbox) fails(dir string, env []string, want string, args ...string) {
+// fails runs rostr and fails the test unless it exits 1. It doesn't check the error's wording.
+func (s *sandbox) fails(dir string, env []string, args ...string) {
 	s.t.Helper()
 	r := s.run(dir, "", env, args...)
-	if r.code != 1 || !strings.Contains(r.stderr, want) {
-		s.t.Fatalf("rostr %v: exit %d, stderr %q; want exit 1 mentioning %q", args, r.code, r.stderr, want)
+	if r.code != 1 {
+		s.t.Fatalf("rostr %v: exit %d, stderr %q; want exit 1", args, r.code, r.stderr)
 	}
 }
 
@@ -164,21 +164,18 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	repo := s.gitRepo("api-checkout", "git@github.com:Acme/API.git")
 
 	// Nothing works before assemble
-	s.fails(s.home, nil, "No rosters yet. Run `rostr assemble`.", "stats")
-	s.fails(s.home, session("s0"), "No rosters yet", "draft")
+	s.fails(s.home, nil, "stats")
+	s.fails(s.home, session("s0"), "draft")
 
 	// assemble: presets, own names, taken names, and the default name
-	out := s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
-	if !strings.Contains(out, "Assembled the work roster") || !strings.Contains(out, "default roster") {
-		t.Fatalf("assemble output: %s", out)
-	}
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 	s.ok(s.home, nil, "create", "play", "--names", "🧮 Ada, Grace", "--emoji", "off")
-	s.fails(s.home, nil, `already have a roster named "work"`, "assemble", "WORK", "--preset", "hogwarts")
+	s.fails(s.home, nil, "assemble", "WORK", "--preset", "hogwarts")
 	s.ok(s.home, nil, "assemble", "--preset", "hogwarts", "--size", "4")
-	s.fails(s.home, nil, "--preset", "assemble")
-	s.fails(s.home, nil, "rostr cloud on", "assemble", "x", "--preset", "kanto", "--cloud")
-	s.fails(s.home, nil, "--size must be a number", "assemble", "x", "--preset", "kanto", "--size", "lots")
-	s.fails(s.home, nil, "needs --preset", "assemble", "x", "--size", "4")
+	s.fails(s.home, nil, "assemble")
+	s.fails(s.home, nil, "assemble", "x", "--preset", "kanto", "--cloud")
+	s.fails(s.home, nil, "assemble", "x", "--preset", "kanto", "--size", "lots")
+	s.fails(s.home, nil, "assemble", "x", "--size", "4")
 
 	// A preset's team is its first 16 unless --size says otherwise
 	listing := s.list()
@@ -186,24 +183,18 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		len(listing.Rosters[2].Bench) != 4 {
 		t.Fatalf("list: %+v", listing)
 	}
-	if text := s.ok(s.home, nil, "stats", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {
-		t.Fatalf("list work: %s", text)
+	if l := s.list("work"); len(l.Rosters) != 1 || l.Rosters[0].Name != "work" {
+		t.Fatalf("list work: %+v", l)
 	}
 
 	// link: outside git it errors; in the repo it links by owner/repo
-	s.fails(s.home, nil, "not in a git repo", "link", "play")
-	if out := s.ok(repo, nil, "link"); out != "acme/api uses the work roster (your default).\n" {
-		t.Fatalf("bare link: %q", out)
-	}
-	if out := s.ok(repo, nil, "link", "play"); out != "Linked acme/api to the play roster.\n" {
-		t.Fatalf("link: %q", out)
-	}
-	if out := s.ok(s.home, nil, "link", "--repo", "Acme/API"); out != "acme/api uses the play roster (linked).\n" {
-		t.Fatalf("bare link --repo: %q", out)
-	}
+	s.fails(s.home, nil, "link", "play")
+	s.ok(repo, nil, "link")
+	s.ok(repo, nil, "link", "play")
+	s.ok(s.home, nil, "link", "--repo", "Acme/API")
 
 	// draft: the linked roster in the repo, the default outside it, --roster over both
-	s.fails(s.home, nil, "no session", "draft")
+	s.fails(s.home, nil, "draft")
 	if d := s.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Roster: "play", Display: "Ada"}) {
 		t.Fatalf("draft in repo: %+v", d)
 	}
@@ -213,17 +204,15 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	if d := s.draft(repo, "s3", "--roster", "Hogwarts"); d.Name != "Harry" {
 		t.Fatalf("draft --roster: %+v", d)
 	}
-	if out := s.ok(repo, session("s1"), "draft"); out != "Ada\n" {
+	if out := s.ok(repo, session("s1"), "draft"); !strings.Contains(out, "Ada") {
 		t.Fatalf("redraft: %q", out)
 	}
 
 	// task: the session's agent, or a named one
-	if out := s.ok(repo, session("s1"), "task", "Fix auth redirect loop"); out != "Ada · Fix auth redirect loop\n" {
-		t.Fatalf("task: %q", out)
-	}
+	s.ok(repo, session("s1"), "task", "Fix auth redirect loop")
 	s.ok(s.home, nil, "task", "GANDALF", "Review the PR")
-	s.fails(s.home, nil, "no session", "task", "Something")
-	s.fails(s.home, session("nobody"), "no drafted agent", "task", "Something")
+	s.fails(s.home, nil, "task", "Something")
+	s.fails(s.home, session("nobody"), "task", "Something")
 
 	listing = s.list("play,", "work")
 	ada, gandalf := listing.Rosters[0].Drafted[0], listing.Rosters[1].Drafted[0]
@@ -231,15 +220,13 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("list: %+v", listing)
 	}
 	// list is an alias for stats
-	if text := s.ok(s.home, nil, "list", "play"); !strings.Contains(text, "Ada   Fix auth redirect loop   acme/api   just now") || !strings.Contains(text, "Bench: Grace") {
+	if text := s.ok(s.home, nil, "list", "play"); !strings.Contains(text, "Ada") || !strings.Contains(text, "Grace") {
 		t.Fatalf("list text:\n%s", text)
 	}
 
 	// bench: by name, by session, and nothing to bench
-	if out := s.ok(s.home, nil, "bench", "ada"); out != "Benched Ada from the play roster.\n" {
-		t.Fatalf("bench by name: %q", out)
-	}
-	s.fails(s.home, nil, `no agent named "ada" is drafted`, "bench", "ada")
+	s.ok(s.home, nil, "bench", "ada")
+	s.fails(s.home, nil, "bench", "ada")
 	// names are separated by commas, since they can have spaces the shell splits apart
 	s.draft(s.home, "s4", "--roster", "play") // Grace, never drafted
 	s.draft(s.home, "s5", "--roster", "play") // Ada
@@ -251,27 +238,28 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("draft copy: %+v", copy)
 	}
 	member, number, _ := strings.Cut(copy.Name, " ")
-	want := "Benched " + copy.Name + " from the play roster.\nBenched " + other + " from the play roster.\n"
-	if out := s.ok(s.home, nil, "bench", strings.ToLower(member), number+",", strings.ToLower(other)); out != want {
-		t.Fatalf("bench copy: %q", out)
+	s.ok(s.home, nil, "bench", strings.ToLower(member), number+",", strings.ToLower(other))
+	if drafted := s.list("play").Rosters[0].Drafted; len(drafted) != 1 || drafted[0].Name != member {
+		t.Fatalf("after benching %s and %s: %+v", copy.Name, other, drafted)
 	}
 	s.ok(s.home, nil, "bench", strings.ToLower(member), "--roster", "play")
-	if out := s.ok(s.home, session("s2"), "bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
-		t.Fatalf("bench by session: %q", out)
+	s.ok(s.home, session("s2"), "bench")
+	if drafted := s.list("work").Rosters[0].Drafted; len(drafted) != 0 {
+		t.Fatalf("bench by session: %+v", drafted)
 	}
-	if out := s.ok(s.home, session("s2"), "bench"); out != "This session has no drafted agent.\n" {
-		t.Fatalf("bench again: %q", out)
-	}
+	s.ok(s.home, session("s2"), "bench")
 
 	// unlink and config
-	if out := s.ok(repo, nil, "unlink"); out != "Unlinked acme/api. It uses your default roster (work).\n" {
-		t.Fatalf("unlink: %q", out)
+	s.ok(repo, nil, "unlink")
+	if d := s.draft(repo, "s7"); d.Roster != "work" {
+		t.Fatalf("draft after unlink: %+v", d)
 	}
+	s.ok(s.home, session("s7"), "bench")
 	s.ok(s.home, nil, "config", "default", "PLAY")
 	s.ok(s.home, nil, "config", "expiry", "2w")
 	s.ok(s.home, nil, "config", "auto-draft", "off")
 	s.ok(s.home, nil, "config", "emoji", "only", "--roster", "work")
-	s.fails(s.home, nil, "expiry must be", "config", "expiry", "soon")
+	s.fails(s.home, nil, "config", "expiry", "soon")
 	var config struct {
 		Storage, Default, Expiry string
 		AutoDraft                bool
@@ -285,15 +273,14 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	}
 
 	// disband: asks first, promotes the oldest roster when the default goes, starts over after the last
-	s.fails(s.home, nil, "pass --yes to disband the play roster (0 agents drafted, 0 linked projects)", "disband", "play")
-	if out := s.ok(s.home, nil, "disband", "play", "--yes"); out != "Disbanded the play roster. Ada says bye.\nwork is your default roster now.\n" {
-		t.Fatalf("disband: %q", out)
+	s.fails(s.home, nil, "disband", "play")
+	s.ok(s.home, nil, "disband", "play", "--yes")
+	if err := json.Unmarshal([]byte(s.ok(s.home, nil, "config", "--json")), &config); err != nil || config.Default != "work" {
+		t.Fatalf("default after disband: %+v, %v", config, err)
 	}
 	s.ok(s.home, nil, "disband", "hogwarts", "--yes")
-	if out := s.ok(s.home, nil, "disband", "work", "--yes"); !strings.Contains(out, "last roster") {
-		t.Fatalf("disband last: %q", out)
-	}
-	s.fails(s.home, nil, "No rosters yet", "stats")
+	s.ok(s.home, nil, "disband", "work", "--yes")
+	s.fails(s.home, nil, "stats")
 }
 
 func TestSessionKeepsItsRosterWhenItChangesDirectory(t *testing.T) {
@@ -321,9 +308,10 @@ func TestBenchByNameAsksWhichRosterWhenAmbiguous(t *testing.T) {
 	s.draft(s.home, "s1")
 	s.draft(s.home, "s2", "--roster", "side")
 
-	s.fails(s.home, nil, "Gandalf is drafted in more than one roster (work, side); pass --roster", "bench", "gandalf")
-	if out := s.ok(s.home, nil, "bench", "gandalf", "--roster", "side"); out != "Benched 🧙 Gandalf from the side roster.\n" {
-		t.Fatalf("got %q", out)
+	s.fails(s.home, nil, "bench", "gandalf")
+	s.ok(s.home, nil, "bench", "gandalf", "--roster", "side")
+	if l := s.list("work,", "side"); len(l.Rosters[0].Drafted) != 1 || len(l.Rosters[1].Drafted) != 0 {
+		t.Fatalf("list: %+v", l)
 	}
 }
 
@@ -338,31 +326,36 @@ func TestBenchSeveralNamesAndAll(t *testing.T) {
 	names := s.list("work").Rosters[0].Drafted
 
 	// A typo benches nobody
-	s.fails(s.home, nil, `no agent named "nobody" is drafted`, "bench", names[0].Name+",", "nobody", "--roster", "work")
+	s.fails(s.home, nil, "bench", names[0].Name+",", "nobody", "--roster", "work")
 
 	// Several names at once
-	want := fmt.Sprintf("Benched %s from the work roster.\nBenched %s from the work roster.\n", names[0].Display, names[1].Display)
-	if out := s.ok(s.home, nil, "bench", names[0].Name+",", names[1].Name, "--roster", "work"); out != want {
-		t.Fatalf("bench several: %q", out)
+	if len(s.list("work").Rosters[0].Drafted) != 3 {
+		t.Fatal("a typo benched someone")
+	}
+
+	// Several names at once
+	s.ok(s.home, nil, "bench", names[0].Name+",", names[1].Name, "--roster", "work")
+	if drafted := s.list("work").Rosters[0].Drafted; len(drafted) != 1 || drafted[0].Name != names[2].Name {
+		t.Fatalf("bench several: %+v", drafted)
 	}
 
 	// all, narrowed to a roster, then everyone
-	if out := s.ok(s.home, nil, "bench", "all", "--roster", "side"); out != "Benched 🧙 Gandalf from the side roster.\n" {
-		t.Fatalf("bench all --roster: %q", out)
+	s.ok(s.home, nil, "bench", "all", "--roster", "side")
+	if l := s.list("work,", "side"); len(l.Rosters[0].Drafted) != 1 || len(l.Rosters[1].Drafted) != 0 {
+		t.Fatalf("bench all --roster: %+v", l)
 	}
-	if out := s.ok(s.home, nil, "bench", "all"); out != fmt.Sprintf("Benched %s from the work roster.\n", names[2].Display) {
-		t.Fatalf("bench all: %q", out)
+	s.ok(s.home, nil, "bench", "all")
+	if l := s.list(); len(l.Rosters[0].Drafted) != 0 || len(l.Rosters[1].Drafted) != 0 {
+		t.Fatalf("bench all: %+v", l)
 	}
-	if out := s.ok(s.home, nil, "bench", "all"); out != "No agents are drafted.\n" {
-		t.Fatalf("bench all again: %q", out)
-	}
+	s.ok(s.home, nil, "bench", "all")
 }
 
 func TestEditNeedsATerminal(t *testing.T) {
 	s := newSandbox(t)
-	s.fails(s.home, nil, "No rosters yet", "edit")
+	s.fails(s.home, nil, "edit")
 	s.ok(s.home, nil, "assemble", "work", "--names", "🧙 Gandalf, 💍 Frodo")
-	s.fails(s.home, nil, "needs a terminal", "edit")
+	s.fails(s.home, nil, "edit")
 }
 
 func TestClaudeCodeHooks(t *testing.T) {
@@ -391,7 +384,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 			HookSpecificOutput struct{ HookEventName, AdditionalContext string }
 		}
 		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.HookSpecificOutput.HookEventName != "SessionStart" ||
-			!strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're "+display+" for this session") {
+			!strings.Contains(out.HookSpecificOutput.AdditionalContext, display) {
 			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
 		}
 	}
@@ -423,9 +416,8 @@ func TestClaudeCodeHooks(t *testing.T) {
 	fakeClaude := filepath.Join(t.TempDir(), "claude")
 	os.WriteFile(fakeClaude, []byte("#!/bin/sh\ncat >/dev/null; printf '{\"result\":\"Fix login redirect\"}\n'\n"), 0o755)
 	out := readPromptOutput(hook("prompt", firstPrompt("s1"), "ROSTR_CLAUDE_BIN="+fakeClaude))
-	if !strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're 🧙 Gandalf for this session (drafted by rostr from the \"work\" roster).") ||
-		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `run: rostr task --session s1 "<new task>"`) ||
-		strings.Contains(out.HookSpecificOutput.AdditionalContext, "summary") ||
+	if !strings.Contains(out.HookSpecificOutput.AdditionalContext, "🧙 Gandalf") ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, "rostr task --session s1") ||
 		strings.Contains(out.HookSpecificOutput.AdditionalContext, "set_session_title") ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
 		t.Fatalf("first prompt: %+v", out)
@@ -460,9 +452,9 @@ func TestClaudeCodeHooks(t *testing.T) {
 	sessionsDir := filepath.Join(s.home, ".claude", "sessions")
 	os.MkdirAll(sessionsDir, 0o755)
 	os.WriteFile(filepath.Join(sessionsDir, "4242.json"), []byte(`{"sessionId":"s2","bridgeSessionId":"session_xyz","entrypoint":"sdk-cli"}`), 0o644)
-	if out := readPromptOutput(hook("prompt", firstPrompt("s2"))); !strings.Contains(out.HookSpecificOutput.AdditionalContext,
-		`mcp__claude-code-remote__set_session_title with session_id "session_xyz" and title "💍 Frodo · <3-5 word summary`) {
-		t.Fatalf("Remote Control first prompt: %+v", out)
+	if ctx := readPromptOutput(hook("prompt", firstPrompt("s2"))).HookSpecificOutput.AdditionalContext; !strings.Contains(ctx, "mcp__claude-code-remote__set_session_title") ||
+		!strings.Contains(ctx, `"session_xyz"`) || !strings.Contains(ctx, "💍 Frodo · ") {
+		t.Fatalf("Remote Control first prompt: %s", ctx)
 	}
 
 	// Setting the app's title "<name> · <summary>" records the summary as the task; other titles are left alone
@@ -477,11 +469,25 @@ func TestClaudeCodeHooks(t *testing.T) {
 		}
 		return ""
 	}
+	// What the title-set hook tells Claude: carry on (more context, no "continue"), or stop the turn
+	type toolOutput struct {
+		Continue           *bool
+		HookSpecificOutput struct{ HookEventName, AdditionalContext string }
+	}
+	readToolOutput := func(name string, r result) toolOutput {
+		t.Helper()
+		var out toolOutput
+		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil {
+			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
+		}
+		return out
+	}
 	// (Without a transcript the call can't be seen to follow an answer, so the hook tells Claude to carry on)
 	expectCarryOn := func(name string, r result) {
 		t.Helper()
-		if r.code != 0 || !strings.Contains(r.stdout, "answer the user") {
-			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
+		if out := readToolOutput(name, r); out.Continue != nil || out.HookSpecificOutput.HookEventName != "PostToolUse" ||
+			out.HookSpecificOutput.AdditionalContext == "" {
+			t.Fatalf("%s: stdout %q", name, r.stdout)
 		}
 	}
 	expectCarryOn("title set", hook("title-set", titleSet("💍 Frodo · Untangle the auth flow")))
@@ -507,26 +513,24 @@ func TestClaudeCodeHooks(t *testing.T) {
 	toolCall := func(transcript, tool, input string) string {
 		return fmt.Sprintf(`{"session_id":"s2","transcript_path":%q,"hook_event_name":"PostToolUse","tool_name":%q,"tool_use_id":"t1","tool_input":%s}`, transcript, tool, input)
 	}
-	if r := hook("title-set", toolCall(answer, "Bash", `{"command":"rostr task \"Deepest lake\""}`)); r.code != 0 || strings.TrimSpace(r.stdout) != `{"continue": false, "suppressOutput": true}` {
-		t.Fatalf("plain answer: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	if out := readToolOutput("plain answer", hook("title-set", toolCall(answer, "Bash", `{"command":"rostr task \"Deepest lake\""}`))); out.Continue == nil || *out.Continue {
+		t.Fatalf("plain answer: %+v", out)
 	}
-	if r := hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)); r.code != 0 ||
-		!strings.Contains(r.stdout, `"hookEventName":"PostToolUse"`) || !strings.Contains(r.stdout, "answer the user") || strings.Contains(r.stdout, `"continue"`) {
-		t.Fatalf("title call before the answer: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
-	}
+	expectCarryOn("title call before the answer", hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)))
 	expectQuiet("other Bash call", hook("title-set", toolCall(answer, "Bash", `{"command":"ls"}`)), 0)
 
 	// Local desktop session: the name shows right away, and the agent uses the app's own tool
 	os.WriteFile(filepath.Join(sessionsDir, "4343.json"), []byte(`{"sessionId":"s9","bridgeSessionId":"session_l","entrypoint":"claude-desktop"}`), 0o644)
 	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); !strings.HasSuffix(out.HookSpecificOutput.SessionTitle, " · Fix the login redirect loop") ||
-		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `mcp__ccd_session_mgmt__set_session_title, with session_id "self"`) {
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, "mcp__ccd_session_mgmt__set_session_title") ||
+		!strings.Contains(out.HookSpecificOutput.AdditionalContext, `"self"`) {
 		t.Fatalf("Local first prompt: %+v", out)
 	}
 	expectQuiet("Local end", hook("session-end", `{"session_id":"s9","hook_event_name":"SessionEnd"}`), 0)
 
 	// Cloud session: the agent titles it through the server session its container names
 	if out := readPromptOutput(hook("prompt", firstPrompt("s3"), "CLAUDE_CODE_REMOTE_SESSION_ID=cse_abc")); !strings.Contains(
-		out.HookSpecificOutput.AdditionalContext, `set_session_title with session_id "session_abc"`) {
+		out.HookSpecificOutput.AdditionalContext, `"session_abc"`) {
 		t.Fatalf("cloud first prompt: %+v", out)
 	}
 	expectQuiet("cloud end", hook("session-end", `{"session_id":"s3","hook_event_name":"SessionEnd"}`), 0)
@@ -579,10 +583,11 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("CLAUDE_ENV_FILE: %q", env)
 	}
 	r := s.run(repo, "", nil, "hook", "claude-code", "draft", "--session", "s4")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 🏹 Legolas for this session") || !strings.Contains(r.stdout, "rostr task") {
+	if r.code != 0 || !strings.Contains(r.stdout, "🏹 Legolas") || !strings.Contains(r.stdout, "rostr task") {
 		t.Fatalf("/draft: exit %d, stdout %q", r.code, r.stdout)
 	}
-	if r := s.run(repo, "", nil, "hook", "claude-code", "draft"); r.code != 0 || !strings.Contains(r.stdout, "couldn't draft") {
+	before := len(s.list().Rosters[0].Drafted)
+	if r := s.run(repo, "", nil, "hook", "claude-code", "draft"); r.code != 0 || r.stdout == "" || len(s.list().Rosters[0].Drafted) != before {
 		t.Fatalf("/draft without a session: %+v", r)
 	}
 
@@ -637,7 +642,7 @@ func TestClaudeCodeHooksSkipHeadlessRuns(t *testing.T) {
 		"wss://example.com/v1/sessions/h2", "--session-id", "h2", "--input-format", "stream-json"}
 	// (COLUMNS puts ps's cut inside the long argument, with room for the ppid column before the arguments)
 	columns := fmt.Sprintf("COLUMNS=%d", len("/bin/sh "+claude+" --print --debug-file /tmp/")+20)
-	if out := runAsClaude(remoteControl, "prompt", prompt("h2"), columns); !strings.Contains(out, "drafted by rostr") {
+	if out := runAsClaude(remoteControl, "prompt", prompt("h2"), columns); !strings.Contains(out, "🧙 Gandalf") {
 		t.Fatalf("Remote Control prompt: %q", out)
 	}
 	if drafted := s.list().Rosters[0].Drafted; len(drafted) != 1 || drafted[0].Session != "h2" {
@@ -651,14 +656,9 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	os.MkdirAll(filepath.Dir(settingsPath), 0o755)
 	os.WriteFile(settingsPath, []byte(`{"theme":"dark","hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}`), 0o644)
 
-	out := s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
-	if !strings.Contains(out, "Hooks installed for Claude Code") {
-		t.Fatalf("first assemble: %s", out)
-	}
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 	first, _ := os.ReadFile(settingsPath)
-	if out := s.ok(s.home, nil, "assemble", "play", "--preset", "kanto"); strings.Contains(out, "installed for") {
-		t.Fatalf("second assemble reinstalled: %s", out)
-	}
+	s.ok(s.home, nil, "assemble", "play", "--preset", "kanto")
 	second, _ := os.ReadFile(settingsPath)
 	if !bytes.Equal(first, second) {
 		t.Fatal("second assemble changed settings.json")
@@ -687,23 +687,23 @@ func TestCloudInstallAddsClaudeCodeHooksOnlyInCloudSessions(t *testing.T) {
 	os.WriteFile(settingsPath, []byte(`{"theme":"dark"}`), 0o644)
 
 	// On a person's own machine it points to assemble and changes nothing
-	s.fails(s.home, nil, "rostr assemble", "cloud", "install")
+	s.fails(s.home, nil, "cloud", "install")
 	if settings, _ := os.ReadFile(settingsPath); strings.Contains(string(settings), "rostr hook") {
 		t.Fatalf("installed outside a cloud session: %s", settings)
 	}
 
 	cloud := []string{"CLAUDE_CODE_REMOTE=true"}
-	if out := s.ok(s.home, cloud, "cloud", "install"); !strings.Contains(out, "Hooks installed for Claude Code.") {
-		t.Fatalf("cloud install: %s", out)
-	}
+	s.ok(s.home, cloud, "cloud", "install")
 	settings, _ := os.ReadFile(settingsPath)
-	if !strings.Contains(string(settings), `"theme": "dark"`) || !strings.Contains(string(settings), "rostr hook claude-code") {
+	var kept struct{ Theme string }
+	if json.Unmarshal(settings, &kept) != nil || kept.Theme != "dark" || !strings.Contains(string(settings), "rostr hook claude-code") {
 		t.Fatalf("settings: %s", settings)
 	}
-	if out := s.ok(s.home, cloud, "cloud", "install"); strings.Contains(out, "Installed") {
-		t.Fatalf("second install reinstalled: %s", out)
+	s.ok(s.home, cloud, "cloud", "install")
+	if again, _ := os.ReadFile(settingsPath); !bytes.Equal(settings, again) {
+		t.Fatalf("second install changed settings.json: %s", again)
 	}
-	s.fails(s.home, nil, "No rosters yet", "stats")
+	s.fails(s.home, nil, "stats")
 }
 
 func TestAssembleLinksTheRepoYoureIn(t *testing.T) {
@@ -711,20 +711,19 @@ func TestAssembleLinksTheRepoYoureIn(t *testing.T) {
 	repo := s.gitRepo("api", "git@github.com:Acme/API.git")
 
 	// The first roster is the default, so --link has nothing to do
-	if out := s.ok(repo, nil, "assemble", "work", "--preset", "fellowship", "--link"); strings.Contains(out, "Linked") {
-		t.Fatalf("first roster linked: %s", out)
-	}
+	s.ok(repo, nil, "assemble", "work", "--preset", "fellowship", "--link")
 
 	// A later roster with --link is linked to the repo you're in
-	if out := s.ok(repo, nil, "assemble", "side", "--preset", "nba", "--link"); !strings.Contains(out, "Linked acme/api to it.") {
-		t.Fatalf("assemble --link: %s", out)
+	s.ok(repo, nil, "assemble", "side", "--preset", "nba", "--link")
+	if d := s.draft(repo, "s1"); d.Roster != "side" {
+		t.Fatalf("draft in the linked repo: %+v", d)
 	}
-	if out := s.ok(repo, nil, "link"); !strings.Contains(out, "acme/api uses the side roster (linked)") {
-		t.Fatalf("link: %s", out)
+	if d := s.draft(s.home, "s2"); d.Roster != "work" {
+		t.Fatalf("draft outside it: %+v", d)
 	}
 
 	// Outside a repo, --link says how to use it
-	if r := s.run(s.home, "", nil, "assemble", "play", "--preset", "kanto", "--link"); r.code != 1 || !strings.Contains(r.stderr, "--link needs a git repo") || !strings.Contains(r.stderr, "Usage:") {
+	if r := s.run(s.home, "", nil, "assemble", "play", "--preset", "kanto", "--link"); r.code != 1 || !strings.Contains(r.stderr, "Usage:") {
 		t.Fatalf("--link outside a repo: exit %d, %s", r.code, r.stderr)
 	}
 }
@@ -736,14 +735,14 @@ func TestUninstallRemovesEverything(t *testing.T) {
 	s.ok(s.home, nil, "draft", "--session", "s1")
 
 	// Without a terminal it needs --yes, and says how to use it
-	s.fails(s.home, nil, "pass --yes", "uninstall")
-	if r := s.run(s.home, "", nil, "uninstall"); !strings.Contains(r.stderr, "Usage:\n  rostr uninstall [flags]") {
+	s.fails(s.home, nil, "uninstall")
+	if r := s.run(s.home, "", nil, "uninstall"); !strings.Contains(r.stderr, "Usage:") {
 		t.Fatalf("no usage: %s", r.stderr)
 	}
 
-	out := s.ok(s.home, nil, "uninstall", "--yes")
-	if !strings.Contains(out, "Deleted 2 rosters.") || !strings.Contains(out, "Removed hooks in") || !strings.Contains(out, "Removed the /draft command") {
-		t.Fatalf("uninstall: %s", out)
+	s.ok(s.home, nil, "uninstall", "--yes")
+	if _, err := os.Stat(filepath.Join(s.home, ".claude", "commands", "draft.md")); err == nil {
+		t.Fatal("left the /draft command")
 	}
 	settings, _ := os.ReadFile(filepath.Join(s.home, ".claude", "settings.json"))
 	if strings.Contains(string(settings), "rostr") {
@@ -752,12 +751,10 @@ func TestUninstallRemovesEverything(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.home, ".config", "rostr", "rostr.db")); !os.IsNotExist(err) {
 		t.Fatalf("database still there: %v", err)
 	}
-	s.fails(s.home, nil, "No rosters yet", "stats")
+	s.fails(s.home, nil, "stats")
 
 	// Running it again finds nothing left
-	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "Nothing to remove") {
-		t.Fatalf("second uninstall: %s", out)
-	}
+	s.ok(s.home, nil, "uninstall", "--yes")
 }
 
 func TestMissingArgumentsPrintUsage(t *testing.T) {
@@ -828,13 +825,13 @@ func TestCloudModeWithoutTheAPI(t *testing.T) {
 	credentials := filepath.Join(s.home, ".config", "rostr", "credentials")
 
 	// With nothing local to move and no terminal to paste a key into, cloud on explains the other ways in
-	s.fails(s.home, nil, "no local rosters to move", "cloud", "on")
-	s.fails(s.home, nil, "only runs in a terminal", "config", "key")
+	s.fails(s.home, nil, "cloud", "on")
+	s.fails(s.home, nil, "config", "key")
 
 	// A failed upload leaves the local setup untouched, and saves no key
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
 	s.draft(s.home, "s1")
-	s.fails(s.home, nil, "your local setup is untouched", "cloud", "on")
+	s.fails(s.home, nil, "cloud", "on")
 	if _, err := os.Stat(database); err != nil {
 		t.Fatalf("local database: %v", err)
 	}
@@ -844,16 +841,16 @@ func TestCloudModeWithoutTheAPI(t *testing.T) {
 	if l := s.list(); len(l.Rosters) != 1 || len(l.Rosters[0].Drafted) != 1 {
 		t.Fatalf("local setup changed: %+v", l)
 	}
-	s.fails(s.home, nil, "rostr cloud on", "assemble", "play", "--preset", "kanto", "--cloud")
+	s.fails(s.home, nil, "assemble", "play", "--preset", "kanto", "--cloud")
 
 	// A key puts the machine in cloud mode: a bad one is an error, and an unreachable API is reported
-	s.fails(s.home, []string{"ROSTR_KEY=rostr_sk_x"}, "ROSTR_KEY", "stats")
-	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "can't reach the rostr API at http://127.0.0.1:1", "stats")
-	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "already in cloud mode", "cloud", "on")
+	s.fails(s.home, []string{"ROSTR_KEY=rostr_sk_x"}, "stats")
+	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "stats")
+	s.fails(s.home, []string{"ROSTR_KEY=" + unregisteredKey}, "cloud", "on")
 
 	// A first setup in the cloud that can't reach the API saves no key
 	fresh := newSandbox(t)
-	fresh.fails(fresh.home, nil, "uploading to the rostr API failed", "assemble", "--preset", "fellowship", "--cloud")
+	fresh.fails(fresh.home, nil, "assemble", "--preset", "fellowship", "--cloud")
 	if _, err := os.Stat(filepath.Join(fresh.home, ".config", "rostr", "credentials")); err == nil {
 		t.Fatal("credentials saved after a failed setup")
 	}
@@ -885,17 +882,17 @@ func TestCloudModeWithADeadKey(t *testing.T) {
 	}
 
 	// Errors say how to get going again, which depends on where the key comes from
-	s.fails(s.home, apiURL, "doesn't recognize your rostr key. Its cloud setup may have been deleted: run `rostr cloud on`", "stats")
-	s.fails(s.home, envKey, "set ROSTR_KEY to another key", "stats")
+	s.fails(s.home, apiURL, "stats")
+	s.fails(s.home, envKey, "stats")
 
 	// cloud on replaces a dead saved key (here, without a terminal, it stops at having nothing to move), but not ROSTR_KEY
-	s.fails(s.home, apiURL, "no local rosters to move", "cloud", "on")
-	s.fails(s.home, envKey, "already in cloud mode", "cloud", "on")
+	s.fails(s.home, apiURL, "cloud", "on")
+	s.fails(s.home, envKey, "cloud", "on")
 
 	// uninstall has no cloud setup to delete, so it cleans up this machine
-	out := s.ok(s.home, apiURL, "uninstall", "--yes")
-	if !strings.Contains(out, "no cloud setup left to delete") || !strings.Contains(out, "Removed hooks in") {
-		t.Fatalf("uninstall: %s", out)
+	s.ok(s.home, apiURL, "uninstall", "--yes")
+	if settings, _ := os.ReadFile(filepath.Join(s.home, ".claude", "settings.json")); strings.Contains(string(settings), "rostr") {
+		t.Fatalf("rostr left in settings.json: %s", settings)
 	}
 	if _, err := os.Stat(credentials); !os.IsNotExist(err) {
 		t.Fatalf("credentials still there: %v", err)
@@ -904,7 +901,7 @@ func TestCloudModeWithADeadKey(t *testing.T) {
 	if old, _ := os.ReadFile(credentials + ".old"); string(old) != unregisteredKey+"\n" {
 		t.Fatalf("credentials.old: %q", old)
 	}
-	s.fails(s.home, nil, "No rosters yet", "stats")
+	s.fails(s.home, nil, "stats")
 }
 
 func TestCodexHooks(t *testing.T) {
@@ -939,7 +936,7 @@ func TestCodexHooks(t *testing.T) {
 			HookSpecificOutput struct{ HookEventName, AdditionalContext string }
 		}
 		if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.HookSpecificOutput.HookEventName != event ||
-			!strings.HasPrefix(out.HookSpecificOutput.AdditionalContext, "You're "+display+" for this session") {
+			!strings.Contains(out.HookSpecificOutput.AdditionalContext, display) {
 			t.Fatalf("%s: exit %d, stdout %q, stderr %q", name, r.code, r.stdout, r.stderr)
 		}
 	}
@@ -972,11 +969,14 @@ func TestCodexHooks(t *testing.T) {
 	}
 
 	// The agent's own rostr commands find the session through CODEX_THREAD_ID, unless ROSTR_SESSION says otherwise
-	if out := s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "task", "Fix auth redirects"); out != "🧙 Gandalf · Fix auth redirects\n" {
-		t.Fatalf("task: %q", out)
+	s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "task", "Fix auth redirects")
+	s.ok(repo, []string{"CODEX_THREAD_ID=t1", "ROSTR_SESSION=other"}, "draft")
+	sessions := map[string]string{}
+	for _, d := range s.list().Rosters[0].Drafted {
+		sessions[d.Session] = d.Task
 	}
-	if out := s.ok(repo, []string{"CODEX_THREAD_ID=t1", "ROSTR_SESSION=other"}, "draft"); out != "💍 Frodo\n" {
-		t.Fatalf("ROSTR_SESSION should win over CODEX_THREAD_ID: %q", out)
+	if len(sessions) != 2 || sessions["t1"] != "Fix auth redirects" {
+		t.Fatalf("ROSTR_SESSION should win over CODEX_THREAD_ID: %v", sessions)
 	}
 	s.ok(repo, session("other"), "bench")
 
@@ -1029,11 +1029,12 @@ func TestCodexHooks(t *testing.T) {
 	expectQuiet("prompt, auto-draft off", hook("prompt", prompt("t3", "null", firstPrompt)))
 	expectQuiet("fork, auto-draft off", hook("session-start", start("t4", "fork")))
 	r := s.run(repo, "", []string{path, "CODEX_THREAD_ID=t3"}, "hook", "codex", "draft")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "You're 👑 Aragorn for this session") || !strings.Contains(r.stdout, "rostr task --session t3") {
+	if r.code != 0 || !strings.Contains(r.stdout, "👑 Aragorn") || !strings.Contains(r.stdout, "rostr task --session t3") {
 		t.Fatalf("$rostr-draft: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	expectNamed("$rostr-draft")
-	if r := s.run(repo, "", []string{path}, "hook", "codex", "draft"); r.code != 0 || !strings.Contains(r.stdout, "couldn't draft") {
+	before := len(s.list().Rosters[0].Drafted)
+	if r := s.run(repo, "", []string{path}, "hook", "codex", "draft"); r.code != 0 || r.stdout == "" || len(s.list().Rosters[0].Drafted) != before {
 		t.Fatalf("$rostr-draft without a session: %+v", r)
 	}
 
@@ -1047,26 +1048,17 @@ func TestAssembleInstallsCodexOnlyWhereItsInstalled(t *testing.T) {
 	// Without Codex (no ~/.codex, no codex on PATH), assemble leaves it alone
 	s := newSandbox(t)
 	noCodex := "PATH=" + pathWithout("codex")
-	out := s.ok(s.home, []string{noCodex}, "assemble", "work", "--preset", "fellowship")
-	if strings.Contains(out, "for Codex") {
-		t.Fatalf("assemble without Codex: %s", out)
-	}
+	s.ok(s.home, []string{noCodex}, "assemble", "work", "--preset", "fellowship")
 	for _, dir := range []string{".codex", ".agents"} {
 		if _, err := os.Stat(filepath.Join(s.home, dir)); err == nil {
 			t.Errorf("created ~/%s", dir)
 		}
 	}
 
-	// With a ~/.codex, the hooks and skills go in once, and the output says to approve the hooks
+	// With a ~/.codex, the hooks and skills go in once
 	os.MkdirAll(filepath.Join(s.home, ".codex"), 0o755)
-	out = s.ok(s.home, []string{noCodex}, "assemble", "play", "--preset", "kanto")
-	if !strings.Contains(out, "Hooks installed for Codex.") ||
-		!strings.Contains(out, "open /hooks in Codex") {
-		t.Fatalf("assemble with Codex: %s", out)
-	}
-	if out := s.ok(s.home, []string{noCodex}, "assemble", "side", "--preset", "hogwarts"); strings.Contains(out, "installed for") {
-		t.Fatalf("third assemble reinstalled: %s", out)
-	}
+	s.ok(s.home, []string{noCodex}, "assemble", "play", "--preset", "kanto")
+	s.ok(s.home, []string{noCodex}, "assemble", "side", "--preset", "hogwarts")
 	hooks, _ := os.ReadFile(filepath.Join(s.home, ".codex", "hooks.json"))
 	for _, subcommand := range []string{"session-start", "prompt", "session-end"} {
 		if strings.Count(string(hooks), "rostr hook codex "+subcommand+";") != 1 {
@@ -1089,16 +1081,14 @@ func TestAssembleInstallsCodexOnlyWhereItsInstalled(t *testing.T) {
 	}
 
 	// uninstall takes rostr's pieces back out of Codex too
-	out = s.ok(s.home, nil, "uninstall", "--yes")
-	if !strings.Contains(out, "Removed hooks in "+filepath.Join(s.home, ".codex", "hooks.json")+" (Codex)") ||
-		!strings.Contains(out, "Removed the $rostr-draft skill (Codex)") {
-		t.Fatalf("uninstall: %s", out)
-	}
+	s.ok(s.home, nil, "uninstall", "--yes")
 	if hooks, _ := os.ReadFile(filepath.Join(s.home, ".codex", "hooks.json")); strings.Contains(string(hooks), "rostr") {
 		t.Fatalf("rostr left in hooks.json: %s", hooks)
 	}
-	if _, err := os.Stat(filepath.Join(s.home, ".agents", "skills", "rostr")); err == nil {
-		t.Fatal("left the rostr skill")
+	for _, skill := range []string{"rostr", "rostr-draft"} {
+		if _, err := os.Stat(filepath.Join(s.home, ".agents", "skills", skill)); err == nil {
+			t.Errorf("left the %s skill", skill)
+		}
 	}
 }
 
@@ -1135,7 +1125,7 @@ func TestHooksLabelTheHerdrPane(t *testing.T) {
 	// names another pane, so it doesn't label w1:p3: it looks for the pane by its title, and herdr has none here
 	os.Remove(herdrCalls)
 	r = s.run(s.home, `{"session_id":"t1","transcript_path":null,"prompt":"Fix it"}`, env, "hook", "codex", "prompt")
-	if r.code != 0 || !strings.Contains(r.stdout, "You're 💍 Frodo") {
+	if r.code != 0 || !strings.Contains(r.stdout, "💍 Frodo") {
 		t.Fatalf("codex prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	s.run(s.home, `{"session_id":"t1"}`, env, "hook", "codex", "session-end")

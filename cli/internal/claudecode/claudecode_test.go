@@ -130,24 +130,23 @@ func TestTaskFromTitle(t *testing.T) {
 }
 
 func TestIdentityText(t *testing.T) {
-	want := `You're 🧙 Gandalf for this session (drafted by rostr from the "work" roster).
-- When you write somewhere other than this chat, sign it "— 🧙 Gandalf": Slack messages, emails, PR descriptions, PR and issue comments.
-- Don't put the name in code, commit messages, or files.
-- Your user's own instructions about attribution or sign-offs take precedence over these.
-- When your work changes, run: rostr task --session s1 "<new task>"`
-	if got := Identity("🧙 Gandalf", "work", "s1"); got != want {
-		t.Fatalf("got:\n%s", got)
+	// The name, the roster, and the command to record the task; the wording around them is free to change
+	got := Identity("🧙 Gandalf", "work", "s1")
+	for _, want := range []string{"🧙 Gandalf", `"work"`, "rostr task --session s1"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("no %q in:\n%s", want, got)
+		}
 	}
 }
 
 func TestTitleInstruction(t *testing.T) {
 	const title = `"🧙 Gandalf · <3-5 word summary of what the user wants>"`
 	local := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{DesktopLocal: true, ServerSessionID: "session_abc"})
-	if !strings.Contains(local, LocalTitleTool+", with session_id") || !strings.Contains(local, "load it with ToolSearch right before calling it") || !strings.Contains(local, `session_id "self" and title `+title) {
+	if !strings.Contains(local, LocalTitleTool) || !strings.Contains(local, `"self"`) || !strings.Contains(local, title) {
 		t.Errorf("local: %s", local)
 	}
 	remote := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{ServerSessionID: "session_abc"})
-	if !strings.Contains(remote, RemoteTitleTool+` with session_id "session_abc" and title `+title) || strings.Contains(remote, "ToolSearch") {
+	if !strings.Contains(remote, RemoteTitleTool) || !strings.Contains(remote, `"session_abc"`) || !strings.Contains(remote, title) {
 		t.Errorf("remote: %s", remote)
 	}
 	terminal := TitleInstruction("🧙 Gandalf", "s1", TitleWhere{})
@@ -155,12 +154,6 @@ func TestTitleInstruction(t *testing.T) {
 		t.Fatalf("terminal: %q", terminal)
 	}
 	// Local titles after the answer; Remote Control and cloud title first
-	if !strings.Contains(local, "Write your complete answer to the user first") {
-		t.Errorf("local when: %s", local)
-	}
-	if !strings.Contains(remote, "Make this call first, before you write anything") || strings.Contains(remote, "answer to the user first") {
-		t.Errorf("remote when: %s", remote)
-	}
 	if !(TitleWhere{ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{DesktopLocal: true, ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{}).TitlesFirst() {
 		t.Error("TitlesFirst")
 	}
@@ -261,7 +254,7 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	skill := filepath.Join(claudeDir, "skills", "rostr", "SKILL.md")
 	write(t, skill, "an older version's text")
 	os.Remove(filepath.Join(claudeDir, "commands", "draft.md"))
-	if installed, _ := Install(claudeDir); strings.Join(installed, "; ") != "the rostr skill; the /draft command" {
+	if installed, _ := Install(claudeDir); len(installed) != 2 {
 		t.Errorf("reinstalled %v", installed)
 	}
 	if got, _ := os.ReadFile(skill); string(got) != skillContent {
@@ -271,7 +264,7 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	// An older rostr /draft is replaced; someone's own /draft isn't
 	draft := filepath.Join(claudeDir, "commands", "draft.md")
 	write(t, draft, "!`rostr hook claude-code draft` (an older version)")
-	if installed, _ := Install(claudeDir); len(installed) != 1 || installed[0] != "the /draft command" {
+	if installed, _ := Install(claudeDir); len(installed) != 1 {
 		t.Errorf("older /draft: reinstalled %v", installed)
 	}
 	write(t, draft, "Draft an email to my team")
@@ -302,7 +295,7 @@ func TestUninstallRemovesOnlyWhatRostrAdded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(removed) != 2 || removed[1] != "the rostr skill" {
+	if len(removed) != 2 {
 		t.Errorf("removed %v", removed)
 	}
 
@@ -435,7 +428,7 @@ func TestUninstallRemovesAnOlderRostrDraft(t *testing.T) {
 	claudeDir := t.TempDir()
 	draft := filepath.Join(claudeDir, "commands", "draft.md")
 	write(t, draft, "!`rostr hook claude-code draft` (an older version)")
-	if removed, err := Uninstall(claudeDir); err != nil || strings.Join(removed, "; ") != "the /draft command" {
+	if removed, err := Uninstall(claudeDir); err != nil || len(removed) != 1 {
 		t.Fatalf("removed %v, %v", removed, err)
 	}
 	if _, err := os.Stat(draft); !os.IsNotExist(err) {

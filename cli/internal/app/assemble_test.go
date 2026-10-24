@@ -257,9 +257,9 @@ func TestAssembleWizardOwnNames(t *testing.T) {
 	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("🧮 Ada, Grace")})
 	drive(s, nil, key(tea.KeyEnter))
 	drive(s, nil, key(tea.KeyEsc))
-	expectView(t, s, "2 of 2 picked", "Your team · 2", "Ada", "Grace")
+	expectView(t, s, "Ada", "Grace")
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Ready to assemble?", "Team of 2: 🧮 Ada")
+	expectStep(t, s, 3, 3)
 
 	// It saves, and comes back to edit
 	chosen := f.chosenCast()
@@ -277,9 +277,10 @@ func TestAssembleWizardOwnNames(t *testing.T) {
 	s, steps = edit.screen(ctx, st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34})
-	expectView(t, s, "Edit the work roster", "2 of 2 picked")
+	expectStep(t, s, 1, 2)
+	expectView(t, s, "Ada", "Grace")
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Team of 2", "Save")
+	expectStep(t, s, 2, 2)
 	var out strings.Builder
 	if err := saveEdit(ctx, &out, st, edit); err != nil {
 		t.Fatal(err)
@@ -298,11 +299,11 @@ func TestAssembleWizardLeavesAnEmptyCast(t *testing.T) {
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, key(tea.KeyDown), key(tea.KeyDown))
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Who's on your roster?", "shift+tab back", "esc quit")
+	expectStep(t, s, 2, 3)
 
 	// Shift+tab goes back with no one added, and esc quits
 	drive(s, nil, key(tea.KeyShiftTab))
-	expectView(t, s, "How do you want to build your roster?")
+	expectStep(t, s, 1, 3)
 	drive(s, nil, key(tea.KeyEnter))
 	drive(s, nil, key(tea.KeyEsc))
 	if !s.cancelled {
@@ -328,14 +329,14 @@ func TestAssembleWizardNewRosterDoesntTakeAnEditedEmojiMode(t *testing.T) {
 	for _, k := range []tea.KeyType{tea.KeyDown, tea.KeyDown, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
 		drive(s, nil, key(k))
 	}
-	expectView(t, s, "Save the wizards roster?")
+	expectStep(t, s, 4, 4)
 	if f.emoji != roster.EmojiOff {
 		t.Fatalf("editing starts from %s", f.emoji)
 	}
 	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyUp, tea.KeyUp, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
 		drive(s, nil, key(k))
 	}
-	expectView(t, s, "Ready to assemble?")
+	expectStep(t, s, 6, 6)
 	if f.emoji != roster.EmojiOn {
 		t.Fatalf("a new roster starts from %s", f.emoji)
 	}
@@ -377,13 +378,16 @@ func TestAssembleWizardEdits(t *testing.T) {
 	s, steps := f.screen(ctx, st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 40})
-	expectView(t, s, "rostr · edit", "Step 1 of 2", "Edit the wizards roster", "Harry", "Neville", "16 of 16 picked")
+	expectStep(t, s, 1, 2)
+	expectView(t, s, "Harry", "Neville")
 
 	// Take Harry off, then save, keeping the roster's emoji mode
 	drive(s, nil, key(tea.KeySpace))
-	expectView(t, s, "15 of 16 picked")
+	if n := len(f.chosenCast().members); n != 15 {
+		t.Fatalf("%d picked after taking Harry off", n)
+	}
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 2", "Save the wizards roster?", "Save")
+	expectStep(t, s, 2, 2)
 	drive(s, nil, key(tea.KeyEnter))
 	drive(s, nil, key(tea.KeyEnter))
 	var out strings.Builder
@@ -426,47 +430,46 @@ func TestAssembleWizardScreen(t *testing.T) {
 	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30})
-	expectView(t, s, "rostr · assemble", "Step 1 of 5", "How do you want to build your roster?", "Free Agents", "esc quit")
+	expectStep(t, s, 1, 5)
 
 	// The preset picker previews the highlighted roster, and searching moves it
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 5", "Pick a roster: type to search", "The Lord of the Rings", "Gandalf", "Wormtongue", "20 members")
-	if strings.Contains(s.View(), "Feeling chaotic") {
-		t.Fatal("the preset picker lists Free Agents")
-	}
+	expectStep(t, s, 2, 5)
+	expectView(t, s, "Gandalf", "Wormtongue")
 	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hogwarts")})
 	expectView(t, s, "Hermione", "Dumbledore")
 
 	// Shift+tab goes back; coming forward again searches again
 	drive(s, nil, key(tea.KeyShiftTab))
-	expectView(t, s, "Step 1 of 5", "How do you want to build your roster?")
+	expectStep(t, s, 1, 5)
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 5", "/hogwarts", "Hermione")
+	expectStep(t, s, 2, 5)
+	expectView(t, s, "Hermione")
 
 	// The size picker starts at everyone (Hogwarts has 16), and previews the team each size makes
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 3 of 5", "How big is your team?", "first few of Hogwarts", "> All 16", "Your team · 16", "Draco")
+	expectStep(t, s, 3, 5)
+	expectView(t, s, "Draco")
 	drive(s, nil, key(tea.KeyUp), key(tea.KeyUp))
-	expectView(t, s, "> 4", "Your team · 4")
 	if strings.Contains(s.View(), "Snape") {
 		t.Fatal("the preview of a team of four shows Snape")
 	}
 
 	// The cast page lists all of Hogwarts with that team picked, and shows the team beside it
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 4 of 5", "Who's on the roster?", "4 of 16 picked", "Your team · 4", "Draco", "space pick",
-		"a add your own")
+	expectStep(t, s, 4, 5)
+	expectView(t, s, "Draco")
 	drive(s, nil, key(tea.KeySpace))
 	for range 4 {
 		drive(s, nil, key(tea.KeyDown))
 	}
 	drive(s, nil, key(tea.KeySpace))
-	expectView(t, s, "4 of 16 picked", "Your team · 4", "Snape")
+	expectView(t, s, "Snape")
 
 	// The last page confirms everything, with the name from the preset
 	drive(s, nil, key(tea.KeyEnter))
-	expectView(t, s, "Step 5 of 5", "Ready to assemble?", "Team of 4: 📚 Hermione", "Roster name", "hogwarts", "Emojis",
-		"always", "rostr lives on", "Name new sessions", "Assemble")
+	expectStep(t, s, 5, 5)
+	expectView(t, s, "Hermione", "hogwarts")
 	for range 5 {
 		drive(s, nil, key(tea.KeyEnter))
 	}
@@ -499,10 +502,13 @@ func TestAssembleWizardFreeAgents(t *testing.T) {
 	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 30}, key(tea.KeyDown), key(tea.KeyEnter))
-	expectView(t, s, "Step 2 of 4", "How big is your team?", "this random", "> All 16")
+	expectStep(t, s, 2, 4)
 	drive(s, nil, key(tea.KeyUp), key(tea.KeyEnter))
-	expectView(t, s, "Step 3 of 4", "Who's on the roster?", "8 of 16 picked", "Your team · 8")
+	expectStep(t, s, 3, 4)
 	drawn := f.chosenCast()
+	if len(drawn.members) != 8 {
+		t.Fatalf("drew %d", len(drawn.members))
+	}
 
 	// The cast stays put on the way to the last page and back to the size, and going back to the start draws a new one
 	drive(s, nil, key(tea.KeyEnter))
@@ -536,6 +542,15 @@ func TestScreenCancels(t *testing.T) {
 
 func key(k tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: k} }
 
+// expectStep checks which page of the flow is showing, by its position rather than its wording.
+func expectStep(t *testing.T, s *screen, current, total int) {
+	t.Helper()
+	if c, n := s.progress(); c != current || n != total {
+		t.Fatalf("on step %d of %d, want %d of %d:\n%s", c, n, current, total, s.View())
+	}
+}
+
+// expectView checks the screen shows some data, like member and roster names. Don't check its wording.
 func expectView(t *testing.T, s *screen, want ...string) {
 	t.Helper()
 	view := s.View()

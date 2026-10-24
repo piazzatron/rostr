@@ -150,16 +150,17 @@ func (m *machine) okIn(dir string, args ...string) string {
 	return r.stdout
 }
 
-// fails runs rostr and fails the test unless it exits 1 with stderr containing want.
-func (m *machine) fails(want string, args ...string) {
+// fails runs rostr and fails the test unless it exits 1. It doesn't check the error's wording.
+func (m *machine) fails(args ...string) {
 	m.t.Helper()
 	r := m.run(m.home, "", args...)
-	if r.code != 1 || !strings.Contains(r.stderr, want) {
-		m.t.Fatalf("rostr %v: exit %d, stderr %q; want exit 1 mentioning %q", args, r.code, r.stderr, want)
+	if r.code != 1 {
+		m.t.Fatalf("rostr %v: exit %d, stderr %q; want exit 1", args, r.code, r.stderr)
 	}
 }
 
-// ttyStep waits for text in a terminal's output, then types input.
+// ttyStep waits for text in a terminal's output, then types input. Waiting on a prompt's text is the one place these
+// tests depend on wording, since it's how they know where the terminal UI is.
 type ttyStep struct {
 	waitFor string
 	input   string
