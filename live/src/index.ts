@@ -1,9 +1,9 @@
 // The rostr live Worker: one Durable Object holds the home page's counts and pushes each update to every open socket.
-// See docs/live-stats.md.
+// See docs/live-counts.md.
 import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
-  STATS: DurableObjectNamespace<Stats>;
+  COUNTS: DurableObjectNamespace<LiveCounts>;
   LIVE_SECRET: string;
 }
 
@@ -14,7 +14,7 @@ export interface Counts {
 
 export default {
   async fetch(request, env): Promise<Response> {
-    const stats = env.STATS.get(env.STATS.idFromName("global"));
+    const live = env.COUNTS.get(env.COUNTS.idFromName("global"));
     const { pathname } = new URL(request.url);
 
     switch (`${request.method} ${pathname}`) {
@@ -22,7 +22,7 @@ export default {
         if (request.headers.get("Upgrade") !== "websocket") {
           return new Response("Expected a WebSocket upgrade.", { status: 426 });
         }
-        return stats.fetch(request);
+        return live.fetch(request);
 
       case "POST /update": {
         if (!authorized(request, env.LIVE_SECRET)) {
@@ -32,7 +32,7 @@ export default {
         if (!counts) {
           return new Response('Expected {"working": n, "benched": m} with whole numbers 0 or more.', { status: 400 });
         }
-        await stats.update(counts);
+        await live.update(counts);
         return Response.json(counts);
       }
     }
@@ -44,7 +44,7 @@ export default {
  * The single, global counts object. Sockets use the hibernation API, so the object is evicted from memory between
  * updates while the sockets stay open, and idle tabs cost nothing.
  */
-export class Stats extends DurableObject<Env> {
+export class LiveCounts extends DurableObject<Env> {
   // WebSocket upgrades only; the Worker routes everything else to the RPC methods below
   async fetch(): Promise<Response> {
     const [client, server] = Object.values(new WebSocketPair());

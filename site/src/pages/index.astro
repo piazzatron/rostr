@@ -590,37 +590,37 @@ const LIST_JSON_EXAMPLE = `{
       }, 2600);
     }
 
-    // The live bar: agents drafted out of all agents, across everyone (see docs/live-stats.md). A socket to the live
+    // The live bar: agents drafted out of all agents, across everyone (see docs/live-counts.md). A socket to the live
     // Worker at PUBLIC_LIVE_URL pushes each change as it happens; a dropped socket retries after 5s, 10s, 30s, then
     // every 60s. The bar shows once there's a drafted agent to count, and slides up once the visitor scrolls down.
     const liveBar = document.querySelector<HTMLElement>(".live-bar");
     if (liveBar) {
-      type Stats = { working: number; benched: number };
+      type Counts = { working: number; benched: number };
       const LIVE_URL: string = import.meta.env.PUBLIC_LIVE_URL ?? "";
       const RETRY_DELAYS_MS = [5_000, 10_000, 30_000, 60_000];
       const COUNT_MS = 600;
       const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-      let onScreen: Stats = { working: 0, benched: 0 };
+      let onScreen: Counts = { working: 0, benched: 0 };
       let frame = 0;
 
-      const render = (stats: Stats) => {
-        onScreen = stats;
+      const render = (counts: Counts) => {
+        onScreen = counts;
         const set = (selector: string, text: string) =>
           liveBar.querySelectorAll(selector).forEach((el) => (el.textContent = text));
-        set(".live-drafted", stats.working.toLocaleString("en-US"));
-        set(".live-drafted-label", stats.working === 1 ? "agent drafted" : "agents drafted");
-        set(".live-total", (stats.working + stats.benched).toLocaleString("en-US"));
+        set(".live-drafted", counts.working.toLocaleString("en-US"));
+        set(".live-drafted-label", counts.working === 1 ? "agent drafted" : "agents drafted");
+        set(".live-total", (counts.working + counts.benched).toLocaleString("en-US"));
       };
 
       // Counts up or down from the numbers on screen; the first counts, and reduced motion, just appear
-      const show = (stats: Stats) => {
+      const show = (counts: Counts) => {
         cancelAnimationFrame(frame);
-        if (!stats.working) {
+        if (!counts.working) {
           liveBar.hidden = true;
           return;
         }
         if (liveBar.hidden || reduceMotion) {
-          render(stats);
+          render(counts);
           liveBar.hidden = false;
           return;
         }
@@ -629,7 +629,7 @@ const LIST_JSON_EXAMPLE = `{
         const step = (now: number) => {
           const progress = Math.min((now - start) / COUNT_MS, 1);
           const eased = 1 - (1 - progress) ** 3;
-          const at = (key: keyof Stats) => Math.round(from[key] + (stats[key] - from[key]) * eased);
+          const at = (key: keyof Counts) => Math.round(from[key] + (counts[key] - from[key]) * eased);
           render({ working: at("working"), benched: at("benched") });
           if (progress < 1) frame = requestAnimationFrame(step);
         };
