@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/piazzatron/rostr/cli/internal/presets"
@@ -33,11 +34,12 @@ func TestPresetsAreValidRosters(t *testing.T) {
 			t.Errorf("duplicate preset id %s", p.ID)
 		}
 		ids[p.ID] = true
-		if err := roster.ValidateCast(p.ATeam, p.BTeam, roster.EmojiOnly); err != nil {
+		if err := roster.ValidateCast(p.Members, roster.EmojiOnly); err != nil {
 			t.Errorf("%s: %v", p.ID, err)
 		}
-		if len(p.ATeam) != roster.ATeamSize {
-			t.Errorf("%s: A team of %d", p.ID, len(p.ATeam))
+		// Every team size assemble offers leaves someone to swap in
+		if largest := slices.Max(presets.TeamSizes); len(p.Members) <= largest {
+			t.Errorf("%s: %d members, no more than the largest team size (%d)", p.ID, len(p.Members), largest)
 		}
 	}
 	if _, ok := presets.ByID("fellowship"); !ok {

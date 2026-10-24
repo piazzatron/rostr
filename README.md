@@ -23,7 +23,7 @@ title: `🧙 Gandalf · Fix auth redirect loop`. It also teaches your agent to r
 pings you on Slack, GitHub, or email, you know exactly which session needs you.
 
 <p align="center">
-  <img alt="rostr assemble sets up the Fellowship and its A team; each new session drafts the next A-teamer off the bench; Samwise asks for input, Gandalf posts in Slack, and Frodo comments on a PR, each signed with their name; Gandalf finishes and goes back to the bench." src=".github/assets/demo.gif" width="720" />
+  <img alt="rostr assemble sets up the Fellowship; each new session drafts the next member off the bench; Samwise asks for input, Gandalf posts in Slack, and Frodo comments on a PR, each signed with their name; Gandalf finishes and goes back to the bench." src=".github/assets/demo.gif" width="720" />
 </p>
 
 ## Install
@@ -60,11 +60,11 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 
 | Command | What it does |
 |---|---|
-| `rostr assemble [<roster>]` | Set up a roster: interactive, or with `--preset`, `--names`, `--emoji`, `--cloud`, `--link` |
+| `rostr assemble [<roster>]` | Set up a roster: interactive, or with `--preset`, `--size`, `--names`, `--emoji`, `--cloud`, `--link` |
 | `rostr link [<roster>]` | Use a roster for the current project; bare, shows which one it uses |
 | `rostr unlink` | Go back to the default roster for the current project |
 | `rostr stats [<roster>, ...]` | Who's drafted and what they're working on, and who's idle (`--json` for scripts) |
-| `rostr edit [<roster>]` | Edit a roster's members, emoji, and A team in a full-screen editor |
+| `rostr edit [<roster>]` | Edit a roster's members and emoji in a full-screen editor |
 | `rostr presets` | List the pre-built rosters |
 | `rostr disband [<roster>]` | Delete a roster |
 
@@ -72,7 +72,7 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 
 | Command | What it does |
 |---|---|
-| `rostr draft` | Draft the next free member for this session, A team first |
+| `rostr draft` | Draft the next free member for this session |
 | `rostr bench [<name>, ... \| all]` | Send this session's agent, named ones, or all of them back to the bench |
 | `rostr task [<name>] <description>` | Set what an agent is working on |
 

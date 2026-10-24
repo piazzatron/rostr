@@ -76,8 +76,8 @@ func runConfigScreen(ctx context.Context, out io.Writer, st store.Store, setting
 			r := emojiRoster()
 			mode = r.EmojiMode
 			first := roster.Member{Emoji: "🧙", Name: "Gandalf"}
-			if len(r.ATeam) > 0 {
-				first = r.ATeam[0]
+			if len(r.Members) > 0 {
+				first = r.Members[0]
 			}
 			pickEmoji.Options(emojiModeOptions(first)...)
 		}

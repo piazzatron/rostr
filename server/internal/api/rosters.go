@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -25,48 +24,28 @@ type rosterRow struct {
 	ID        string
 	Name      string
 	EmojiMode string
-	ATeam     []member
-	BTeam     []member
+	Members   []member // in draft order
 	CreatedAt time.Time
 }
 
 // rosterColumns selects a rosterRow; queries alias rosters as r.
-const rosterColumns = `r.id, r.name, r.emoji_mode, r.a_team, r.b_team, r.created_at`
+const rosterColumns = `r.id, r.name, r.emoji_mode, r.members, r.created_at`
 
 func scanRoster(row pgx.Row) (rosterRow, error) {
 	var r rosterRow
-	err := row.Scan(&r.ID, &r.Name, &r.EmojiMode, &r.ATeam, &r.BTeam, &r.CreatedAt)
+	err := row.Scan(&r.ID, &r.Name, &r.EmojiMode, &r.Members, &r.CreatedAt)
 	return r, err
 }
 
-// members is the roster's cast in draft order, A team first.
-func (r rosterRow) members() []member {
-	return append(slices.Clone(r.ATeam), r.BTeam...)
-}
-
-// findMember finds a member by name, ignoring case and accents, and returns their team ("a" or "b").
-func (r rosterRow) findMember(name string) (member, string, bool) {
+// findMember finds a member by name, ignoring case and accents.
+func (r rosterRow) findMember(name string) (member, bool) {
 	key := nameKey(name)
-	for _, m := range r.ATeam {
+	for _, m := range r.Members {
 		if nameKey(m.Name) == key {
-			return m, "a", true
+			return m, true
 		}
 	}
-	for _, m := range r.BTeam {
-		if nameKey(m.Name) == key {
-			return m, "b", true
-		}
-	}
-	return member{}, "", false
-}
-
-// team is the member's team, or nil when they're no longer in the cast (it was replaced while they were drafted).
-func (r rosterRow) team(memberName string) *string {
-	_, team, ok := r.findMember(memberName)
-	if !ok {
-		return nil
-	}
-	return &team
+	return member{}, false
 }
 
 func rosterNotFound(name string) *apiError {
@@ -84,10 +63,10 @@ func findRosterByName(ctx context.Context, q querier, ownerID, name string) (ros
 
 func insertRoster(ctx context.Context, tx pgx.Tx, ownerID, name string, c cast, createdAt *time.Time) (rosterRow, error) {
 	roster, err := scanRoster(tx.QueryRow(ctx, `
-		insert into rosters as r (owner_id, name, name_key, emoji_mode, a_team, b_team, created_at)
-		values ($1, $2, $3, $4, $5, $6, coalesce($7, clock_timestamp()))
+		insert into rosters as r (owner_id, name, name_key, emoji_mode, members, created_at)
+		values ($1, $2, $3, $4, $5, coalesce($6, clock_timestamp()))
 		returning `+rosterColumns,
-		ownerID, name, nameKey(name), c.EmojiMode, c.ATeam, c.BTeam, createdAt))
+		ownerID, name, nameKey(name), c.EmojiMode, c.Members, createdAt))
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.ConstraintName == "rosters_owner_name" {
 		return rosterRow{}, &apiError{http.StatusConflict, "roster_exists",
@@ -108,8 +87,7 @@ func promoteOldestRosterToDefault(ctx context.Context, tx pgx.Tx, ownerID string
 type rosterResponse struct {
 	Name           string    `json:"name"`
 	EmojiMode      string    `json:"emojiMode"`
-	ATeam          []member  `json:"aTeam"`
-	BTeam          []member  `json:"bTeam"`
+	Members        []member  `json:"members"`
 	IsDefault      bool      `json:"isDefault"`
 	ActiveDrafts   int       `json:"activeDrafts"`
 	LinkedProjects int       `json:"linkedProjects"`
@@ -117,7 +95,7 @@ type rosterResponse struct {
 }
 
 func rosterDetails(ctx context.Context, q querier, ownerID string, r rosterRow) (rosterResponse, error) {
-	resp := rosterResponse{Name: r.Name, EmojiMode: r.EmojiMode, ATeam: r.ATeam, BTeam: r.BTeam, CreatedAt: r.CreatedAt}
+	resp := rosterResponse{Name: r.Name, EmojiMode: r.EmojiMode, Members: r.Members, CreatedAt: r.CreatedAt}
 	err := q.QueryRow(ctx, `
 		select
 		  coalesce((select default_roster_id = $2 from owners where id = $1), false),
@@ -219,10 +197,10 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 			if err != nil {
 				return err
 			}
-			updated := rosterRow{ATeam: c.ATeam, BTeam: c.BTeam}
+			updated := rosterRow{Members: c.Members}
 			var missing []string
 			for _, name := range drafted {
-				if m, _, ok := updated.findMember(name); !ok || m.Name != name {
+				if m, ok := updated.findMember(name); !ok || m.Name != name {
 					missing = append(missing, name)
 				}
 			}
@@ -234,9 +212,9 @@ func (s *Server) updateCast(w http.ResponseWriter, r *http.Request, ownerID stri
 		}
 
 		roster, err = scanRoster(tx.QueryRow(r.Context(), `
-			update rosters r set emoji_mode = $2, a_team = $3, b_team = $4
+			update rosters r set emoji_mode = $2, members = $3
 			where r.id = $1
-			returning `+rosterColumns, roster.ID, c.EmojiMode, c.ATeam, c.BTeam))
+			returning `+rosterColumns, roster.ID, c.EmojiMode, c.Members))
 		if err != nil {
 			return err
 		}
@@ -308,7 +286,6 @@ func (s *Server) handleDisbandRoster(w http.ResponseWriter, r *http.Request, own
 type listedDraft struct {
 	Name      string    `json:"name"`
 	Emoji     string    `json:"emoji"`
-	Team      *string   `json:"team"`
 	Task      *string   `json:"task"`
 	Repo      *string   `json:"repo"`
 	DraftedAt time.Time `json:"draftedAt"`
@@ -317,21 +294,14 @@ type listedDraft struct {
 	RestingSince *time.Time `json:"restingSince"`
 }
 
-type idleMember struct {
-	Name  string `json:"name"`
-	Emoji string `json:"emoji"`
-	Team  string `json:"team"`
-}
-
 type listedRoster struct {
 	Name      string        `json:"name"`
 	EmojiMode string        `json:"emojiMode"`
-	ATeam     []member      `json:"aTeam"`
-	BTeam     []member      `json:"bTeam"`
+	Members   []member      `json:"members"`
 	IsDefault bool          `json:"isDefault"`
 	CreatedAt time.Time     `json:"createdAt"`
 	Drafted   []listedDraft `json:"drafted"`
-	Idle      []idleMember  `json:"idle"`
+	Idle      []member      `json:"idle"`
 }
 
 // handleStats is the public GET /v1/stats: every roster with its cast, drafted agents, and idle members, in the
@@ -377,7 +347,7 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 		var err error
 		rosters, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (listingRoster, error) {
 			var r listingRoster
-			err := row.Scan(&r.ID, &r.Name, &r.EmojiMode, &r.ATeam, &r.BTeam, &r.CreatedAt, &r.isDefault)
+			err := row.Scan(&r.ID, &r.Name, &r.EmojiMode, &r.Members, &r.CreatedAt, &r.isDefault)
 			return r, err
 		})
 		return err
@@ -424,8 +394,8 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 	// in the order drafts would take them (see freeMember)
 	listed := make([]listedRoster, 0, len(rosters))
 	for _, roster := range rosters {
-		entry := listedRoster{Name: roster.Name, EmojiMode: roster.EmojiMode, ATeam: roster.ATeam, BTeam: roster.BTeam,
-			IsDefault: roster.isDefault, CreatedAt: roster.CreatedAt, Drafted: []listedDraft{}, Idle: []idleMember{}}
+		entry := listedRoster{Name: roster.Name, EmojiMode: roster.EmojiMode, Members: roster.Members,
+			IsDefault: roster.isDefault, CreatedAt: roster.CreatedAt, Drafted: []listedDraft{}, Idle: []member{}}
 		busy := map[string]bool{}
 		for _, d := range drafts {
 			if d.rosterID != roster.ID {
@@ -437,24 +407,20 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 			entry.Drafted = append(entry.Drafted, listedDraft{
 				Name:         displayName(d.memberName, d.copy),
 				Emoji:        d.memberEmoji,
-				Team:         roster.team(d.memberName),
 				Task:         encodeCiphertext(d.task),
 				Repo:         encodeCiphertext(d.repo),
 				DraftedAt:    d.draftedAt,
 				RestingSince: d.restingSince,
 			})
 		}
-		for _, team := range [][]member{roster.ATeam, roster.BTeam} {
-			taken := map[string]bool{}
-			for {
-				m, ok := leastRecentlyDrafted(team, func(m member) bool { return busy[nameKey(m.Name)] || taken[nameKey(m.Name)] }, last[roster.ID])
-				if !ok {
-					break
-				}
-				taken[nameKey(m.Name)] = true
-				_, teamName, _ := roster.findMember(m.Name)
-				entry.Idle = append(entry.Idle, idleMember{Name: m.Name, Emoji: m.Emoji, Team: teamName})
+		taken := map[string]bool{}
+		for {
+			m, ok := leastRecentlyDrafted(roster.Members, func(m member) bool { return busy[nameKey(m.Name)] || taken[nameKey(m.Name)] }, last[roster.ID])
+			if !ok {
+				break
 			}
+			taken[nameKey(m.Name)] = true
+			entry.Idle = append(entry.Idle, m)
 		}
 		listed = append(listed, entry)
 	}

@@ -31,7 +31,7 @@ func restingOf(t *testing.T, st Store, name string) time.Time {
 
 func TestATurnThatEndedFifteenMinutesAgoRests(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf"), nil)
+	createRoster(t, st, "work", members("Gandalf"))
 	draft(t, st, "s", "work")
 
 	ended := clock.Now()
@@ -63,7 +63,7 @@ func TestATurnThatEndedFifteenMinutesAgoRests(t *testing.T) {
 
 func TestADraftTakesTheLongestRestingNameBeforeCopies(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo", "Samwise"), nil)
+	createRoster(t, st, "work", members("Gandalf", "Frodo", "Samwise"))
 	draft(t, st, "gandalf", "work")
 	draft(t, st, "frodo", "work")
 	draft(t, st, "samwise", "work")
@@ -93,7 +93,7 @@ func TestADraftTakesTheLongestRestingNameBeforeCopies(t *testing.T) {
 
 func TestAFreeNameComesBeforeAResting(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 	draft(t, st, "gandalf", "work")
 	recordTurn(t, st, "gandalf", true, clock.Now())
 	clock.Advance(time.Hour)
@@ -112,10 +112,11 @@ func TestOpeningAVersionTwoDatabaseAddsTurns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createRoster(t, st, "work", members("Gandalf"), nil)
+	createRoster(t, st, "work", members("Gandalf"))
 	draft(t, st, "s", "work")
 
 	// Turn it back into a version 2 database, from before turns
+	splitTeams(t, st, 1)
 	if _, err := st.db.Exec(`alter table drafts drop column turn_started_at; alter table drafts drop column turn_ended_at;
 		pragma user_version = 2`); err != nil {
 		t.Fatal(err)
@@ -132,7 +133,7 @@ func TestOpeningAVersionTwoDatabaseAddsTurns(t *testing.T) {
 
 func TestAStartInTheSameSecondAsTheEndCountsAsWorking(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf"), nil)
+	createRoster(t, st, "work", members("Gandalf"))
 	draft(t, st, "s", "work")
 
 	// SQLite keeps seconds, so a queued prompt right after the turn ended is stored at the same time

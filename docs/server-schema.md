@@ -22,16 +22,15 @@ create table owners (
 );
 
 -- A roster and all its members. Members are always read and written as a whole (`rostr edit` opens the entire
--- roster), so they live in JSON columns. Array order is draft order, A team first.
--- a_team, b_team: [{"name": "Gandalf", "emoji": "🧙"}, ...]
+-- roster), so they live in a JSON column. Array order is draft order.
+-- members: [{"name": "Gandalf", "emoji": "🧙"}, ...]
 create table rosters (
   id            uuid primary key default gen_random_uuid(),
   owner_id      text not null references owners on delete cascade,
   name          text not null,
   name_key      text not null,  -- name lowercased with accents stripped (by the API), so names are unique loosely
   emoji_mode    text not null default 'on' check (emoji_mode in ('on', 'off', 'only')),
-  a_team        jsonb not null,
-  b_team        jsonb not null default '[]',
+  members       jsonb not null,
   created_at    timestamptz not null default now(),
   constraint rosters_owner_name unique (owner_id, name_key)
 );
@@ -98,8 +97,8 @@ A draft makes two round trips to the database (see [api.md](api.md#post-v1agents
    draft, the owner's active drafts (with which are resting), and when each member was last drafted
    (`max(drafted_at)` per member over the retained drafts).
 2. **The pick, in Go:** resume the session's previous member if they're free; else the free member drafted least
-   recently (never drafted first, then roster order), A team before the B team; if every member is busy, the name of
-   the member who has rested longest; else a free numbered copy (`copy` 2, then 3).
+   recently (never drafted first, then roster order); if every member is busy, the name of the member who has rested
+   longest; else a free numbered copy (`copy` 2, then 3).
 3. **One batch of writes,** run as one implicit transaction: bench the resting draft whose name it takes, if any
    (only if it's still resting), and insert the new draft.
 

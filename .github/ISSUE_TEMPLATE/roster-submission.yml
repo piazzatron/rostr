@@ -19,10 +19,10 @@ body:
     validations:
       required: true
   - type: textarea
-    id: a-team
+    id: members
     attributes:
-      label: A team
-      description: The six members drafted first, one per line, each with an emoji.
+      label: Members
+      description: One per line, each with an emoji, the best-known first. A team of six takes the first six.
       placeholder: |
         🧙 Gandalf
         💍 Frodo
@@ -30,14 +30,8 @@ body:
         👑 Aragorn
         🏹 Legolas
         🪓 Gimli
-    validations:
-      required: true
-  - type: textarea
-    id: b-team
-    attributes:
-      label: B team
-      description: Everyone else, one per line, each with an emoji.
-      placeholder: |
         🛡️ Boromir
         🍺 Merry
         🍄 Pippin
+    validations:
+      required: true

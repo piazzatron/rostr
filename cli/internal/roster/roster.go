@@ -15,9 +15,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// ATeamSize is how many names from a --names list go on the A team.
-const ATeamSize = 6
-
 // Member is one name on a roster.
 type Member struct {
 	Name  string `json:"name"`
@@ -90,9 +87,9 @@ func ParseMember(s string) Member {
 	return Member{Name: s}
 }
 
-// ParseNames parses a comma-separated --names list into an A team (the first six) and a B team, giving every name
-// without an emoji a random one that no other member uses.
-func ParseNames(list string) (aTeam, bTeam []Member, err error) {
+// ParseNames parses a comma-separated --names list, giving every name without an emoji a random one that no other
+// member uses.
+func ParseNames(list string) ([]Member, error) {
 	var members []Member
 	for _, part := range strings.Split(list, ",") {
 		if strings.TrimSpace(part) == "" {
@@ -101,17 +98,9 @@ func ParseNames(list string) (aTeam, bTeam []Member, err error) {
 		members = append(members, ParseMember(part))
 	}
 	if len(members) == 0 {
-		return nil, nil, errors.New("--names needs at least one name")
+		return nil, errors.New("--names needs at least one name")
 	}
-
-	members, err = AssignMissingEmoji(members)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(members) <= ATeamSize {
-		return members, []Member{}, nil
-	}
-	return members[:ATeamSize], members[ATeamSize:], nil
+	return AssignMissingEmoji(members)
 }
 
 // AssignMissingEmoji returns a copy of members where every member without an emoji gets a random one, different from
@@ -145,11 +134,11 @@ func AssignMissingEmoji(members []Member) ([]Member, error) {
 	return out, nil
 }
 
-// ValidateCast checks a roster's members: at least one on the A team, every name and emoji present, no two names
-// that match loosely, and, in "only" mode, no two members with the same emoji.
-func ValidateCast(aTeam, bTeam []Member, mode EmojiMode) error {
-	if len(aTeam) == 0 {
-		return errors.New("the A team needs at least one member")
+// ValidateCast checks a roster's members: at least one, every name and emoji present, no two names that match
+// loosely, and, in "only" mode, no two members with the same emoji.
+func ValidateCast(members []Member, mode EmojiMode) error {
+	if len(members) == 0 {
+		return errors.New("a roster needs at least one member")
 	}
 	if _, err := ParseEmojiMode(string(mode)); err != nil {
 		return err
@@ -157,7 +146,7 @@ func ValidateCast(aTeam, bTeam []Member, mode EmojiMode) error {
 
 	names := map[string]string{}
 	emoji := map[string]string{}
-	for _, m := range append(append([]Member{}, aTeam...), bTeam...) {
+	for _, m := range members {
 		if strings.TrimSpace(m.Name) == "" {
 			return errors.New("every member needs a name")
 		}

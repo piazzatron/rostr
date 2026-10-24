@@ -16,9 +16,15 @@ type Preset struct {
 	Name   string
 	Source string
 	Emoji  string
-	ATeam  []roster.Member
-	BTeam  []roster.Member
+	// Members is everyone on the roster, the best-known first: a team of n takes the first n.
+	Members []roster.Member
 }
+
+// TeamSizes are the team sizes `rostr assemble` offers for a preset, besides everyone on it.
+var TeamSizes = []int{4, 6, 10}
+
+// DefaultTeamSize is how many of a preset's members a new roster takes unless you pick another size.
+const DefaultTeamSize = 6
 
 // FreeAgentsID is the preset that mixes everyone else's characters.
 const FreeAgentsID = "free-agents"
@@ -30,12 +36,12 @@ func FreeAgents() Preset {
 	var pool []roster.Member
 	for _, other := range all {
 		if other.ID != FreeAgentsID {
-			pool = append(append(pool, other.ATeam...), other.BTeam...)
+			pool = append(pool, other.Members...)
 		}
 	}
 	rand.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
 
-	size := len(p.ATeam) + len(p.BTeam)
+	size := len(p.Members)
 	names, emoji := map[string]bool{}, map[string]bool{}
 	var cast []roster.Member
 	for _, m := range pool {
@@ -49,8 +55,7 @@ func FreeAgents() Preset {
 		names[name], emoji[mark] = true, true
 		cast = append(cast, m)
 	}
-	split := min(len(p.ATeam), len(cast))
-	p.ATeam, p.BTeam = cast[:split], cast[split:]
+	p.Members = cast
 	return p
 }
 

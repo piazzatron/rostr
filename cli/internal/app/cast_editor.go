@@ -16,8 +16,8 @@ import (
 	"github.com/piazzatron/rostr/cli/internal/roster"
 )
 
-// castEditor is a form field for building or changing a cast: the A team and the B team as one list, where you add
-// people, rename them, change their emoji, remove them, and move them between teams.
+// castEditor is a form field for building or changing a cast: one list, where you add people, rename them, change
+// their emoji, remove them, and swap them for someone else from the preset the cast was picked from.
 type castEditor struct {
 	title, description string
 	cast               *cast
@@ -25,9 +25,11 @@ type castEditor struct {
 	validate func(cast) error
 
 	cursor int
-	mode   castEditorMode
-	input  textinput.Model
-	err    error
+	// swapCursor is the highlighted member among those who can be swapped in
+	swapCursor int
+	mode       castEditorMode
+	input      textinput.Model
+	err        error
 
 	focused       bool
 	width, height int
@@ -40,11 +42,8 @@ const (
 	castBrowsing castEditorMode = iota
 	castAdding
 	castRenaming
+	castSwapping
 )
-
-// castEditorFixedLines is every line of the editor that isn't a member: title, description, input, error, and the two
-// team headings with a blank line between them.
-const castEditorFixedLines = 8
 
 func newCastEditor() *castEditor {
 	input := textinput.New()
@@ -61,23 +60,22 @@ func (e *castEditor) reset(c *cast) {
 	}
 }
 
-func (e *castEditor) members() []roster.Member {
-	return append(append([]roster.Member{}, e.cast.aTeam...), e.cast.bTeam...)
-}
-
 func (e *castEditor) size() int {
 	if e.cast == nil {
 		return 0
 	}
-	return len(e.cast.aTeam) + len(e.cast.bTeam)
+	return len(e.cast.members)
 }
 
-// at finds a member by position in the list: the A team, then the B team.
-func (e *castEditor) at(i int) (team *[]roster.Member, index int) {
-	if i < len(e.cast.aTeam) {
-		return &e.cast.aTeam, i
+// swappable is everyone the cast was picked from who isn't on it, in the preset's order.
+func (e *castEditor) swappable() []roster.Member {
+	var out []roster.Member
+	for _, m := range e.cast.from {
+		if !slices.ContainsFunc(e.cast.members, func(on roster.Member) bool { return roster.NamesMatch(on.Name, m.Name) }) {
+			out = append(out, m)
+		}
 	}
-	return &e.cast.bTeam, i - len(e.cast.aTeam)
+	return out
 }
 
 func (e *castEditor) startAdding() {
@@ -88,13 +86,16 @@ func (e *castEditor) startAdding() {
 }
 
 func (e *castEditor) startRenaming() {
-	team, i := e.at(e.cursor)
-	m := (*team)[i]
+	m := e.cast.members[e.cursor]
 	e.mode = castRenaming
 	e.input.SetValue(roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn))
 	e.input.Placeholder = ""
 	e.input.CursorEnd()
 	e.input.Focus()
+}
+
+func (e *castEditor) startSwapping() {
+	e.mode, e.swapCursor = castSwapping, 0
 }
 
 func (e *castEditor) stopTyping() {
@@ -103,29 +104,28 @@ func (e *castEditor) stopTyping() {
 	e.err = nil
 }
 
-// add adds each comma-separated name typed in, filling the A team to six before the B team. Names without an emoji get
-// one no one else has.
+// add adds each comma-separated name typed in to the end of the cast. A name from the preset without an emoji gets
+// its emoji there; any other name without one gets one no one else has.
 func (e *castEditor) add(text string) error {
 	var added []roster.Member
 	for _, part := range strings.Split(text, ",") {
-		if m := roster.ParseMember(part); m.Name != "" {
-			added = append(added, m)
+		m := roster.ParseMember(part)
+		if m.Name == "" {
+			continue
 		}
+		if i := slices.IndexFunc(e.cast.from, func(p roster.Member) bool { return roster.NamesMatch(p.Name, m.Name) }); i >= 0 && m.Emoji == "" {
+			m = e.cast.from[i]
+		}
+		added = append(added, m)
 	}
 	if err := e.checkNames(added, -1); err != nil {
 		return err
 	}
-	everyone, err := roster.AssignMissingEmoji(append(e.members(), added...))
+	everyone, err := roster.AssignMissingEmoji(append(slices.Clone(e.cast.members), added...))
 	if err != nil {
 		return err
 	}
-	for _, m := range everyone[e.size():] {
-		if len(e.cast.aTeam) < roster.ATeamSize {
-			e.cast.aTeam = append(e.cast.aTeam, m)
-		} else {
-			e.cast.bTeam = append(e.cast.bTeam, m)
-		}
-	}
+	e.cast.members = everyone
 	e.cursor = e.size() - 1
 	return nil
 }
@@ -139,18 +139,17 @@ func (e *castEditor) rename(text string) error {
 	if err := e.checkNames([]roster.Member{m}, e.cursor); err != nil {
 		return err
 	}
-	team, i := e.at(e.cursor)
 	if m.Emoji == "" {
-		m.Emoji = (*team)[i].Emoji
+		m.Emoji = e.cast.members[e.cursor].Emoji
 	}
-	(*team)[i] = m
+	e.cast.members[e.cursor] = m
 	return nil
 }
 
 // checkNames refuses names already in the cast, other than the member at skip, or typed twice.
 func (e *castEditor) checkNames(names []roster.Member, skip int) error {
 	taken := map[string]string{}
-	for i, m := range e.members() {
+	for i, m := range e.cast.members {
 		if i != skip {
 			taken[roster.NormalizeName(m.Name)] = m.Name
 		}
@@ -164,23 +163,15 @@ func (e *castEditor) checkNames(names []roster.Member, skip int) error {
 	return nil
 }
 
-// move puts the member under the cursor at the end of the other team, and keeps the cursor on them.
-func (e *castEditor) move() {
-	team, i := e.at(e.cursor)
-	m := (*team)[i]
-	*team = slices.Delete(*team, i, i+1)
-	if team == &e.cast.aTeam {
-		e.cast.bTeam = append(e.cast.bTeam, m)
-		e.cursor = e.size() - 1
-	} else {
-		e.cast.aTeam = append(e.cast.aTeam, m)
-		e.cursor = len(e.cast.aTeam) - 1
+// swap puts the highlighted swappable member in place of the member under the cursor.
+func (e *castEditor) swap() {
+	if in := e.swappable(); e.swapCursor < len(in) {
+		e.cast.members[e.cursor] = in[e.swapCursor]
 	}
 }
 
 func (e *castEditor) remove() {
-	team, i := e.at(e.cursor)
-	*team = slices.Delete(*team, i, i+1)
+	e.cast.members = slices.Delete(e.cast.members, e.cursor, e.cursor+1)
 	e.cursor = max(0, min(e.cursor, e.size()-1))
 }
 
@@ -191,7 +182,10 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok || !e.focused || e.cast == nil {
 		return e, nil
 	}
-	if e.mode != castBrowsing {
+	switch e.mode {
+	case castSwapping:
+		return e.updateSwapping(keyMsg)
+	case castAdding, castRenaming:
 		return e.updateTyping(keyMsg)
 	}
 	e.err = nil
@@ -202,9 +196,9 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		e.cursor = min(e.size()-1, e.cursor+1)
 	case "a", "+":
 		e.startAdding()
-	case " ", "left", "right":
-		if e.size() > 0 {
-			e.move()
+	case "s", " ":
+		if e.size() > 0 && len(e.swappable()) > 0 {
+			e.startSwapping()
 		}
 	case "r", "e":
 		if e.size() > 0 {
@@ -217,8 +211,8 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "shift+tab":
 		return e, huh.PrevField
 	case "enter", "tab":
-		if len(e.cast.aTeam) == 0 {
-			e.err = errors.New("the A team needs at least one member")
+		if e.size() == 0 {
+			e.err = errors.New("a roster needs at least one member")
 			return e, nil
 		}
 		if e.validate != nil {
@@ -227,6 +221,24 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return e, huh.NextField
+	}
+	return e, nil
+}
+
+func (e *castEditor) updateSwapping(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		e.swapCursor = max(0, e.swapCursor-1)
+	case "down", "j":
+		e.swapCursor = min(len(e.swappable())-1, e.swapCursor+1)
+	case "enter", " ", "s":
+		e.swap()
+		e.mode = castBrowsing
+	case "esc":
+		e.mode = castBrowsing
+	case "shift+tab":
+		e.mode = castBrowsing
+		return e, huh.PrevField
 	}
 	return e, nil
 }
@@ -274,7 +286,8 @@ func (e *castEditor) updateTyping(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return e, cmd
 }
 
-// capturesKeys reports whether the editor is taking typing, so esc stops typing instead of leaving the screen.
+// capturesKeys reports whether the editor is taking typing or a choice, so esc stops that instead of leaving the
+// screen.
 func (e *castEditor) capturesKeys() bool {
 	return e.mode != castBrowsing && e.size() > 0
 }
@@ -289,8 +302,14 @@ func (e *castEditor) footerKeys() [][2]string {
 		return [][2]string{{"enter", "add"}, {"esc", "done adding"}}
 	case castRenaming:
 		return [][2]string{{"enter", "save"}, {"esc", "cancel"}}
+	case castSwapping:
+		return [][2]string{{"↑/↓", "move"}, {"enter", "swap in"}, {"esc", "cancel"}}
 	}
-	return [][2]string{{"space", "switch team"}, {"a", "add"}, {"r", "rename"}, {"x", "remove"}, {"enter", "done"}}
+	keys := [][2]string{{"a", "add"}, {"r", "rename"}, {"x", "remove"}, {"enter", "done"}}
+	if len(e.swappable()) > 0 {
+		keys = append([][2]string{{"s", "swap"}}, keys...)
+	}
+	return keys
 }
 
 func (e *castEditor) View() string {
@@ -320,16 +339,19 @@ func (e *castEditor) View() string {
 		lines = append(lines, styles.Title.Render("Add someone"), e.input.View())
 	case castRenaming:
 		lines = append(lines, styles.Title.Render("Rename"), e.input.View())
+	case castSwapping:
+		out := e.cast.members[e.cursor]
+		lines = append(lines, styles.Title.Render("Swap out "+roster.Display(out.Emoji, out.Name, 1, roster.EmojiOn)+" for"))
 	}
 	if e.err != nil {
 		lines = append(lines, styles.ErrorMessage.Render("* "+e.err.Error()))
 	}
 
-	// The teams, scrolled to keep the cursor in view
-	rows := e.rows(styles)
+	// The cast, or who can be swapped in, scrolled to keep the cursor in view
+	rows, cursorRow := e.rows(styles)
 	room := max(3, e.height-len(lines)-2)
 	if e.height > 0 && len(rows) > room {
-		top := min(max(0, e.cursorRow()-room/2), len(rows)-room)
+		top := min(max(0, cursorRow-room/2), len(rows)-room)
 		rows = rows[top : top+room]
 	}
 	lines = append(lines, "")
@@ -337,42 +359,39 @@ func (e *castEditor) View() string {
 	return styles.Base.Width(e.width).Render(strings.Join(lines, "\n"))
 }
 
-// rows are the two team headings and their members, the one under the cursor marked.
-func (e *castEditor) rows(styles huh.FieldStyles) []string {
-	var rows []string
-	member := func(m roster.Member, i int) string {
+// rows are the cast under its heading, the member under the cursor marked, and how many more can be swapped in; or,
+// while swapping, everyone who can be. cursorRow is the marked row.
+func (e *castEditor) rows(styles huh.FieldStyles) (rows []string, cursorRow int) {
+	member := func(m roster.Member, marked bool) string {
 		label := roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)
-		if i == e.cursor && e.mode == castBrowsing {
+		if marked {
 			return styles.SelectSelector.String() + styles.SelectedOption.Render(label)
 		}
 		return "  " + styles.Option.Render(label)
 	}
-	team := func(heading string, members []roster.Member, offset int) {
-		rows = append(rows, styleMuted.Render(fmt.Sprintf("%s · %d", heading, len(members))))
-		if len(members) == 0 {
-			rows = append(rows, "  "+styleFaint.Render("no one yet"))
+	if e.mode == castSwapping {
+		for i, m := range e.swappable() {
+			rows = append(rows, member(m, i == e.swapCursor))
 		}
-		for i, m := range members {
-			rows = append(rows, member(m, offset+i))
-		}
+		return rows, e.swapCursor
 	}
-	team("A team", e.cast.aTeam, 0)
-	rows = append(rows, "")
-	team("B team", e.cast.bTeam, len(e.cast.aTeam))
-	return rows
-}
 
-// cursorRow is the cursor's line among the rows.
-func (e *castEditor) cursorRow() int {
-	if e.cursor < len(e.cast.aTeam) {
-		return 1 + e.cursor
+	rows = append(rows, styleMuted.Render(fmt.Sprintf("Your team · %d", e.size())))
+	if e.size() == 0 {
+		rows = append(rows, "  "+styleFaint.Render("no one yet"))
 	}
-	return 1 + max(1, len(e.cast.aTeam)) + 2 + (e.cursor - len(e.cast.aTeam))
+	for i, m := range e.cast.members {
+		rows = append(rows, member(m, i == e.cursor && e.mode == castBrowsing))
+	}
+	if more := len(e.swappable()); more > 0 {
+		rows = append(rows, "", styleFaint.Render(fmt.Sprintf("%d more to swap in", more)))
+	}
+	return rows, 1 + e.cursor
 }
 
 func (e *castEditor) Focus() tea.Cmd {
 	e.focused = true
-	if e.mode != castBrowsing {
+	if e.mode == castAdding || e.mode == castRenaming {
 		return e.input.Focus()
 	}
 	return nil

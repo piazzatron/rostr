@@ -17,7 +17,6 @@ type draftResponse struct {
 	Name      string    `json:"name"`
 	Emoji     string    `json:"emoji"`
 	Copy      int       `json:"copy"`
-	Team      *string   `json:"team"`
 	Roster    string    `json:"roster"`
 	EmojiMode string    `json:"emojiMode"`
 	Session   string    `json:"session"`
@@ -27,17 +26,14 @@ type draftResponse struct {
 }
 
 // draftColumns selects a draft with its roster; queries alias drafts as d and rosters as r.
-const draftColumns = `d.id, r.name, r.emoji_mode, r.a_team, r.b_team, d.member_name, d.member_emoji, d.copy,
+const draftColumns = `d.id, r.name, r.emoji_mode, d.member_name, d.member_emoji, d.copy,
 	d.session_id, d.task, d.repo, d.drafted_at`
 
 func scanDraft(row pgx.Row) (int64, draftResponse, error) {
 	var id int64
 	var d draftResponse
-	var roster rosterRow
 	var task, repo []byte
-	err := row.Scan(&id, &d.Roster, &d.EmojiMode, &roster.ATeam, &roster.BTeam, &d.Name, &d.Emoji, &d.Copy,
-		&d.Session, &task, &repo, &d.DraftedAt)
-	d.Team = roster.team(d.Name)
+	err := row.Scan(&id, &d.Roster, &d.EmojiMode, &d.Name, &d.Emoji, &d.Copy, &d.Session, &task, &repo, &d.DraftedAt)
 	d.Task, d.Repo = encodeCiphertext(task), encodeCiphertext(repo)
 	return id, d, err
 }
@@ -202,7 +198,7 @@ func tryDraft(ctx context.Context, db *pgxpool.Pool, ownerID string, in draftInp
 	// session's repo and task unless new ones were sent.
 	if p := st.previous; p != nil {
 		if roster, ok := st.roster(p.rosterID); ok {
-			if m, _, inCast := roster.findMember(p.memberName); inCast && !st.busy(roster.ID)[slot{nameKey(m.Name), p.copy}] {
+			if m, inCast := roster.findMember(p.memberName); inCast && !st.busy(roster.ID)[slot{nameKey(m.Name), p.copy}] {
 				d := newDraft{ownerID, roster, m, p.copy, in.session, p.repoHash, p.repo, p.task, in.idle}
 				if in.repoHash != nil {
 					d.repoHash, d.repo = in.repoHash, in.repo
@@ -385,32 +381,29 @@ func (st draftState) longestResting(roster rosterRow) (restingMember, bool) {
 		if d.rosterID != roster.ID || d.copy != 1 || d.restingSince == nil {
 			continue
 		}
-		if m, _, inCast := roster.findMember(d.member); inCast {
+		if m, inCast := roster.findMember(d.member); inCast {
 			return restingMember{d.id, m}, true
 		}
 	}
 	return restingMember{}, false
 }
 
-// freeMember picks the free copy-1 member drafted least recently (never-drafted first, then roster order), A team
-// first, then the B team, then copy 2 the same way, and so on, so drafts cycle through the cast. The cast is never
-// empty.
+// freeMember picks the free copy-1 member drafted least recently (never-drafted first, then roster order), then copy 2
+// the same way, and so on, so drafts cycle through the cast. The cast is never empty.
 func freeMember(roster rosterRow, busy map[slot]bool, last map[string]time.Time) (member, int) {
 	for copy := 1; ; copy++ {
-		for _, team := range [][]member{roster.ATeam, roster.BTeam} {
-			if m, ok := leastRecentlyDrafted(team, func(m member) bool { return busy[slot{nameKey(m.Name), copy}] }, last); ok {
-				return m, copy
-			}
+		if m, ok := leastRecentlyDrafted(roster.Members, func(m member) bool { return busy[slot{nameKey(m.Name), copy}] }, last); ok {
+			return m, copy
 		}
 	}
 }
 
 // leastRecentlyDrafted is the member not busy whose last draft is oldest; never drafted counts as oldest, and ties
 // keep roster order.
-func leastRecentlyDrafted(team []member, isBusy func(member) bool, last map[string]time.Time) (member, bool) {
+func leastRecentlyDrafted(members []member, isBusy func(member) bool, last map[string]time.Time) (member, bool) {
 	best, found := member{}, false
 	var bestAt time.Time
-	for _, m := range team {
+	for _, m := range members {
 		if isBusy(m) {
 			continue
 		}
@@ -439,7 +432,7 @@ type newDraft struct {
 // the insert hits the unique index on its name, and neither is kept.
 func writeDraft(ctx context.Context, db *pgxpool.Pool, d newDraft, taking *int64) (draftResponse, error) {
 	resp := draftResponse{
-		Name: d.member.Name, Emoji: d.member.Emoji, Copy: d.copy, Team: d.roster.team(d.member.Name), Roster: d.roster.Name,
+		Name: d.member.Name, Emoji: d.member.Emoji, Copy: d.copy, Roster: d.roster.Name,
 		EmojiMode: d.roster.EmojiMode, Session: d.session, Task: encodeCiphertext(d.task), Repo: encodeCiphertext(d.repo),
 	}
 	batch := &pgx.Batch{}

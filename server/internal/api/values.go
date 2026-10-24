@@ -14,7 +14,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// member is one roster member, as stored in the a_team and b_team JSON columns.
+// member is one roster member, as stored in the members JSON column.
 type member struct {
 	Name  string `json:"name"`
 	Emoji string `json:"emoji"`
@@ -23,8 +23,7 @@ type member struct {
 // cast is a roster's emoji mode and members, as sent by create, edit, replace cast, and import.
 type cast struct {
 	EmojiMode string   `json:"emojiMode"`
-	ATeam     []member `json:"aTeam"`
-	BTeam     []member `json:"bTeam"`
+	Members   []member `json:"members"`
 }
 
 const (
@@ -71,42 +70,30 @@ func validateCast(c cast) (cast, error) {
 	if c.EmojiMode != "on" && c.EmojiMode != "off" && c.EmojiMode != "only" {
 		return cast{}, invalidRequest(`emojiMode must be "on", "off", or "only".`)
 	}
-	if len(c.ATeam) == 0 {
-		return cast{}, invalidRequest("aTeam needs at least one member.")
+	if len(c.Members) == 0 {
+		return cast{}, invalidRequest("members needs at least one member.")
 	}
-	if len(c.ATeam)+len(c.BTeam) > maxMembers {
+	if len(c.Members) > maxMembers {
 		return cast{}, invalidRequest(fmt.Sprintf("A roster can have at most %d members.", maxMembers))
 	}
 
 	seen := map[string]bool{}
-	validateTeam := func(team []member) ([]member, error) {
-		out := make([]member, len(team))
-		for i, m := range team {
-			name, err := validateName("Member name", m.Name)
-			if err != nil {
-				return nil, err
-			}
-			if m.Emoji == "" || len(m.Emoji) > maxEmojiBytes {
-				return nil, invalidRequest(fmt.Sprintf("Member %q needs an emoji.", name))
-			}
-			if seen[nameKey(name)] {
-				return nil, invalidRequest(fmt.Sprintf("Two members match %q (names ignore case and accents).", name))
-			}
-			seen[nameKey(name)] = true
-			out[i] = member{Name: name, Emoji: m.Emoji}
+	members := make([]member, len(c.Members))
+	for i, m := range c.Members {
+		name, err := validateName("Member name", m.Name)
+		if err != nil {
+			return cast{}, err
 		}
-		return out, nil
+		if m.Emoji == "" || len(m.Emoji) > maxEmojiBytes {
+			return cast{}, invalidRequest(fmt.Sprintf("Member %q needs an emoji.", name))
+		}
+		if seen[nameKey(name)] {
+			return cast{}, invalidRequest(fmt.Sprintf("Two members match %q (names ignore case and accents).", name))
+		}
+		seen[nameKey(name)] = true
+		members[i] = member{Name: name, Emoji: m.Emoji}
 	}
-
-	aTeam, err := validateTeam(c.ATeam)
-	if err != nil {
-		return cast{}, err
-	}
-	bTeam, err := validateTeam(c.BTeam)
-	if err != nil {
-		return cast{}, err
-	}
-	return cast{EmojiMode: c.EmojiMode, ATeam: aTeam, BTeam: bTeam}, nil
+	return cast{EmojiMode: c.EmojiMode, Members: members}, nil
 }
 
 func validateSession(session string) error {

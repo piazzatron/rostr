@@ -985,25 +985,6 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     font-size: 22px;
   }
 
-  /* The agent's team, from the API: the A team in purple, the B team in gray */
-  .agent-team {
-    margin-left: auto;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: #d7cbff;
-    color: #4a26cc;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  .agent-team-b {
-    background: #dcd8ea;
-    color: #5f5a78;
-  }
-
   .agent-time {
     font-variant-numeric: tabular-nums;
   }
@@ -1280,7 +1261,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
-  /* Hovered or focused, a tile lifts slightly like the other cards, and shows its A and B teams */
+  /* Hovered or focused, a tile lifts slightly like the other cards, and shows its members */
   .rosters li:focus-visible {
     z-index: 5;
     border-color: var(--accent);
@@ -1318,15 +1299,15 @@ const previewImageUrl = new URL("/og.png", Astro.site);
       transform: translateY(-2px);
     }
 
-    .rosters li:hover .roster-teams {
+    .rosters li:hover .roster-members {
       display: block;
     }
   }
 
-  /* A team / B team popover, shown on hover or keyboard focus. It sits just above the tile, lined up with its left
+  /* The members popover, shown on hover or keyboard focus. It sits just above the tile, lined up with its left
      edge; the script below nudges it left when it would run off the screen. It ignores the pointer, so moving across
      it hovers whichever tile is underneath. */
-  .roster-teams {
+  .roster-members {
     display: none;
     position: absolute;
     bottom: calc(100% + 8px);
@@ -1341,11 +1322,11 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     animation: popover-in 0.18s ease-out;
   }
 
-  .rosters li:focus-within .roster-teams {
+  .rosters li:focus-within .roster-members {
     display: block;
   }
 
-  .roster-teams b {
+  .roster-members b {
     display: block;
     margin: 0 0 6px;
     color: var(--accent);
@@ -1354,13 +1335,15 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     letter-spacing: 0.08em;
   }
 
-  /* The B team label and chips are gray, so the A team stands out */
-  .chips + b {
-    margin-top: 10px;
+  /* A small line under the chips */
+  .roster-members-note {
+    margin: 8px 0 0;
     color: var(--muted);
+    font-size: 12px;
   }
 
-  .roster-teams .chip:not(.chip-a) {
+  /* Members past the default team of six are gray, so the team you start with stands out */
+  .roster-members .chip:not(.chip-a) {
     border-color: color-mix(in srgb, var(--muted) 30%, transparent);
     background: color-mix(in srgb, var(--muted) 12%, var(--surface));
     color: var(--muted);
@@ -1381,24 +1364,6 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     white-space: nowrap;
   }
 
-  /* "A team" and "B team" in running text, colored like the roster popover's A team and B team chips */
-  .team-label {
-    padding: 0.05em 0.45em;
-    border-radius: 999px;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
-  .team-a {
-    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-    color: var(--accent);
-  }
-
-  .team-b {
-    background: color-mix(in srgb, var(--muted) 14%, var(--surface));
-    color: var(--muted);
-  }
-
   .chip-a {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
@@ -1414,7 +1379,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
 
   @media (prefers-reduced-motion: reduce) {
     .rosters li,
-    .roster-teams {
+    .roster-members {
       animation: none;
       transition: none;
     }
@@ -1442,7 +1407,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     }
   }
 
-  .team-cards {
+  .roster-cards {
     margin-top: 48px;
   }
 

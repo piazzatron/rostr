@@ -136,10 +136,9 @@ func members(names ...string) []member {
 	return out
 }
 
-func createRoster(c *client, name string, aTeam, bTeam []member) rosterResponse {
+func createRoster(c *client, name string, members []member) rosterResponse {
 	c.t.Helper()
-	return call[rosterResponse](c, "POST", "/v1/rosters",
-		map[string]any{"name": name, "aTeam": aTeam, "bTeam": bTeam}, http.StatusCreated)
+	return call[rosterResponse](c, "POST", "/v1/rosters", map[string]any{"name": name, "members": members}, http.StatusCreated)
 }
 
 func draft(c *client, body map[string]any) draftResponse {

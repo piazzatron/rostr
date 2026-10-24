@@ -12,9 +12,9 @@ import (
 func TestLiveCountsCoverEveryOwner(t *testing.T) {
 	before := countsNow(t)
 	a, b := newOwner(t), newOwner(t)
-	createRoster(a, "work", members("Gandalf", "Frodo", "Sam"), members("Boromir"))
-	createRoster(a, "games", members("Mario"), nil)
-	createRoster(b, "work", members("Pikachu", "Eevee"), nil)
+	createRoster(a, "work", members("Gandalf", "Frodo", "Sam", "Boromir"))
+	createRoster(a, "games", members("Mario"))
+	createRoster(b, "work", members("Pikachu", "Eevee"))
 
 	// Gandalf, Mario 2, and Pikachu are working. Mario is benched: copy 1 was released, and Mario 2 doesn't hold the name.
 	draftSessionNamed(a, a.session("s1"))
@@ -34,8 +34,8 @@ func TestLiveCountsCoverEveryOwner(t *testing.T) {
 func TestLiveCountsLeaveOutSweptDrafts(t *testing.T) {
 	before := countsNow(t)
 	a, b := newOwner(t), newOwner(t)
-	createRoster(a, "work", members("Gandalf", "Frodo"), nil)
-	createRoster(b, "work", members("Mario"), nil)
+	createRoster(a, "work", members("Gandalf", "Frodo"))
+	createRoster(b, "work", members("Mario"))
 	call[settingsResponse](a, "PATCH", "/v1/settings", map[string]any{"draftExpiry": "1h"}, http.StatusOK)
 	stale, recent, other := a.session("s1"), a.session("s2"), b.session("s1")
 	draftSessionNamed(a, stale)

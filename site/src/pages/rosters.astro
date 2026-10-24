@@ -2,14 +2,18 @@
 import Layout from "../layouts/Layout.astro";
 import { SUBMIT_ROSTER_URL } from "../consts";
 import { PRESET_ROSTERS } from "../data/rosters";
+
+// Assembling from a preset takes its first six members unless you pick another team size; they're highlighted below
+const DEFAULT_TEAM_SIZE = 6;
 ---
 
-<Layout title="rostr pre-built rosters" description="Every pre-built rostr roster, with its A team and B team.">
+<Layout title="rostr pre-built rosters" description="Every pre-built rostr roster and all its members.">
   <section class="rosters-hero">
     <h1>Pre-built rosters</h1>
     <p class="lede">
       Pick one with <code>rostr assemble --preset &lt;id&gt;</code>, or let <code>rostr assemble</code> walk you
-      through it. Made one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
+      through it. Your team starts as the first six, highlighted below: pick a smaller or bigger team, or swap in
+      anyone else on the roster. Made one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
     </p>
     <nav class="franchises" aria-label="Franchises">
       {PRESET_ROSTERS.map((roster) => (
@@ -30,10 +34,12 @@ import { PRESET_ROSTERS } from "../data/rosters";
             </span>
             <code class="roster-card-id">{roster.id}</code>
           </header>
-          <b class="team-label">A team</b>
-          <div class="chips">{roster.aTeam.map((member) => <span class="chip chip-a">{member}</span>)}</div>
-          <b class="team-label team-label-b">B team</b>
-          <div class="chips">{roster.bTeam.map((member) => <span class="chip chip-b">{member}</span>)}</div>
+          <b class="members-label">{roster.members.length} members</b>
+          <div class="chips">
+            {roster.members.map((member, index) => (
+              <span class:list={["chip", index < DEFAULT_TEAM_SIZE ? "chip-a" : "chip-rest"]}>{member}</span>
+            ))}
+          </div>
         </article>
       ))}
     </div>
@@ -103,7 +109,7 @@ import { PRESET_ROSTERS } from "../data/rosters";
     margin-left: auto;
   }
 
-  .team-label {
+  .members-label {
     display: block;
     margin: 0 0 6px;
     color: var(--accent);
@@ -112,13 +118,8 @@ import { PRESET_ROSTERS } from "../data/rosters";
     text-transform: uppercase;
   }
 
-  .team-label-b {
-    margin-top: 12px;
-    color: var(--muted);
-  }
-
-  /* The B team is gray, like on the home page */
-  .chip-b {
+  /* Members past the default team of six are gray, like on the home page */
+  .chip-rest {
     border-color: color-mix(in srgb, var(--muted) 30%, transparent);
     background: color-mix(in srgb, var(--muted) 12%, var(--surface));
     color: var(--muted);
