@@ -178,7 +178,13 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     padding-top: 24px;
+  }
+
+  /* Nothing in the header should squeeze or wrap */
+  .nav > * {
+    flex-shrink: 0;
   }
 
   .wordmark {
@@ -205,15 +211,23 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     color: var(--text);
   }
 
+  /* Monospace like the wordmark, so the header reads as one family */
   .nav nav {
     display: flex;
     gap: 20px;
-    font-size: 15px;
+    font-family: var(--mono);
+    font-size: 13px;
   }
 
   .nav nav a {
     color: var(--muted);
     text-decoration: none;
+  }
+
+  /* Trimmed to cap height, so their capitals center on the same line as the logo; the padding keeps the click target */
+  .nav nav a:not(.nav-icon) {
+    padding: 8px 0;
+    text-box: trim-both cap alphabetic;
   }
 
   .nav nav a:hover {
@@ -431,6 +445,242 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     color: var(--text);
   }
 
+  /* The live board: agents at work in big split-flap digits, then how many are on the bench, on a dark board that
+     hangs by a wire from the top of the screen, fixed in the right margin. It waits out of sight above the screen,
+     then drops (index.astro plays the fall, bounce, and swing), swinging out in depth like a sheet of paper and coming
+     to rest flat against the page, its shadow on the page behind it. It's centered in the margin (the page's 912px
+     column leaves (100vw - 912px) / 2 on each side), and only shows where the margin has room for it. */
+  .live-board {
+    display: none;
+  }
+
+  @media (min-width: 1360px) {
+    .live-board:not([hidden]) {
+      position: fixed;
+      top: 0;
+      right: calc((100vw - 912px) / 4);
+      z-index: 50;
+      display: flex;
+      justify-content: center;
+      width: 0;
+      perspective: 700px;
+      perspective-origin: 50% 0;
+      font-family: var(--mono);
+      font-size: 13px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+  }
+
+  /* The wire and the board swing together, in depth, from where the wire meets the top of the screen */
+  .live-board-rig {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform-origin: 50% 0;
+    visibility: hidden;
+  }
+
+  .live-board.is-dropped .live-board-rig {
+    visibility: visible;
+  }
+
+  /* The board's shadow on the page, sized to the board when it drops (top: the wire's length), tight while it's flat
+     against the page */
+  .live-board-shadow {
+    position: absolute;
+    top: 150px;
+    border-radius: 8px;
+    background: rgb(0 0 0 / 0.45);
+    visibility: hidden;
+  }
+
+  .live-board.is-dropped .live-board-shadow {
+    visibility: visible;
+    translate: 0 3px;
+    opacity: 0.18;
+    filter: blur(4px);
+  }
+
+  .live-board-wire {
+    width: 2px;
+    height: 150px;
+    background: var(--text);
+  }
+
+  .live-board-sign {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    padding: 18px 16px 12px;
+    border: 1px solid #2e2c29;
+    border-radius: 8px;
+    background: #1c1b19;
+  }
+
+  /* A red light in the top left corner, pulsing while the board's live */
+  .live-board-light {
+    position: absolute;
+    top: 7px;
+    left: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff3b30;
+    box-shadow: 0 0 6px 1px rgb(255 59 48 / 0.7);
+    animation: live-board-light 1.4s ease-in-out infinite;
+  }
+
+  @keyframes live-board-light {
+    50% {
+      opacity: 0.3;
+      box-shadow: none;
+    }
+  }
+
+  .live-board-label {
+    margin-top: 12px;
+    color: #ece8df;
+    font-weight: 700;
+  }
+
+  .live-board-bench {
+    margin-top: 4px;
+    color: #9c978d;
+  }
+
+  .live-board-bench b {
+    color: #ece8df;
+  }
+
+  /* The flaps shrink as the number grows, so the card stays about the same width, and a wider gap marks the thousands
+     where a comma would go */
+  .flaps {
+    --flap-w: 52px;
+    --flap-h: 76px;
+    --flap-font: 50px;
+    display: flex;
+    gap: 4px;
+  }
+
+  .flaps[data-digits="3"] {
+    --flap-w: 40px;
+    --flap-h: 58px;
+    --flap-font: 38px;
+  }
+
+  .flaps[data-digits="4"] {
+    --flap-w: 34px;
+    --flap-h: 50px;
+    --flap-font: 32px;
+  }
+
+  .flaps[data-digits="5"] {
+    --flap-w: 28px;
+    --flap-h: 42px;
+    --flap-font: 27px;
+  }
+
+  .flaps[data-digits="6"],
+  .flaps[data-digits="7"] {
+    --flap-w: 23px;
+    --flap-h: 36px;
+    --flap-font: 22px;
+  }
+
+  .flap.is-thousands {
+    margin-left: 6px;
+  }
+
+  /* One digit: two static halves (the new digit's top, the old digit's bottom until the turn lands) and two that fold
+     over them, the old top falling away and then the new bottom landing. The 1px seam between halves shows the
+     darker tile behind. */
+  .flap {
+    position: relative;
+    width: var(--flap-w);
+    height: var(--flap-h);
+    border-radius: 7px;
+    background: #0a0908;
+    color: #ff7a3d;
+    font-size: var(--flap-font);
+    font-weight: 800;
+    text-align: center;
+    perspective: 300px;
+  }
+
+  .flap > span {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: calc(50% - 0.5px);
+    overflow: hidden;
+    background: #36332e;
+    backface-visibility: hidden;
+  }
+
+  .flap i {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: var(--flap-h);
+    font-style: normal;
+    line-height: var(--flap-h);
+  }
+
+  .flap-top,
+  .flap-fold-top {
+    top: 0;
+    border-radius: 7px 7px 0 0;
+    transform-origin: 50% 100%;
+  }
+
+  .flap-bottom,
+  .flap-fold-bottom {
+    bottom: 0;
+    border-radius: 0 0 7px 7px;
+    transform-origin: 50% 0;
+  }
+
+  .flap-top i,
+  .flap-fold-top i {
+    top: 0;
+  }
+
+  .flap-bottom i,
+  .flap-fold-bottom i {
+    bottom: 0;
+  }
+
+  .flap-fold-top,
+  .flap-fold-bottom {
+    z-index: 1;
+    visibility: hidden;
+  }
+
+  .flap.is-turning .flap-fold-top {
+    visibility: visible;
+    animation: flap-fall 80ms ease-in both;
+  }
+
+  .flap.is-turning .flap-fold-bottom {
+    visibility: visible;
+    animation: flap-land 80ms ease-out 80ms both;
+  }
+
+  @keyframes flap-fall {
+    to {
+      transform: rotateX(-90deg);
+      filter: brightness(0.6);
+    }
+  }
+
+  @keyframes flap-land {
+    from {
+      transform: rotateX(90deg);
+      filter: brightness(0.6);
+    }
+  }
+
   /* The live bar: pinned to the bottom of the screen and sliding up once the visitor scrolls down, with "LIVE · X agents
      drafted out of Y" crawling slowly across it. Six copies, so the crawl never runs out; the track moves by half
      (three copies) per loop. */
@@ -602,6 +852,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     .hero-notification,
     .hero > :is(h1, .hero-subtitle, .lede, .cta-title, .cta, .cta-alt),
     .hero-terminal > .expressive-code,
+    .live-board-light,
     .live-bar-track {
       animation: none !important;
     }

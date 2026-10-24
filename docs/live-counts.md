@@ -1,11 +1,22 @@
 # Live counts
 
-The home page's live bar, "LIVE 128 agents drafted out of 1,530", updates as agents are drafted and released. It's
-pinned to the bottom of the screen, slides up once the visitor scrolls down, and crawls slowly across. The first
-number is `working`; the second is `working` plus `benched`. `working` is the number of active drafts, copies included
-(an expired draft counts until the sweep benches it). `benched` is the number of idle members in every roster: cast
-members whose name (copy 1) is free. Both come from one query in `server/internal/api/counts.go`. The socket is the
-only way to get them; there's no polling endpoint.
+The home page's live board hangs from the top of the screen, fixed in the right margin on screens at least 1360px
+wide: `working` in big split-flap digits with a pulsing red light in the corner, "agents at work" under them, then "4
+on the bench" (`benched`). A wire runs from the top edge of the screen to the middle of its top. The board waits out
+of sight and drops 0.6 seconds after load: it falls until the wire goes taut, bobs on the wire's stretch, and swings
+out from the page and back in depth like a sheet of paper, each swing smaller and none hitting the page, until it
+rests flat against it, its shadow on the page following it. Scrolling down reels it back up out of sight, and it drops
+again once the visitor is back at the top. Its digits turn in from blank just after the jolt, and after that each
+digit turns forward one flap at a time to its new value. The number is zero-padded to two digits; past 99 it gains
+flaps, which shrink as they're added (with a gap where the thousands comma would go), so the board stays within the
+margin up to six digits.
+
+There's also a live bar, "LIVE 128 agents drafted out of 1,530", pinned to the bottom of the screen; it slides up once
+the visitor scrolls down and crawls slowly across. It's off for now (`SHOW_LIVE_BAR` in `site/src/pages/index.astro`).
+
+`working` is the number of active drafts, copies included (an expired draft counts until the sweep benches it).
+`benched` is the number of idle members in every roster: cast members whose name (copy 1) is free. Both come from one
+query in `server/internal/api/counts.go`. The socket is the only way to get them; there's no polling endpoint.
 
 ## Flow
 
@@ -26,7 +37,7 @@ API server write ──▶ POST /update ──▶ LiveCounts Durable Object ─�
    just two routes, `GET /ws` and `POST /update`.
 4. **Browsers update in place.** The home page opens `{PUBLIC_LIVE_URL}/ws`, gets the current counts on connect, and
    counts up or down to each new pair. If the socket fails or closes, it retries after 5s, 10s, 30s, then every 60s.
-   With no drafted agents (or no counts yet), the bar stays hidden.
+   With no drafted agents (or no counts yet), the board and the bar stay hidden.
 
 A draft that passes its owner's expiry stops counting when the sweep benches it, within 15 minutes.
 
@@ -37,7 +48,7 @@ A draft that passes its owner's expiry stops counting when the sweep benches it,
 | Worker | `LIVE_SECRET` (secret, `wrangler secret put`) | The shared secret `POST /update` requires |
 | API server | `LIVE_URL` | The Worker's base URL, `https://live.getrostr.sh` |
 | API server | `LIVE_SECRET` | The same secret. With `LIVE_URL` or `LIVE_SECRET` unset, nothing is pushed |
-| Site (build time) | `PUBLIC_LIVE_URL` | The Worker's base URL. Unset, the page has no live bar |
+| Site (build time) | `PUBLIC_LIVE_URL` | The Worker's base URL. Unset, the page has no live board or bar |
 
 ## Why one Durable Object
 
