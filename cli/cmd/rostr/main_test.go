@@ -896,6 +896,10 @@ func TestCloudModeWithADeadKey(t *testing.T) {
 	if _, err := os.Stat(credentials); !os.IsNotExist(err) {
 		t.Fatalf("credentials still there: %v", err)
 	}
+	// The API may have rejected the key only because it was the wrong server, so the key is kept
+	if old, _ := os.ReadFile(credentials + ".old"); string(old) != unregisteredKey+"\n" {
+		t.Fatalf("credentials.old: %q", old)
+	}
 	s.fails(s.home, nil, "No rosters yet", "stats")
 }
 

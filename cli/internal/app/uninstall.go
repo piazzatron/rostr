@@ -66,8 +66,14 @@ func newUninstallCommand() *cobra.Command {
 				return err
 			}
 
-			// Then the files this machine keeps: the key or the local database, and the keep-alive marks
+			// Then the files this machine keeps: the key or the local database, and the keep-alive marks. A key the API
+			// rejected is kept as credentials.old, in case it was rejected by the wrong server
 			cloud := hasCloudKey()
+			if deadKey {
+				if err := backUpCredentials(); err != nil {
+					return err
+				}
+			}
 			files := []string{paths.Credentials(), paths.Database(), paths.Database() + "-wal", paths.Database() + "-shm"}
 			for _, path := range files {
 				if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -92,7 +98,8 @@ func newUninstallCommand() *cobra.Command {
 				fmt.Fprintf(out, "Deleted %s.\n", plural(len(rosters), "roster", "rosters"))
 			}
 			if deadKey {
-				fmt.Fprintln(out, "The rostr API didn't recognize your key, so there was no cloud setup left to delete.")
+				fmt.Fprintf(out, "The rostr API didn't recognize your key, so there was no cloud setup left to delete. "+
+					"Any saved key is kept in %s.old.\n", paths.Credentials())
 			}
 			for _, piece := range removed {
 				fmt.Fprintf(out, "Removed %s\n", piece)
@@ -104,7 +111,7 @@ func newUninstallCommand() *cobra.Command {
 				fmt.Fprintln(out, "Nothing to remove: rostr isn't set up here.")
 				return nil
 			}
-			if cloud && os.Getenv("ROSTR_KEY") != "" {
+			if cloud && !deadKey && os.Getenv("ROSTR_KEY") != "" {
 				fmt.Fprintln(out, "Your cloud setup is deleted. Unset ROSTR_KEY too: the key no longer works.")
 			}
 			fmt.Fprintln(out, "rostr is uninstalled. Run `rostr assemble` to start again.")

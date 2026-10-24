@@ -251,7 +251,19 @@ func saveCredentials(key crypto.Key) error {
 	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
 		return err
 	}
+	if err := backUpCredentials(); err != nil {
+		return err
+	}
 	return os.WriteFile(paths.Credentials(), []byte(key.String()+"\n"), 0o600)
+}
+
+// backUpCredentials moves a saved key to credentials.old before it's replaced or removed. Only a key the API rejected
+// gets replaced, and the API may only have rejected it because ROSTR_API_URL points at the wrong server, so it's kept.
+func backUpCredentials() error {
+	if err := os.Rename(paths.Credentials(), paths.Credentials()+".old"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // removeLocalDatabase deletes the local database and SQLite's files beside it.
