@@ -175,13 +175,13 @@ import Rostr from "../components/Rostr.astro";
       The summary is recorded as the session's task, which <code>rostr stats</code> shows. When the task changes, later
       prompts retitle the session to match.
     </p>
-    <h3>Why the agent writes the summary</h3>
+    <h3>Why the agent writes the summary in the app</h3>
     <p>
-      A hook can only set a title when the session starts or a prompt arrives, before the agent has done anything, and
-      a hook's title doesn't reach Remote Control or cloud sessions at all (a{" "}
-      <a href="https://github.com/anthropics/claude-code/issues/104473">known Claude Code bug</a>). The desktop app writes its own summary, but
-      too late for the first-prompt hook to read it. The agent already knows what the task is, and it has a title tool
-      that works everywhere in the app, so <Rostr /> asks it to write the summary.
+      In a terminal, the hook sets the title itself, on the prompt after the summary is ready. In the app, that doesn't
+      work: a hook's title doesn't reach Remote Control or cloud sessions (a{" "}
+      <a href="https://github.com/anthropics/claude-code/issues/104473">known Claude Code bug</a>), and the app's own
+      summary is saved too late for the first-prompt hook to read. But the app gives the agent a title tool, and the
+      agent already knows the task, so <Rostr /> asks it to write the summary.
     </p>
     <h3>Why the call's position changes</h3>
     <p>
