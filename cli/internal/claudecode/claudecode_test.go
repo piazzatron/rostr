@@ -153,9 +153,9 @@ func TestTitleInstruction(t *testing.T) {
 	if terminal != "" || !(TitleWhere{}).IsTerminal() || (TitleWhere{DesktopLocal: true}).IsTerminal() || (TitleWhere{ServerSessionID: "x"}).IsTerminal() {
 		t.Fatalf("terminal: %q", terminal)
 	}
-	// Local titles after the answer; Remote Control and cloud title first
-	if !(TitleWhere{ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{DesktopLocal: true, ServerSessionID: "x"}).TitlesFirst() || (TitleWhere{}).TitlesFirst() {
-		t.Error("TitlesFirst")
+	// Terminals and Local sessions show a hook's title; Remote Control and cloud sessions don't
+	if (TitleWhere{ServerSessionID: "x"}).ShowsHookTitles() || !(TitleWhere{DesktopLocal: true, ServerSessionID: "x"}).ShowsHookTitles() || !(TitleWhere{}).ShowsHookTitles() {
+		t.Error("ShowsHookTitles")
 	}
 }
 

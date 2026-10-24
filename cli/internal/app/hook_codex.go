@@ -89,8 +89,7 @@ type codexTitleInput struct {
 
 // newHookCodexTitleCommand is `rostr hook codex title`, which a thread's first prompt starts in the background. It
 // waits for Codex to title the thread, records the title as the task unless the agent has set one meanwhile, then
-// names the thread `<display> · <task>` and labels its pane. Without a title from Codex, the placeholder stays the
-// task. It prints nothing.
+// names the thread `<display> · <task>` and labels its pane. It prints nothing.
 func newHookCodexTitleCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:    "title",
@@ -103,8 +102,8 @@ func newHookCodexTitleCommand() *cobra.Command {
 			}
 			ctx := cmd.Context()
 			title, err := codex.WaitForThreadName(ctx, in.SessionID, codexTitleWait)
-			if err != nil {
-				logBackground("reading the Codex title for thread %s: %v", in.SessionID, err)
+			if err != nil || title == "" {
+				logBackground("reading the Codex title for thread %s: title %q, error %v", in.SessionID, title, err)
 				return nil
 			}
 
@@ -118,7 +117,7 @@ func newHookCodexTitleCommand() *cobra.Command {
 			if err != nil || d == nil {
 				return nil
 			}
-			if title != "" && d.Task == in.Placeholder {
+			if d.Task == in.Placeholder {
 				if updated, err := st.SetTask(ctx, d.Key(), title); err == nil {
 					d = &updated
 				}

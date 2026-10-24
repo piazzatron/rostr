@@ -16,7 +16,7 @@ Each handler reads the hook's JSON from stdin and prints the reply the agent exp
 |---|---|---|
 | `SessionStart` | `session-start` | Writes `ROSTR_SESSION`. `startup`/`clear`: in cloud mode, drafts ahead in the background (see [drafting.md](drafting.md#drafting-ahead)). `resume`: drafts, asking for the old name back. `compact`: re-tells the agent its name (below) |
 | `UserPromptSubmit` | `prompt` | First prompt: the draft step (below). Later prompts: come back from a rest, keep the draft alive, retitle the session to `<name> · <task>` if it differs (see [keepalive.md](keepalive.md)) |
-| `PostToolUse`, title tools and `Bash` | `title-set` | Records the title's summary as the task, and ends a plain-answer turn (below) |
+| `PostToolUse`, title tools and `Bash` | `title-set` | Records the title's summary as the task, and ends a plain-answer turn after `rostr task` (below) |
 | `PostToolUse`, any tool | `working` | Reports that a turn started, if a turn end is pending: a turn can start without a prompt |
 | `Stop` | `turn-end` | Records that the turn ended |
 | `SessionEnd` | `session-end` | Benches the session's member and clears its files and pane label |
@@ -31,15 +31,18 @@ neither the hook input nor the entrypoint tells them apart) are never drafted or
 Claude Code keeps two titles: a local one in the transcript, which hooks can set (`sessionTitle`), and the app's
 server-side title, which hooks can set for desktop Local sessions but not for Remote Control or cloud sessions. So:
 
-1. The first-prompt hook drafts, tells the agent who it is, and sets the title to `<name> · <start of the prompt>`, so
-   the name shows straight away.
-2. The agent is asked to title the session `<name> · <3-5 word summary>` with the app's title tool: in Local
-   sessions after writing its answer, in Remote Control and cloud sessions before writing anything (text just before
-   a tool call can be shown as a progress-update summary there, and the answer would appear twice).
+1. The first-prompt hook drafts and tells the agent who it is. In a terminal it also sets the title to
+   `<name> · <start of the prompt>`, so the name shows straight away.
+2. In the app, the agent is asked to title the session `<name> · <3-5 word summary>` with the app's title tool, before
+   writing anything (Local sessions load the tool with ToolSearch first). Recent models can return text written just
+   before a tool call as a progress update, a summary of it, so an answer followed by a title call could show up
+   twice; the first thing in a turn is never turned into one. Local sessions get no placeholder title: the agent's
+   comes first thing anyway.
 3. Terminal sessions have no title tool, so the hook starts `rostr hook summarize` in the background: a headless
    `claude -p --model haiku` run that summarizes the prompt into the task, which the next prompt puts in the title.
-4. When the agent has written its answer and every tool call since was titling, `title-set` returns
-   `continue: false` to end the turn; otherwise Claude would reply to the tool result and repeat itself.
+4. After a title call, `title-set` tells the agent to carry on and answer. When the agent runs `rostr task` after
+   writing its answer and every tool call since was titling, `title-set` returns `continue: false` to end the turn;
+   otherwise Claude would reply to the tool result and repeat itself.
 
 ### Compaction and identity
 
@@ -59,8 +62,7 @@ Same shape, with Codex's limits (`hook_codex.go`):
 - Codex's clients (the TUI and the app) title a thread themselves, but only one with no name, and drop their title if
   the name changes meanwhile. So the first prompt leaves the thread unnamed and starts `rostr hook codex title` in the
   background, which polls `thread/read` for up to 10 seconds for Codex's title, makes it the task (unless the agent
-  set one), then names the thread `<display> · <task>` and labels its pane. No title in time, and the placeholder
-  task stays.
+  set one), then names the thread `<display> · <task>` and labels its pane.
 - `SessionStart` fires only when the first prompt is sent, so there's nothing to gain from drafting ahead. A `fork`
   gets its own member.
 - A "first prompt" is one whose rollout has no earlier `user_message`, so threads from before rostr aren't drafted

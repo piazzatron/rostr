@@ -9,10 +9,6 @@ import Rostr from "../components/Rostr.astro";
 >
   <section class="page-hero">
     <h1>How <Rostr /> works</h1>
-    <p class="lede">
-      Every Claude Code and Codex session gets a name from your roster and a short summary of what it's doing, like <span
-        class="session-title">🧹 Ginny · Fix flaky login test</span>. Here's how that works under the hood.
-    </p>
   </section>
 
   <section class="section">
@@ -108,15 +104,15 @@ import Rostr from "../components/Rostr.astro";
       <div class="row">
         <dt><code>UserPromptSubmit</code></dt>
         <dd>
-          First prompt: drafts, tells the agent who it is, and sets the title. Later prompts: end a rest, keep the name
-          alive, and retitle the session if its task changed.
+          First prompt: drafts, tells the agent who it is, and starts the title (below). Later prompts: end a rest, keep
+          the name alive, and retitle the session if its task changed.
         </dd>
       </div>
       <div class="row">
         <dt><code>PostToolUse</code></dt>
         <dd>
-          Marks the session as working again. Claude Code: after a title call, records the summary as the task, and ends
-          the turn if the answer is already written.
+          Marks the session as working again. Claude Code: after a title call, records the summary as the task and tells
+          the agent to carry on with its answer.
         </dd>
       </div>
       <div class="row">
@@ -137,36 +133,30 @@ import Rostr from "../components/Rostr.astro";
   <section class="section">
     <h2>Titles in Claude Code</h2>
     <p>
-      The first-prompt hook sets the title to <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>,
-      so the name shows straight away. Then a 3-5 word summary replaces the prompt, written by <Rostr /> or by the agent,
-      depending on where the session runs:
+      The title is <span class="session-title">&lt;name&gt; · &lt;3-5 word summary&gt;</span>. Who writes the summary
+      depends on where the session runs:
     </p>
     <table class="surface-table">
       <thead>
         <tr>
           <th>Where the session runs</th>
-          <th>How the summary gets there</th>
+          <th>How the title gets there</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <th scope="row">Terminal</th>
           <td>
-            <Rostr /> summarizes your first prompt in the background with <code>claude -p --model haiku</code>, on your own
-            login, and puts the summary in the terminal title on your next prompt
+            The first-prompt hook sets <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>, so
+            the name shows straight away. <Rostr /> summarizes your prompt in the background with{" "}
+            <code>claude -p --model haiku</code>, on your own login, and puts the summary in the title on your next prompt
           </td>
         </tr>
         <tr>
-          <th scope="row">Desktop app, Local session</th>
+          <th scope="row">Desktop app and cloud sessions</th>
           <td>
-            The agent writes its answer, then calls the app's <code>set_session_title</code> at the end of the same
-            message. <Rostr />'s PostToolUse hook ends the turn there, so the answer stays the last thing on screen
-          </td>
-        </tr>
-        <tr>
-          <th scope="row">Desktop app via Remote Control, and cloud sessions</th>
-          <td>
-            The agent calls Claude Code's remote <code>set_session_title</code> first, before writing its answer
+            Before writing anything, the agent calls the app's <code>set_session_title</code>. In Local sessions it loads
+            the tool with ToolSearch first
           </td>
         </tr>
       </tbody>
@@ -179,36 +169,34 @@ import Rostr from "../components/Rostr.astro";
     <p>
       Hooks can only set a title when a prompt arrives. In a terminal, that's the best there is: the summary shows up
       on your second prompt. The app can do better, because it gives the agent a title tool. The agent already knows
-      the task, so it titles the session during its first reply.
+      the task, so it titles the session in its first reply.
     </p>
     <p>
       The title tool is also the only option in Remote Control and cloud sessions, where a hook's title doesn't show up
       at all (a <a href="https://github.com/anthropics/claude-code/issues/104473">known Claude Code bug</a>).
     </p>
-    <h3>When in the reply the title gets set</h3>
+    <h3>Why the title comes first</h3>
     <p>
-      After any tool call, Claude normally writes another message, so a title call could leave an extra message after
-      your answer. To avoid that:
+      Recent models can turn text written just before a tool call into a progress update, a short summary of it. So an
+      answer followed by a title call could show up twice: once as a summary, then again in full. The first thing in a
+      reply is never turned into one, so the agent sets the title before writing anything.
     </p>
-    <ul class="terse-list">
-      <li>
-        <strong>Local sessions:</strong> the agent answers first and sets the title last. <Rostr />'s PostToolUse hook
-        then ends the turn, so your answer stays the last message.
-      </li>
-      <li>
-        <strong>Remote Control and cloud sessions:</strong> the agent sets the title first, then answers. Those apps
-        show text written just before a tool call as a progress update, so an answer followed by a title call would show
-        up once as an update, then again in full.
-      </li>
-    </ul>
   </section>
 
   <section class="section">
     <h2>Titles in Codex</h2>
     <p>
-      The first-prompt hook drafts a name and names the thread <span class="session-title"
-        >&lt;name&gt; · &lt;start of your prompt&gt;</span> itself, through the Codex app-server, before the agent's
-      first reply. Codex's terminal title shows the thread name, and a forked thread gets a name of its own.
+      The title is <span class="session-title">&lt;name&gt; · &lt;Codex's own title&gt;</span>. On the first prompt,{" "}
+      <Rostr /> drafts a name and tells the agent who it is, but leaves the thread unnamed. Codex's TUI and app then title
+      the thread themselves, usually within a few seconds. <Rostr /> waits for that title in the background, makes it the
+      session's task, and renames the thread to <span class="session-title">&lt;name&gt; · &lt;title&gt;</span>.
+    </p>
+    <h3>Why <Rostr /> waits for Codex</h3>
+    <p>
+      Codex hooks can't set a title, so <Rostr /> names threads through the Codex app-server instead. Codex only titles
+      a thread that has no name, and drops its title if the name changes while it's writing one. Naming the thread on
+      the first prompt would mean no summary, so <Rostr /> waits and adds the name to Codex's title. The summary costs
+      no extra tokens.
     </p>
   </section>
 
@@ -224,13 +212,14 @@ import Rostr from "../components/Rostr.astro";
         tokens. The full skill loads only when you ask about <Rostr />.
       </li>
       <li>
-        <strong>First prompt.</strong> The agent's identity, about 120 tokens. In the Claude Code desktop app and cloud
-        sessions, the title request (about 100 more), and one short title call, which in Local sessions first loads the
-        title tool.
+        <strong>First prompt, Claude Code.</strong> The agent's identity, about 120 tokens. In the app, the title request
+        (about 100 more) and one short title call, which in Local sessions first loads the title tool. In a terminal,
+        there's no title call: <code>claude -p --model haiku</code> summarizes up to the first 4,000 characters of your
+        prompt instead, on your own login.
       </li>
       <li>
-        <strong>Terminal sessions.</strong> No title call. Instead, <code>claude -p --model haiku</code> summarizes up to the
-        first 4,000 characters of your first prompt, on your own login.
+        <strong>First prompt, Codex.</strong> Only the agent's identity, about 120 tokens. The title is the one Codex
+        writes anyway.
       </li>
       <li>
         <strong>Now and then.</strong> After compaction, or when a resting session is renamed, the agent is told its
