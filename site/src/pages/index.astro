@@ -158,6 +158,9 @@ const LIST_JSON_EXAMPLE = `{
     }
   ]
 }`;
+
+// The live bar along the bottom of the page is off for now; the hanging live board replaces it
+const SHOW_LIVE_BAR = false;
 ---
 
 <Layout
@@ -577,11 +580,12 @@ const LIST_JSON_EXAMPLE = `{
       }, 2600);
     }
 
-    // The live bar: agents drafted out of all agents, across everyone (see docs/live-counts.md). A socket to the live
-    // Worker at PUBLIC_LIVE_URL pushes each change as it happens; a dropped socket retries after 5s, 10s, 30s, then
-    // every 60s. The bar shows once there's a drafted agent to count, and slides up once the visitor scrolls down.
-    const liveBar = document.querySelector<HTMLElement>(".live-bar");
-    if (liveBar) {
+    // The live board (agents at work in split flaps, and on the bench), and the live bar when it's on: agents working
+    // and on the bench, across everyone (see docs/live-counts.md). A socket to the live Worker at PUBLIC_LIVE_URL pushes
+    // each change as it happens; a dropped socket retries after 5s, 10s, 30s, then every 60s. They show once there's a
+    // drafted agent to count, and the bar slides up once the visitor scrolls down.
+    const liveEls = [...document.querySelectorAll<HTMLElement>(".live-board, .live-bar")];
+    if (liveEls.length) {
       type Counts = { working: number; benched: number };
       const LIVE_URL: string = import.meta.env.PUBLIC_LIVE_URL ?? "";
       const RETRY_DELAYS_MS = [5_000, 10_000, 30_000, 60_000];
@@ -593,22 +597,242 @@ const LIST_JSON_EXAMPLE = `{
       const render = (counts: Counts) => {
         onScreen = counts;
         const set = (selector: string, text: string) =>
-          liveBar.querySelectorAll(selector).forEach((el) => (el.textContent = text));
+          liveEls.forEach((live) => live.querySelectorAll(selector).forEach((el) => (el.textContent = text)));
         set(".live-drafted", counts.working.toLocaleString("en-US"));
         set(".live-drafted-label", counts.working === 1 ? "agent drafted" : "agents drafted");
         set(".live-total", (counts.working + counts.benched).toLocaleString("en-US"));
+        set(".live-benched", counts.benched.toLocaleString("en-US"));
       };
+
+      // The board's agents at work are split flaps that only turn forward, 0 to 9 and round again, one flap at a time until
+      // each shows its digit, like a station's departures board. They start blank, so the first counts turn in. A
+      // number has at least two digits, zero-padded, and gains a flap on the left when it needs one; the flaps shrink
+      // as they're added, with a gap where the thousands comma would go. They hold still until the board drops.
+      const DIGITS = "0123456789";
+      const FLAP_MS = 160; // the top half falling, then the bottom half landing
+      type Flap = { el: HTMLElement; shown: string; target: string; turning: boolean };
+      const makeFlap = (): Flap => {
+        const el = document.createElement("span");
+        el.className = "flap";
+        el.innerHTML = ["flap-top", "flap-bottom", "flap-fold-top", "flap-fold-bottom"]
+          .map((half) => `<span class="${half}"><i> </i></span>`)
+          .join("");
+        return { el, shown: " ", target: " ", turning: false };
+      };
+      const paint = (flap: Flap, half: string, char: string) => (flap.el.querySelector(`.${half} i`)!.textContent = char);
+      const turn = (flap: Flap) => {
+        if (flap.shown === flap.target) {
+          flap.turning = false;
+          return;
+        }
+        flap.turning = true;
+        const next = flap.shown === " " ? "0" : DIGITS[(DIGITS.indexOf(flap.shown) + 1) % DIGITS.length];
+        paint(flap, "flap-top", next);
+        paint(flap, "flap-fold-top", flap.shown);
+        paint(flap, "flap-fold-bottom", next);
+        flap.el.classList.remove("is-turning");
+        void flap.el.offsetWidth; // restarts the animation
+        flap.el.classList.add("is-turning");
+        setTimeout(() => {
+          paint(flap, "flap-bottom", next);
+          flap.el.classList.remove("is-turning");
+          flap.shown = next;
+          turn(flap);
+        }, FLAP_MS);
+      };
+      const flapsEl = document.querySelector<HTMLElement>(".flaps");
+      const flaps: Flap[] = [];
+      const setFlaps = (working: number) => {
+        if (!flapsEl) return;
+        const digits = String(working);
+        flapsEl.setAttribute("aria-label", digits);
+        while (flaps.length < Math.max(2, digits.length)) {
+          const flap = makeFlap();
+          flaps.unshift(flap);
+          flapsEl.prepend(flap.el);
+        }
+        const chars = digits.padStart(flaps.length, "0");
+        flapsEl.dataset.digits = String(flaps.length);
+        flaps.forEach((flap, i) => {
+          flap.el.classList.toggle("is-thousands", i > 0 && (flaps.length - i) % 3 === 0);
+          flap.target = chars[i];
+          if (reduceMotion) {
+            ["flap-top", "flap-bottom"].forEach((half) => paint(flap, half, flap.target));
+            flap.shown = flap.target;
+          } else if (!flap.turning && boardDropped) {
+            turn(flap);
+          }
+        });
+      };
+
+      // The board hangs out of sight above the screen, then drops 0.6s after load (or once there are counts, if they're
+      // later), as long as the visitor hasn't scrolled away. It falls until the wire goes taut, bobs on the wire's
+      // stretch, and swings in depth like a hanging sheet of paper: the jolt throws its bottom out toward the viewer,
+      // and it swings back and forth in depth, each swing back just reaching the page rather than hitting it, smaller
+      // each time, until it rests flat against the page. The wire stays anchored to the top of the screen throughout,
+      // paying out as the board falls and stretching as it bobs, and the board swings from that anchor. Its shadow on
+      // the page moves with it. The motion is simulated once and played as keyframes, and the flaps start turning just
+      // after the jolt. Scrolling down reels it back up out of sight, and it drops again once the visitor is back at
+      // the top of the page.
+      const DROP_DELAY_MS = 600;
+      const RETRACT_AFTER_PX = 120; // scrolled this far down, it's reeled up
+      const RETRACT_MS = 500;
+      const liveBoard = document.querySelector<HTMLElement>(".live-board");
+      const rig = liveBoard?.querySelector<HTMLElement>(".live-board-rig");
+      const wire = liveBoard?.querySelector<HTMLElement>(".live-board-wire");
+      const sign = liveBoard?.querySelector<HTMLElement>(".live-board-sign");
+      const shadow = liveBoard?.querySelector<HTMLElement>(".live-board-shadow");
+      let boardDropped = false;
+      let dropWanted = false;
+      const startTurning = () => {
+        boardDropped = true;
+        flaps.forEach((flap) => !flap.turning && turn(flap));
+      };
+      // y is the board's offset from where it rests: negative above, positive below
+      const dropMotion = (wirePx: number, signPx: number) => {
+        const fallPx = wirePx + signPx + 24;
+        const FPS = 60;
+        const GRAVITY = 3200; // px/s²
+        const fallS = Math.sqrt((2 * fallPx) / GRAVITY);
+        // From the moment the wire goes taut: a damped bob down and back on its stretch, and the swing out from the page
+        const bob = { w: 2 * Math.PI * 2.2, damping: 0.35, speed: 260 }; // rad/s, damping ratio, px/s downward
+        // In depth, each swing back slows to a stop just as it reaches the page, so it never hits it: (1 - cos) is 0
+        // with no speed at the end of each swing, and the swings shrink as they decay
+        const swing = { w: 2 * Math.PI, decay: 0.9, size: 10 }; // rad/s, per second, degrees (half the first swing)
+        const settleS = 2.8;
+        const rigFrames: Keyframe[] = [];
+        const wireFrames: Keyframe[] = [];
+        const signFrames: Keyframe[] = [];
+        const shadowFrames: Keyframe[] = [];
+        for (let i = 0; i <= Math.round((fallS + settleS) * FPS); i++) {
+          const t = i / FPS;
+          let y = -fallPx + (GRAVITY * t * t) / 2;
+          let deg = 0;
+          if (t >= fallS) {
+            const s = t - fallS;
+            const bobW = bob.w * Math.sqrt(1 - bob.damping ** 2);
+            y = (bob.speed / bobW) * Math.exp(-bob.damping * bob.w * s) * Math.sin(bobW * s);
+            // What's left of the swing fades out over the last 0.4s, so it ends exactly flat
+            const fade = Math.min(1, (settleS - s) / 0.4);
+            deg = fade * swing.size * Math.exp(-swing.decay * s) * (1 - Math.cos(swing.w * s));
+          }
+          // The wire runs from the top of the screen to the board, so it's as long as the board is low; while the board
+          // is still above the screen there's no wire showing and the board itself is moved up
+          rigFrames.push({ rotate: `x ${deg.toFixed(3)}deg` });
+          wireFrames.push({ height: `${Math.max(0, wirePx + y).toFixed(2)}px` });
+          signFrames.push({ translate: `0 ${Math.min(0, wirePx + y).toFixed(2)}px` });
+          // The further out the bottom, the further down and softer its shadow falls; perspective makes the board look
+          // bigger and lower as it comes out, so the shadow has to drop further than that to show beneath it
+          const out = Math.sin((deg * Math.PI) / 180);
+          shadowFrames.push({
+            translate: `0 ${(y + 3 + out * signPx * 1.1).toFixed(2)}px`,
+            opacity: (0.18 + out * 1.6).toFixed(3),
+            filter: `blur(${(4 + out * 16).toFixed(1)}px)`,
+          });
+        }
+        return {
+          rigFrames,
+          wireFrames,
+          signFrames,
+          shadowFrames,
+          durationMs: (fallS + settleS) * 1000,
+          tautMs: fallS * 1000,
+        };
+      };
+      let retracting = false;
+      const dropBoard = () => {
+        dropWanted = true;
+        if (!liveBoard || !rig || !wire || !sign || liveBoard.hidden) return;
+        if (liveBoard.classList.contains("is-dropped") || retracting || window.scrollY > RETRACT_AFTER_PX) return;
+        liveBoard.classList.add("is-dropped");
+        if (shadow) {
+          shadow.style.width = `${sign.offsetWidth}px`;
+          shadow.style.height = `${sign.offsetHeight}px`;
+        }
+        if (reduceMotion || !rig.offsetHeight) {
+          startTurning();
+          return;
+        }
+        const motion = dropMotion(wire.offsetHeight, sign.offsetHeight);
+        const timing = { duration: motion.durationMs, easing: "linear" };
+        rig.animate(motion.rigFrames, timing);
+        wire.animate(motion.wireFrames, timing);
+        sign.animate(motion.signFrames, timing);
+        shadow?.animate(motion.shadowFrames, timing);
+        setTimeout(startTurning, motion.tautMs + 150);
+      };
+
+      // Reels the board up from wherever it is (mid-drop too), speeding up as it goes, then drops it again if the
+      // visitor is back at the top by the time it's gone
+      const retractBoard = () => {
+        if (!liveBoard || !rig || !wire || !sign || retracting || !liveBoard.classList.contains("is-dropped")) return;
+        const parts = [rig, wire, sign, shadow].filter((el): el is HTMLElement => !!el);
+        const finish = () => {
+          parts.forEach((el) => el.getAnimations().forEach((animation) => animation.cancel()));
+          liveBoard.classList.remove("is-dropped");
+          retracting = false;
+          if (window.scrollY <= 0) dropBoard();
+        };
+        if (reduceMotion) {
+          finish();
+          return;
+        }
+        retracting = true;
+        // Where it is now, then where it rests, so the reel starts from the current spot
+        const rotated = getComputedStyle(rig).rotate;
+        const fromDeg = rotated === "none" ? 0 : parseFloat(rotated.split(" ").pop()!);
+        // The board's top is the wire's length plus how far the board's been moved up
+        const signShift = parseFloat(getComputedStyle(sign).translate.split(" ")[1] ?? "0") || 0;
+        const top = parseFloat(getComputedStyle(wire).height) + signShift;
+        const fromShadowOpacity = shadow ? parseFloat(getComputedStyle(shadow).opacity) : 0;
+        parts.forEach((el) => el.getAnimations().forEach((animation) => animation.cancel()));
+        const restWirePx = wire.offsetHeight;
+        const distance = top + sign.offsetHeight + 24;
+        const frames = Math.round((RETRACT_MS / 1000) * 60);
+        const rigFrames: Keyframe[] = [];
+        const wireFrames: Keyframe[] = [];
+        const signFrames: Keyframe[] = [];
+        const shadowFrames: Keyframe[] = [];
+        for (let i = 0; i <= frames; i++) {
+          const progress = i / frames;
+          const boardTop = top - distance * progress ** 2;
+          rigFrames.push({ rotate: `x ${(fromDeg * Math.max(0, 1 - progress * 2)).toFixed(3)}deg` });
+          wireFrames.push({ height: `${Math.max(0, boardTop).toFixed(2)}px` });
+          signFrames.push({ translate: `0 ${Math.min(0, boardTop).toFixed(2)}px` });
+          shadowFrames.push({
+            translate: `0 ${(boardTop - restWirePx + 3).toFixed(2)}px`,
+            opacity: (fromShadowOpacity * (1 - progress)).toFixed(3),
+          });
+        }
+        const timing = { duration: RETRACT_MS, easing: "linear", fill: "forwards" as const };
+        rig.animate(rigFrames, timing);
+        wire.animate(wireFrames, timing).addEventListener("finish", finish);
+        sign.animate(signFrames, timing);
+        shadow?.animate(shadowFrames, timing);
+      };
+
+      setTimeout(dropBoard, reduceMotion ? 0 : DROP_DELAY_MS);
+      window.addEventListener(
+        "scroll",
+        () => {
+          if (window.scrollY > RETRACT_AFTER_PX) retractBoard();
+          else if (window.scrollY <= 0 && dropWanted) dropBoard();
+        },
+        { passive: true },
+      );
 
       // Counts up or down from the numbers on screen; the first counts, and reduced motion, just appear
       const show = (counts: Counts) => {
         cancelAnimationFrame(frame);
         if (!counts.working) {
-          liveBar.hidden = true;
+          liveEls.forEach((live) => (live.hidden = true));
           return;
         }
-        if (liveBar.hidden || reduceMotion) {
+        setFlaps(counts.working);
+        if (liveEls[0].hidden || reduceMotion) {
           render(counts);
-          liveBar.hidden = false;
+          liveEls.forEach((live) => (live.hidden = false));
+          if (dropWanted) dropBoard();
           return;
         }
         const from = onScreen;
@@ -635,9 +859,12 @@ const LIST_JSON_EXAMPLE = `{
       };
       if (LIVE_URL) connect();
 
-      const slideUpOnScroll = () => liveBar.classList.toggle("is-shown", window.scrollY > 240);
-      window.addEventListener("scroll", slideUpOnScroll, { passive: true });
-      slideUpOnScroll();
+      const liveBar = document.querySelector<HTMLElement>(".live-bar");
+      if (liveBar) {
+        const slideUpOnScroll = () => liveBar.classList.toggle("is-shown", window.scrollY > 240);
+        window.addEventListener("scroll", slideUpOnScroll, { passive: true });
+        slideUpOnScroll();
+      }
     }
 
     // The hero's Slack notification waits until the visitor scrolls a little
@@ -763,15 +990,32 @@ const LIST_JSON_EXAMPLE = `{
     }
   </script>
 
-  <!-- Live: agents drafted across all of rostr, in a bar that slides up from the bottom once the visitor scrolls -->
-  <div class="live-bar" hidden>
-    <div class="live-bar-track">
-      {[0, 1, 2, 3, 4, 5].map(() => (
-        <span class="live-bar-item">
-          <span class="live-bar-badge">LIVE</span>
-          <span><b class="live-drafted"></b> <span class="live-drafted-label"></span> out of <b class="live-total"></b></span>
-        </span>
-      ))}
+  <!-- Live: agents at work in split-flap digits, and on the bench, on a board hanging from the top of the screen by a
+       wire, right of the page; it drops in a second after load, or as soon as the visitor scrolls -->
+  <div class="live-board" hidden>
+    <span class="live-board-shadow" aria-hidden="true"></span>
+    <div class="live-board-rig">
+      <span class="live-board-wire" aria-hidden="true"></span>
+      <div class="live-board-sign">
+        <span class="live-board-light" aria-hidden="true"></span>
+        <span class="flaps" role="img"></span>
+        <span class="live-board-label">agents at work</span>
+        <span class="live-board-bench"><b class="live-benched"></b> on the bench</span>
+      </div>
     </div>
   </div>
+
+  <!-- Live: agents drafted across all of rostr, in a bar that slides up from the bottom once the visitor scrolls -->
+  {SHOW_LIVE_BAR && (
+    <div class="live-bar" hidden>
+      <div class="live-bar-track">
+        {[0, 1, 2, 3, 4, 5].map(() => (
+          <span class="live-bar-item">
+            <span class="live-bar-badge">LIVE</span>
+            <span><b class="live-drafted"></b> <span class="live-drafted-label"></span> out of <b class="live-total"></b></span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )}
 </Layout>
