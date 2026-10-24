@@ -52,9 +52,6 @@ TEST_DATABASE_URL='postgres://rostr:rostr@localhost:5432/rostr?sslmode=disable' 
 tests/run.sh
 ```
 
-Without Docker but with a local Postgres (as in Claude Code cloud sessions, which `.claude/hooks/session-start.sh`
-sets up), `tests/run-local.sh` starts the server from your checkout instead.
-
 **Site**
 
 ```sh
