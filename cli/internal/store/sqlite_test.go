@@ -229,11 +229,11 @@ func TestExpiryReleasesStaleDrafts(t *testing.T) {
 	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 
 	draft(t, st, "s1", "work") // Gandalf
-	clock.Advance(6 * 24 * time.Hour)
+	clock.Advance(18 * time.Hour)
 	draft(t, st, "s2", "work") // Frodo; Gandalf isn't stale yet
-	clock.Advance(2 * 24 * time.Hour)
+	clock.Advance(8 * time.Hour)
 
-	// s1 is 8 days unseen (released), s2 only 2
+	// s1 is 26 hours unseen (released), s2 only 8
 	active, err := st.ActiveDrafts(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -420,7 +420,7 @@ func TestFirstRosterBecomesDefault(t *testing.T) {
 	createRoster(t, st, "work", members("A"))
 	createRoster(t, st, "play", members("B"))
 	settings, _ := st.Settings(ctx)
-	if settings.DefaultRoster != "work" || !settings.AutoDraft || settings.Expiry != "7d" {
+	if settings.DefaultRoster != "work" || !settings.AutoDraft || settings.Expiry != "1d" {
 		t.Fatalf("settings %+v", settings)
 	}
 }
