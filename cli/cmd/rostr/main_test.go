@@ -131,7 +131,7 @@ func session(id string) []string { return []string{"ROSTR_SESSION=" + id} }
 type listOutput struct {
 	Rosters []struct {
 		Name    string
-		Drafted []struct{ Name, Display, Task, Repo, Session, Team string }
+		Drafted []struct{ Name, Display, Task, Repo, Session string }
 		Bench   []struct{ Name string }
 	}
 }
@@ -145,7 +145,7 @@ func (s *sandbox) list(args ...string) listOutput {
 	return out
 }
 
-type draftOutput struct{ Name, Emoji, Team, Roster, Display string }
+type draftOutput struct{ Name, Emoji, Roster, Display string }
 
 func (s *sandbox) draft(dir, sessionID string, args ...string) draftOutput {
 	s.t.Helper()
@@ -172,12 +172,16 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	}
 	s.ok(s.home, nil, "create", "play", "--names", "🧮 Ada, Grace", "--emoji", "off")
 	s.fails(s.home, nil, `already have a roster named "work"`, "assemble", "WORK", "--preset", "hogwarts")
-	s.ok(s.home, nil, "assemble", "--preset", "hogwarts")
+	s.ok(s.home, nil, "assemble", "--preset", "hogwarts", "--size", "4")
 	s.fails(s.home, nil, "--preset", "assemble")
 	s.fails(s.home, nil, "rostr cloud on", "assemble", "x", "--preset", "kanto", "--cloud")
+	s.fails(s.home, nil, "--size must be a number", "assemble", "x", "--preset", "kanto", "--size", "lots")
+	s.fails(s.home, nil, "needs --preset", "assemble", "x", "--size", "4")
 
+	// A preset's team is its first 16 unless --size says otherwise
 	listing := s.list()
-	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Bench) != 20 {
+	if len(listing.Rosters) != 3 || listing.Rosters[2].Name != "hogwarts" || len(listing.Rosters[0].Bench) != 16 ||
+		len(listing.Rosters[2].Bench) != 4 {
 		t.Fatalf("list: %+v", listing)
 	}
 	if text := s.ok(s.home, nil, "stats", "work"); !strings.HasPrefix(text, "work roster (default)\n") || strings.Contains(text, "play roster") {
@@ -198,7 +202,7 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 
 	// draft: the linked roster in the repo, the default outside it, --roster over both
 	s.fails(s.home, nil, "no session", "draft")
-	if d := s.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Team: "A", Roster: "play", Display: "Ada"}) {
+	if d := s.draft(repo, "s1"); d != (draftOutput{Name: "Ada", Emoji: "🧮", Roster: "play", Display: "Ada"}) {
 		t.Fatalf("draft in repo: %+v", d)
 	}
 	if d := s.draft(s.home, "s2"); d.Display != "🧙 Gandalf" || d.Roster != "work" {

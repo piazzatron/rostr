@@ -47,7 +47,7 @@ Decide once there's a working build to play with.
 ## Project
 
 - [x] Pick a license (MIT).
-- [ ] Finalize the A team and B team for each preset roster.
+- [ ] Finalize the order of each preset roster's members (a team of n takes the first n).
 - [x] Make a few more pre-built rosters (added NBA, MLB, NFL, and NHL Legends).
 - [ ] Design pass on the /rosters page.
 - [x] Logo and iconography design: the logo, the favicon (the site still uses Astro's default), and icons for the site.

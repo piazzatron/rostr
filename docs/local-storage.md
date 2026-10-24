@@ -39,13 +39,12 @@ create table settings (
   value text not null
 );
 
--- a_team, b_team: [{"name": "Gandalf", "emoji": "🧙"}, ...], in draft order
+-- members: [{"name": "Gandalf", "emoji": "🧙"}, ...], in draft order
 create table rosters (
   id         integer primary key,
   name       text not null unique,
   emoji_mode text not null default 'on',  -- 'on', 'off', or 'only'
-  a_team     text not null,
-  b_team     text not null default '[]',
+  members    text not null,
   created_at text not null default (datetime('now'))
 );
 
@@ -93,13 +92,13 @@ The same steps as the server, in one transaction:
    released rows older than 7 days.
 2. **Same session, same name:** if the session has an active draft (in any roster), bump `last_seen_at` and return it.
 3. **Resume:** if the session had a member before and that member is free, draft them again, from that roster.
-4. **Otherwise** draft the free member drafted least recently (never drafted first, then roster order), A team
-   first. If every member is busy, draft a numbered copy (`copy` 2, then 3) by the same rule.
+4. **Otherwise** draft the free member drafted least recently (never drafted first, then roster order). If
+   every member is busy, draft a numbered copy (`copy` 2, then 3) by the same rule.
 
 ## Editing
 
-`rostr edit` opens the roster in the cast editor, then a page for its emoji mode, and saves the emoji mode, A team,
-and B team together when Save is pressed. Saving refuses to remove or rename a drafted member.
+`rostr edit` opens the roster in the cast editor, then a page for its emoji mode, and saves the emoji mode and
+members together when Save is pressed. Saving refuses to remove or rename a drafted member.
 
 ## Moving to the cloud
 

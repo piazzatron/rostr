@@ -306,8 +306,8 @@ type listing struct {
 	Rosters []struct {
 		Name      string
 		EmojiMode string
-		Drafted   []struct{ Name, Emoji, Display, Team, Task, Repo string }
-		Bench     []struct{ Name, Emoji, Team string }
+		Drafted   []struct{ Name, Emoji, Display, Task, Repo string }
+		Bench     []struct{ Name, Emoji string }
 	}
 }
 
@@ -331,7 +331,7 @@ func (l listing) drafted() map[string]string {
 	return out
 }
 
-type draftOutput struct{ Name, Emoji, Team, Roster, Display string }
+type draftOutput struct{ Name, Emoji, Roster, Display string }
 
 func (m *machine) draft(dir, session string, args ...string) draftOutput {
 	m.t.Helper()

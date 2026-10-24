@@ -35,8 +35,7 @@ create table rosters (
   id         integer primary key,
   name       text not null unique,
   emoji_mode text not null default 'on',
-  a_team     text not null,
-  b_team     text not null default '[]',
+  members    text not null,
   created_at text not null default (datetime('now'))
 );
 
@@ -101,28 +100,70 @@ func (s *SQLite) migrate(ctx context.Context) error {
 		if err := tx.QueryRowContext(ctx, "pragma user_version").Scan(&version); err != nil {
 			return err
 		}
-		switch version {
-		case 0:
+		switch {
+		case version >= 4:
+			return nil
+		case version == 0:
 			if _, err := tx.ExecContext(ctx, schema); err != nil {
 				return err
 			}
-		case 1, 2:
+		default:
 			if version == 1 {
 				if _, err := tx.ExecContext(ctx, "alter table drafts rename column released_at to benched_at"); err != nil {
 					return err
 				}
 			}
-			// When the session's turn last started and ended (see RestAfter)
-			if _, err := tx.ExecContext(ctx, `alter table drafts add column turn_started_at text;
-				alter table drafts add column turn_ended_at text;`); err != nil {
+			if version <= 2 {
+				// When the session's turn last started and ended (see RestAfter)
+				if _, err := tx.ExecContext(ctx, `alter table drafts add column turn_started_at text;
+					alter table drafts add column turn_ended_at text;`); err != nil {
+					return err
+				}
+			}
+			if err := mergeTeams(ctx, tx); err != nil {
 				return err
 			}
-		default:
-			return nil
 		}
-		_, err := tx.ExecContext(ctx, "pragma user_version = 3")
+		_, err := tx.ExecContext(ctx, "pragma user_version = 4")
 		return err
 	})
+}
+
+// mergeTeams moves rosters from version 3's A team and B team columns to one members list, the A team first.
+func mergeTeams(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, "select id, a_team, b_team from rosters")
+	if err != nil {
+		return err
+	}
+	merged := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var aTeam, bTeam string
+		if err := rows.Scan(&id, &aTeam, &bTeam); err != nil {
+			rows.Close()
+			return err
+		}
+		var a, b []roster.Member
+		if err := errors.Join(json.Unmarshal([]byte(aTeam), &a), json.Unmarshal([]byte(bTeam), &b)); err != nil {
+			rows.Close()
+			return fmt.Errorf("reading roster %d: %w", id, err)
+		}
+		merged[id] = mustJSON(append(a, b...))
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `alter table rosters rename column a_team to members;
+		alter table rosters drop column b_team;`); err != nil {
+		return err
+	}
+	for id, members := range merged {
+		if _, err := tx.ExecContext(ctx, "update rosters set members = ? where id = ?", members, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Rosters
@@ -149,10 +190,7 @@ func (s *SQLite) CreateRoster(ctx context.Context, r Roster) (Roster, error) {
 	if r.Name == "" {
 		return Roster{}, errors.New("a roster needs a name")
 	}
-	if r.BTeam == nil {
-		r.BTeam = []roster.Member{}
-	}
-	if err := roster.ValidateCast(r.ATeam, r.BTeam, r.EmojiMode); err != nil {
+	if err := roster.ValidateCast(r.Members, r.EmojiMode); err != nil {
 		return Roster{}, err
 	}
 
@@ -163,11 +201,10 @@ func (s *SQLite) CreateRoster(ctx context.Context, r Roster) (Roster, error) {
 			return err
 		}
 
-		aTeam, bTeam := mustJSON(r.ATeam), mustJSON(r.BTeam)
 		r.CreatedAt = s.now().UTC().Truncate(time.Second)
 		if _, err := tx.ExecContext(ctx,
-			"insert into rosters (name, emoji_mode, a_team, b_team, created_at) values (?, ?, ?, ?, ?)",
-			r.Name, string(r.EmojiMode), aTeam, bTeam, formatTime(r.CreatedAt)); err != nil {
+			"insert into rosters (name, emoji_mode, members, created_at) values (?, ?, ?, ?)",
+			r.Name, string(r.EmojiMode), mustJSON(r.Members), formatTime(r.CreatedAt)); err != nil {
 			return err
 		}
 
@@ -184,21 +221,21 @@ func (s *SQLite) CreateRoster(ctx context.Context, r Roster) (Roster, error) {
 	return r, err
 }
 
-func (s *SQLite) ReplaceCast(ctx context.Context, rosterName string, aTeam, bTeam []roster.Member) error {
+func (s *SQLite) ReplaceCast(ctx context.Context, rosterName string, members []roster.Member) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		r, err := findRoster(ctx, tx, rosterName)
 		if err != nil {
 			return err
 		}
-		if err := roster.ValidateCast(aTeam, bTeam, r.EmojiMode); err != nil {
+		if err := roster.ValidateCast(members, r.EmojiMode); err != nil {
 			return err
 		}
-		return updateRoster(ctx, tx, r.id, r.EmojiMode, aTeam, bTeam)
+		return updateRoster(ctx, tx, r.id, r.EmojiMode, members)
 	})
 }
 
-func (s *SQLite) EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, aTeam, bTeam []roster.Member) error {
-	if err := roster.ValidateCast(aTeam, bTeam, mode); err != nil {
+func (s *SQLite) EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, members []roster.Member) error {
+	if err := roster.ValidateCast(members, mode); err != nil {
 		return err
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
@@ -211,19 +248,18 @@ func (s *SQLite) EditRoster(ctx context.Context, rosterName string, mode roster.
 		}
 
 		// Drafted members can't be renamed or removed: their sessions still go by that name
-		edited := Roster{ATeam: aTeam, BTeam: bTeam}
 		active, err := queryDrafts(ctx, tx, "where d.roster_id = ? and d.benched_at is null", r.id)
 		if err != nil {
 			return err
 		}
 		for _, d := range active {
-			if edited.Team(d.Member) == "" {
+			if _, ok := memberNamed(members, d.Member); !ok {
 				return fmt.Errorf("%s is drafted, so you can't rename or remove them. Wait for their session to end, "+
 					"or release them first: rostr bench %q", d.Name(), d.Name())
 			}
 		}
 
-		return updateRoster(ctx, tx, r.id, mode, aTeam, bTeam)
+		return updateRoster(ctx, tx, r.id, mode, members)
 	})
 }
 
@@ -233,10 +269,10 @@ func (s *SQLite) SetEmojiMode(ctx context.Context, rosterName string, mode roste
 		if err != nil {
 			return err
 		}
-		if err := roster.ValidateCast(r.ATeam, r.BTeam, mode); err != nil {
+		if err := roster.ValidateCast(r.Members, mode); err != nil {
 			return err
 		}
-		return updateRoster(ctx, tx, r.id, mode, r.ATeam, r.BTeam)
+		return updateRoster(ctx, tx, r.id, mode, r.Members)
 	})
 }
 
@@ -444,7 +480,7 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
-		// The free member drafted least recently, A team first; else the longest-resting member's name; else a copy
+		// The free member drafted least recently; else the longest-resting member's name; else a copy
 		member, copy, err := firstFreeMember(ctx, tx, r)
 		if err != nil {
 			return err
@@ -639,7 +675,7 @@ func (s *SQLite) reclaim(ctx context.Context, tx *sql.Tx, sessionID, task string
 	if err != nil {
 		return nil, nil, err
 	}
-	member, inCast := memberNamed(r.Members(), last.Member)
+	member, inCast := memberNamed(r.Members, last.Member)
 	if !inCast {
 		return nil, &last, nil
 	}
@@ -670,7 +706,7 @@ func (s *SQLite) takeRestingMember(ctx context.Context, tx *sql.Tx, r rosterRow)
 	var longest *draftRow
 	for i, d := range drafts {
 		since := restingSince(d.turnStarted, d.turnEnded, now)
-		if _, inCast := memberNamed(r.Members(), d.Member); since.IsZero() || !inCast {
+		if _, inCast := memberNamed(r.Members, d.Member); since.IsZero() || !inCast {
 			continue
 		}
 		if longest == nil || since.Before(longest.turnEnded) {
@@ -680,7 +716,7 @@ func (s *SQLite) takeRestingMember(ctx context.Context, tx *sql.Tx, r rosterRow)
 	if longest == nil {
 		return roster.Member{}, false, nil
 	}
-	member, _ := memberNamed(r.Members(), longest.Member)
+	member, _ := memberNamed(r.Members, longest.Member)
 	_, err = tx.ExecContext(ctx, "update drafts set benched_at = ? where id = ?", s.nowText(), longest.id)
 	return member, err == nil, err
 }
@@ -766,7 +802,7 @@ func firstDraftRoster(ctx context.Context, tx *sql.Tx, req DraftRequest) (roster
 }
 
 func firstFreeMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Member, int, error) {
-	members := r.Members()
+	members := r.Members
 	if len(members) == 0 {
 		return roster.Member{}, 0, fmt.Errorf("the %s roster has no members", r.Name)
 	}
@@ -797,29 +833,27 @@ func firstFreeMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Membe
 	if err != nil {
 		return roster.Member{}, 0, err
 	}
-	m, copy := pickFreeMember(r.ATeam, r.BTeam, func(name string, copy int) bool { return busy[slot{name, copy}] }, last)
+	m, copy := pickFreeMember(r.Members, func(name string, copy int) bool { return busy[slot{name, copy}] }, last)
 	return m, copy, nil
 }
 
-// pickFreeMember picks a random free member, A team first, then the B team, then numbered copies the same way. pick
-// chooses an index among the free members; the cast is never empty.
-func pickFreeMember(aTeam, bTeam []roster.Member, busy func(name string, copy int) bool, last map[string]time.Time) (roster.Member, int) {
+// pickFreeMember picks the free member drafted least recently (never drafted first, then roster order), then numbered
+// copies the same way. The cast is never empty.
+func pickFreeMember(members []roster.Member, busy func(name string, copy int) bool, last map[string]time.Time) (roster.Member, int) {
 	for copy := 1; ; copy++ {
-		for _, team := range [][]roster.Member{aTeam, bTeam} {
-			var best roster.Member
-			var bestAt time.Time
-			found := false
-			for _, m := range team {
-				if busy(m.Name, copy) {
-					continue
-				}
-				if at := last[m.Name]; !found || at.Before(bestAt) {
-					best, bestAt, found = m, at, true
-				}
+		var best roster.Member
+		var bestAt time.Time
+		found := false
+		for _, m := range members {
+			if busy(m.Name, copy) {
+				continue
 			}
-			if found {
-				return best, copy
+			if at := last[m.Name]; !found || at.Before(bestAt) {
+				best, bestAt, found = m, at, true
 			}
+		}
+		if found {
+			return best, copy
 		}
 	}
 }
@@ -918,7 +952,7 @@ func findRoster(ctx context.Context, q querier, name string) (rosterRow, error) 
 
 func queryRosters(ctx context.Context, q querier, clause string, args ...any) ([]rosterRow, error) {
 	rows, err := q.QueryContext(ctx,
-		"select id, name, emoji_mode, a_team, b_team, created_at from rosters "+clause, args...)
+		"select id, name, emoji_mode, members, created_at from rosters "+clause, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -927,16 +961,13 @@ func queryRosters(ctx context.Context, q querier, clause string, args ...any) ([
 	var out []rosterRow
 	for rows.Next() {
 		var r rosterRow
-		var mode, aTeam, bTeam, createdAt string
-		if err := rows.Scan(&r.id, &r.Name, &mode, &aTeam, &bTeam, &createdAt); err != nil {
+		var mode, members, createdAt string
+		if err := rows.Scan(&r.id, &r.Name, &mode, &members, &createdAt); err != nil {
 			return nil, err
 		}
 		r.EmojiMode = roster.EmojiMode(mode)
 		r.CreatedAt = parseTime(createdAt)
-		if err := json.Unmarshal([]byte(aTeam), &r.ATeam); err != nil {
-			return nil, fmt.Errorf("reading roster %s: %w", r.Name, err)
-		}
-		if err := json.Unmarshal([]byte(bTeam), &r.BTeam); err != nil {
+		if err := json.Unmarshal([]byte(members), &r.Members); err != nil {
 			return nil, fmt.Errorf("reading roster %s: %w", r.Name, err)
 		}
 		out = append(out, r)
@@ -945,8 +976,7 @@ func queryRosters(ctx context.Context, q querier, clause string, args ...any) ([
 }
 
 func queryDrafts(ctx context.Context, q querier, clause string, args ...any) ([]draftRow, error) {
-	rows, err := q.QueryContext(ctx, `select d.id, d.roster_id, r.name, r.emoji_mode, r.a_team, r.b_team,
-		d.member_name, d.member_emoji, d.copy, d.session_id, coalesce(d.repo, ''), coalesce(d.task, ''),
+	rows, err := q.QueryContext(ctx, `select d.id, d.roster_id, r.name, r.emoji_mode, d.member_name, d.member_emoji, d.copy, d.session_id, coalesce(d.repo, ''), coalesce(d.task, ''),
 		d.drafted_at, d.last_seen_at, coalesce(d.turn_started_at, ''), coalesce(d.turn_ended_at, '')
 		from drafts d join rosters r on r.id = d.roster_id `+clause, args...)
 	if err != nil {
@@ -957,16 +987,12 @@ func queryDrafts(ctx context.Context, q querier, clause string, args ...any) ([]
 	var out []draftRow
 	for rows.Next() {
 		var d draftRow
-		var mode, aTeam, bTeam, draftedAt, lastSeenAt, turnStarted, turnEnded string
-		if err := rows.Scan(&d.id, &d.rosterID, &d.Roster, &mode, &aTeam, &bTeam, &d.Member, &d.Emoji, &d.Copy,
+		var mode, draftedAt, lastSeenAt, turnStarted, turnEnded string
+		if err := rows.Scan(&d.id, &d.rosterID, &d.Roster, &mode, &d.Member, &d.Emoji, &d.Copy,
 			&d.SessionID, &d.Repo, &d.Task, &draftedAt, &lastSeenAt, &turnStarted, &turnEnded); err != nil {
 			return nil, err
 		}
-		var cast Roster
-		_ = json.Unmarshal([]byte(aTeam), &cast.ATeam)
-		_ = json.Unmarshal([]byte(bTeam), &cast.BTeam)
 		d.EmojiMode = roster.EmojiMode(mode)
-		d.Team = cast.Team(d.Member)
 		d.DraftedAt = parseTime(draftedAt)
 		d.LastSeenAt = parseTime(lastSeenAt)
 		d.turnStarted, d.turnEnded = parseTime(turnStarted), parseTime(turnEnded)
@@ -975,12 +1001,9 @@ func queryDrafts(ctx context.Context, q querier, clause string, args ...any) ([]
 	return out, rows.Err()
 }
 
-func updateRoster(ctx context.Context, tx *sql.Tx, id int64, mode roster.EmojiMode, aTeam, bTeam []roster.Member) error {
-	if bTeam == nil {
-		bTeam = []roster.Member{}
-	}
-	_, err := tx.ExecContext(ctx, "update rosters set emoji_mode = ?, a_team = ?, b_team = ? where id = ?",
-		string(mode), mustJSON(aTeam), mustJSON(bTeam), id)
+func updateRoster(ctx context.Context, tx *sql.Tx, id int64, mode roster.EmojiMode, members []roster.Member) error {
+	_, err := tx.ExecContext(ctx, "update rosters set emoji_mode = ?, members = ? where id = ?",
+		string(mode), mustJSON(members), id)
 	return err
 }
 

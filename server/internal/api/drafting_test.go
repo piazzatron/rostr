@@ -11,22 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func TestDraftPicksATeamThenBTeamThenCopies(t *testing.T) {
+func TestDraftPicksMembersInRosterOrderThenCopies(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "Fellowship", members("Gandalf", "Frodo"), members("Boromir"))
+	createRoster(c, "Fellowship", members("Gandalf", "Frodo", "Boromir"))
 
-	want := []struct {
-		display string
-		team    string
-	}{
-		{"Gandalf", "a"}, {"Frodo", "a"}, {"Boromir", "b"}, {"Gandalf 2", "a"}, {"Frodo 2", "a"}, {"Boromir 2", "b"},
-		{"Gandalf 3", "a"},
-	}
+	want := []string{"Gandalf", "Frodo", "Boromir", "Gandalf 2", "Frodo 2", "Boromir 2", "Gandalf 3"}
 	for i, w := range want {
 		d := draftSessionNamed(c, c.session(fmt.Sprint(i)))
-		if displayOf(d) != w.display || d.Team == nil || *d.Team != w.team || d.Roster != "Fellowship" {
-			t.Fatalf("draft %d: got %s (team %v, roster %s), want %s (team %s)", i, displayOf(d), d.Team, d.Roster, w.display, w.team)
+		if displayOf(d) != w || d.Roster != "Fellowship" {
+			t.Fatalf("draft %d: got %s (roster %s), want %s", i, displayOf(d), d.Roster, w)
 		}
 	}
 
@@ -40,7 +34,7 @@ func TestDraftPicksATeamThenBTeamThenCopies(t *testing.T) {
 func TestDraftsCycleThroughTheCast(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Samwise"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo", "Samwise"))
 
 	// One session at a time: each draft takes whoever was drafted longest ago, so everyone gets a turn before a repeat
 	var got []string
@@ -61,7 +55,7 @@ func TestDraftsCycleThroughTheCast(t *testing.T) {
 func TestDraftSameSessionReturnsSameMemberAndBumps(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
 	session := c.session("s1")
 
 	first := draftSessionNamed(c, session)
@@ -85,8 +79,8 @@ func TestDraftSameSessionReturnsSameMemberAndBumps(t *testing.T) {
 func TestDraftFindsSessionAcrossRosters(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
-	createRoster(c, "Smash Bros", members("Mario"), nil)
+	createRoster(c, "work", members("Gandalf"))
+	createRoster(c, "Smash Bros", members("Mario"))
 	session := c.session("s1")
 
 	if d := draft(c, map[string]any{"session": session, "roster": "smash bros"}); d.Name != "Mario" {
@@ -106,7 +100,7 @@ func TestDraftFindsSessionAcrossRosters(t *testing.T) {
 func TestDraftResumesPreviousMemberWhenFree(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"))
 	s1, s2, s3 := c.session("s1"), c.session("s2"), c.session("s3")
 
 	draftSessionNamed(c, s1)
@@ -135,8 +129,8 @@ func TestDraftResumesPreviousMemberWhenFree(t *testing.T) {
 func TestDraftResumesFromTheSessionsOriginalRoster(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
-	createRoster(c, "games", members("Mario"), nil)
+	createRoster(c, "work", members("Gandalf"))
+	createRoster(c, "games", members("Mario"))
 	session := c.session("s1")
 
 	draft(c, map[string]any{"session": session, "roster": "games"})
@@ -150,7 +144,7 @@ func TestDraftResumesFromTheSessionsOriginalRoster(t *testing.T) {
 func TestSweepBenchesDraftsPastTheirOwnersExpiry(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
 	call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"draftExpiry": "2h"}, http.StatusOK)
 	stale, recent := c.session("stale"), c.session("recent")
 
@@ -174,7 +168,7 @@ func TestSweepBenchesDraftsPastTheirOwnersExpiry(t *testing.T) {
 func TestSweepPrunesBenchedDraftsAfterSevenDays(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
 	old, recent := c.session("old"), c.session("recent")
 
 	draftSessionNamed(c, old)
@@ -196,7 +190,7 @@ func TestSweepPrunesBenchedDraftsAfterSevenDays(t *testing.T) {
 func TestKeepAliveNeverDraftsADifferentMember(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
+	createRoster(c, "work", members("Gandalf"))
 	call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"draftExpiry": "1h"}, http.StatusOK)
 	s1, s2 := c.session("s1"), c.session("s2")
 
@@ -232,7 +226,7 @@ func TestKeepAliveNeverDraftsADifferentMember(t *testing.T) {
 func TestConcurrentDraftsNeverDraftAMemberTwice(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"), members("Boromir", "Merry"))
+	createRoster(c, "work", members("Gandalf", "Frodo", "Sam", "Boromir", "Merry"))
 
 	const sessions = 40
 	results := make([]draftResponse, sessions)
@@ -265,7 +259,7 @@ func TestConcurrentDraftsNeverDraftAMemberTwice(t *testing.T) {
 func TestConcurrentDraftsForOneSessionGetOneMember(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"))
 	session := c.session("s1")
 
 	var wg sync.WaitGroup
@@ -286,9 +280,9 @@ func TestConcurrentDraftsForOneSessionGetOneMember(t *testing.T) {
 func TestDatabaseAllowsOneActiveDraftPerSessionAcrossAnOwnersRosters(t *testing.T) {
 	t.Parallel()
 	a, b := newOwner(t), newOwner(t)
-	createRoster(a, "work", members("Gandalf"), nil)
-	createRoster(a, "games", members("Mario"), nil)
-	createRoster(b, "work", members("Frodo"), nil)
+	createRoster(a, "work", members("Gandalf"))
+	createRoster(a, "games", members("Mario"))
+	createRoster(b, "work", members("Frodo"))
 	session := a.session("s1")
 	draft(a, map[string]any{"session": session, "roster": "work"})
 
@@ -346,7 +340,7 @@ func TestUnknownTokensGet401(t *testing.T) {
 		{"POST", "/v1/agents/keepalive", map[string]any{"session": "s1"}},
 		{"POST", "/v1/agents/turn", map[string]any{"session": "s1", "ended": true, "at": "2026-01-01T00:00:00Z"}},
 		{"POST", "/v1/agents/bench", map[string]any{"session": "s1"}},
-		{"POST", "/v1/rosters", map[string]any{"name": "work", "aTeam": members("Gandalf")}},
+		{"POST", "/v1/rosters", map[string]any{"name": "work", "members": members("Gandalf")}},
 	} {
 		callError(unknown, req.method, req.path, req.body, http.StatusUnauthorized, "unauthorized")
 	}
@@ -360,7 +354,7 @@ func TestUnknownTokensGet401(t *testing.T) {
 func TestDraftResponseMatchesTheStoredDraft(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), members("Boromir"))
+	createRoster(c, "work", members("Gandalf", "Boromir"))
 	repoHash := fakeRepoHash("a/b")
 
 	// A new draft's response is built from what was written, without reading it back
@@ -373,7 +367,7 @@ func TestDraftResponseMatchesTheStoredDraft(t *testing.T) {
 			}
 			return *s
 		}
-		return fmt.Sprint(d.Name, d.Emoji, d.Copy, deref(d.Team), d.Roster, d.EmojiMode, d.Session, deref(d.Task), deref(d.Repo),
+		return fmt.Sprint(d.Name, d.Emoji, d.Copy, d.Roster, d.EmojiMode, d.Session, deref(d.Task), deref(d.Repo),
 			d.DraftedAt.UnixMicro())
 	}
 	for _, want := range []draftResponse{d, d2} {
@@ -381,7 +375,7 @@ func TestDraftResponseMatchesTheStoredDraft(t *testing.T) {
 			t.Fatalf("stored %s, response %s", flat(got), flat(want))
 		}
 	}
-	if *d2.Team != "b" || d.DraftedAt.IsZero() || *d.Task != fakeCiphertext("t") {
+	if d2.Name != "Boromir" || d.DraftedAt.IsZero() || *d.Task != fakeCiphertext("t") {
 		t.Fatalf("drafts: %+v, %+v", d, d2)
 	}
 }
@@ -399,7 +393,7 @@ func sweep(t *testing.T) {
 func TestConcurrentDraftsAcrossInstancesNeverDraftAMemberTwice(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"), members("Boromir", "Merry"))
+	createRoster(c, "work", members("Gandalf", "Frodo", "Sam", "Boromir", "Merry"))
 	instances := []*client{c, {t: t, handler: NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000}), token: c.token}}
 
 	const sessions = 20

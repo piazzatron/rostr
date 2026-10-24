@@ -289,8 +289,8 @@
       return Math.min(10, Math.max(4, Math.round(columns * rows * 0.0035)));
     }
 
-    // Start with the usual number of drafted squares, rather than filling the grid up. On load, the first sweep calls
-    // them up: each starts pulsing as the wave reaches it, and the regular drafting begins once the sweep is done.
+    // Start with the usual number of drafted squares, rather than filling the grid up. On load, the first sweep wakes
+    // them: each starts pulsing as the wave reaches it, and the regular drafting begins once the sweep is done.
     function start() {
       cancelAnimationFrame(frame);
       layout();
