@@ -74,15 +74,12 @@ import Rostr from "../components/Rostr.astro";
   <section class="section">
     <h2>Telling the agent who it is</h2>
     <p>
-      The draft goes into the agent's context: its name, to sign messages it writes outside the chat (PR descriptions,
-      Slack messages), to keep the name out of code and commits, and to run <code>rostr task</code> when its work
-      changes. After compaction, the hook tells the agent again, with the same name.
+      The hook tells the agent its name, and to sign anything it writes outside the chat with it, like PR descriptions
+      and Slack messages. After compaction, it's told again.
     </p>
     <p>
-      Every name belongs to a session ID from the agent. Hooks get it in their input, but a command the agent runs
-      itself, like <code>rostr task</code> or <code>rostr stats</code>, needs another way to know which session it's in.
-      In Claude Code, the start hook sets <code>ROSTR_SESSION</code> to the session's ID in the environment of every
-      command the agent runs. Codex already sets <code>CODEX_THREAD_ID</code>, so <Rostr /> reads that instead.
+      Commands the agent runs, like <code>rostr task</code>, find their session through <code>ROSTR_SESSION</code>,
+      which the start hook sets to the Claude Code session's ID. In Codex, they use <code>CODEX_THREAD_ID</code>.
     </p>
   </section>
 
