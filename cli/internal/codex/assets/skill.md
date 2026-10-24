@@ -25,10 +25,10 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 ## Setting rostr up
 
 - `rostr presets`: the pre-built rosters (id, emoji, name, source).
-- `rostr assemble <name> --preset <id>`, or `rostr assemble <name> --names "🧮 Ada, Grace, ..."` (the first six are the
-  A team; names without an emoji get one). Add `--emoji on|off|only`, and `--no-auto-draft` on the first run to draft
+- `rostr assemble <name> --preset <id> [--size 4|8|16|all]` (a team of the preset's first 16 unless `--size` says
+  otherwise), or `rostr assemble <name> --names "🧮 Ada, Grace, ..."` (names without an emoji get one). Add `--emoji on|off|only`, and `--no-auto-draft` on the first run to draft
   only with `$rostr-draft`.
-- Ask the user which preset or names they want before assembling.
+- Ask the user which preset (and team size) or names they want before assembling.
 
 ## Rosters and projects
 

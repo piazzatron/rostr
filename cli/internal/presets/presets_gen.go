@@ -10,15 +10,13 @@ var all = []Preset{
 		Name:   "The Fellowship",
 		Source: "The Lord of the Rings",
 		Emoji:  "💍",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Gandalf", Emoji: "🧙"},
 			{Name: "Frodo", Emoji: "💍"},
 			{Name: "Samwise", Emoji: "🌱"},
 			{Name: "Aragorn", Emoji: "👑"},
 			{Name: "Legolas", Emoji: "🏹"},
 			{Name: "Gimli", Emoji: "🪓"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Boromir", Emoji: "🛡️"},
 			{Name: "Merry", Emoji: "🍺"},
 			{Name: "Pippin", Emoji: "🍄"},
@@ -40,15 +38,13 @@ var all = []Preset{
 		Name:   "Hogwarts",
 		Source: "Harry Potter",
 		Emoji:  "⚡",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Harry", Emoji: "⚡"},
 			{Name: "Hermione", Emoji: "📚"},
 			{Name: "Ron", Emoji: "♟️"},
 			{Name: "Dumbledore", Emoji: "🧙\u200d♂️"},
 			{Name: "Snape", Emoji: "🧪"},
 			{Name: "Hagrid", Emoji: "🐉"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Neville", Emoji: "🌿"},
 			{Name: "Luna", Emoji: "🌙"},
 			{Name: "Ginny", Emoji: "🧹"},
@@ -57,6 +53,8 @@ var all = []Preset{
 			{Name: "Lupin", Emoji: "🐺"},
 			{Name: "Fred", Emoji: "🎆"},
 			{Name: "George", Emoji: "🎇"},
+			{Name: "Dobby", Emoji: "🧦"},
+			{Name: "Draco", Emoji: "🐍"},
 		},
 	},
 	{
@@ -64,15 +62,13 @@ var all = []Preset{
 		Name:   "Smash Bros",
 		Source: "Super Smash Bros.",
 		Emoji:  "🎮",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Mario", Emoji: "🍄"},
 			{Name: "Link", Emoji: "🗡️"},
 			{Name: "Kirby", Emoji: "⭐"},
 			{Name: "Pikachu", Emoji: "⚡"},
 			{Name: "Samus", Emoji: "🚀"},
 			{Name: "Fox", Emoji: "🦊"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Yoshi", Emoji: "🦖"},
 			{Name: "Donkey Kong", Emoji: "🦍"},
 			{Name: "Luigi", Emoji: "👻"},
@@ -81,6 +77,8 @@ var all = []Preset{
 			{Name: "Jigglypuff", Emoji: "🎤"},
 			{Name: "Peach", Emoji: "👸"},
 			{Name: "Bowser", Emoji: "🐢"},
+			{Name: "Zelda", Emoji: "🔺"},
+			{Name: "Ganondorf", Emoji: "🐗"},
 		},
 	},
 	{
@@ -88,15 +86,13 @@ var all = []Preset{
 		Name:   "NBA Legends",
 		Source: "Basketball",
 		Emoji:  "🏀",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Jordan", Emoji: "🐐"},
 			{Name: "LeBron", Emoji: "👑"},
 			{Name: "Kobe", Emoji: "🐍"},
 			{Name: "Magic", Emoji: "🪄"},
 			{Name: "Bird", Emoji: "🍀"},
 			{Name: "Curry", Emoji: "🎯"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Shaq", Emoji: "🦈"},
 			{Name: "Kareem", Emoji: "🪝"},
 			{Name: "Wilt", Emoji: "💯"},
@@ -105,6 +101,8 @@ var all = []Preset{
 			{Name: "Jokić", Emoji: "🃏"},
 			{Name: "Giannis", Emoji: "🦌"},
 			{Name: "Dirk", Emoji: "🦩"},
+			{Name: "Hakeem", Emoji: "🌪️"},
+			{Name: "Durant", Emoji: "🦒"},
 		},
 	},
 	{
@@ -112,15 +110,13 @@ var all = []Preset{
 		Name:   "The Rebellion",
 		Source: "Star Wars",
 		Emoji:  "🌌",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Luke", Emoji: "🌅"},
 			{Name: "Leia", Emoji: "🍩"},
 			{Name: "Han", Emoji: "🚀"},
 			{Name: "Chewie", Emoji: "🐻"},
 			{Name: "Yoda", Emoji: "🐸"},
 			{Name: "R2-D2", Emoji: "🤖"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Obi-Wan", Emoji: "🏜️"},
 			{Name: "Lando", Emoji: "🧥"},
 			{Name: "C-3PO", Emoji: "🥇"},
@@ -129,6 +125,8 @@ var all = []Preset{
 			{Name: "Finn", Emoji: "🪖"},
 			{Name: "Poe", Emoji: "✈️"},
 			{Name: "Mace", Emoji: "💜"},
+			{Name: "Mando", Emoji: "🛡️"},
+			{Name: "Grogu", Emoji: "🥚"},
 		},
 	},
 	{
@@ -136,15 +134,13 @@ var all = []Preset{
 		Name:   "Dunder Mifflin",
 		Source: "The Office",
 		Emoji:  "📎",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Michael", Emoji: "☕"},
 			{Name: "Dwight", Emoji: "🐻"},
 			{Name: "Jim", Emoji: "🍮"},
 			{Name: "Pam", Emoji: "🎨"},
 			{Name: "Andy", Emoji: "🪕"},
 			{Name: "Kevin", Emoji: "🌶️"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Angela", Emoji: "🐈"},
 			{Name: "Oscar", Emoji: "🧮"},
 			{Name: "Stanley", Emoji: "🧩"},
@@ -153,6 +149,8 @@ var all = []Preset{
 			{Name: "Kelly", Emoji: "💅"},
 			{Name: "Ryan", Emoji: "🔥"},
 			{Name: "Toby", Emoji: "🥲"},
+			{Name: "Darryl", Emoji: "🎹"},
+			{Name: "Erin", Emoji: "🌻"},
 		},
 	},
 	{
@@ -160,15 +158,13 @@ var all = []Preset{
 		Name:   "Billionaires",
 		Source: "Put them to work",
 		Emoji:  "💰",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Musk", Emoji: "🚀"},
 			{Name: "Bezos", Emoji: "📦"},
 			{Name: "Zuck", Emoji: "🥽"},
 			{Name: "Altman", Emoji: "🤖"},
 			{Name: "Amodei", Emoji: "🧠"},
 			{Name: "Huang", Emoji: "🧥"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Gates", Emoji: "🪟"},
 			{Name: "Buffett", Emoji: "🍔"},
 			{Name: "Oprah", Emoji: "🎁"},
@@ -177,6 +173,8 @@ var all = []Preset{
 			{Name: "Arnault", Emoji: "👜"},
 			{Name: "Branson", Emoji: "🎈"},
 			{Name: "Andreessen", Emoji: "🥚"},
+			{Name: "Page", Emoji: "🔍"},
+			{Name: "Bloomberg", Emoji: "📈"},
 		},
 	},
 	{
@@ -184,15 +182,13 @@ var all = []Preset{
 		Name:   "CS Heroes",
 		Source: "Computer science",
 		Emoji:  "🧑\u200d💻",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Ada", Emoji: "🧮"},
 			{Name: "Hopper", Emoji: "🐛"},
 			{Name: "Turing", Emoji: "🔐"},
 			{Name: "Hamilton", Emoji: "🚀"},
 			{Name: "Knuth", Emoji: "📖"},
 			{Name: "Torvalds", Emoji: "🐧"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Ritchie", Emoji: "💾"},
 			{Name: "Dijkstra", Emoji: "🗺️"},
 			{Name: "Lamport", Emoji: "⏰"},
@@ -201,6 +197,8 @@ var all = []Preset{
 			{Name: "von Neumann", Emoji: "🖥️"},
 			{Name: "Berners-Lee", Emoji: "🌐"},
 			{Name: "Thompson", Emoji: "🧵"},
+			{Name: "Engelbart", Emoji: "🖱️"},
+			{Name: "Carmack", Emoji: "🎮"},
 		},
 	},
 	{
@@ -208,15 +206,13 @@ var all = []Preset{
 		Name:   "The Seminar",
 		Source: "Philosophy & critical theory",
 		Emoji:  "🤔",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Nietzsche", Emoji: "🔨"},
 			{Name: "Marx", Emoji: "🚩"},
 			{Name: "Kant", Emoji: "⏰"},
 			{Name: "Hegel", Emoji: "🦉"},
 			{Name: "Foucault", Emoji: "👁️"},
 			{Name: "Žižek", Emoji: "🍿"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Derrida", Emoji: "👻"},
 			{Name: "Arendt", Emoji: "⚖️"},
 			{Name: "Sartre", Emoji: "☕"},
@@ -225,6 +221,8 @@ var all = []Preset{
 			{Name: "Benjamin", Emoji: "👼"},
 			{Name: "Butler", Emoji: "🎭"},
 			{Name: "Deleuze", Emoji: "🌿"},
+			{Name: "Wittgenstein", Emoji: "🪜"},
+			{Name: "Plato", Emoji: "🕯️"},
 		},
 	},
 	{
@@ -232,15 +230,13 @@ var all = []Preset{
 		Name:   "The Enterprise",
 		Source: "Star Trek: TNG",
 		Emoji:  "🖖",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Picard", Emoji: "🍵"},
 			{Name: "Riker", Emoji: "🎺"},
 			{Name: "Data", Emoji: "🤖"},
 			{Name: "Worf", Emoji: "⚔️"},
 			{Name: "Troi", Emoji: "🍫"},
 			{Name: "Geordi", Emoji: "🕶️"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Crusher", Emoji: "🩺"},
 			{Name: "Wesley", Emoji: "🧒"},
 			{Name: "Guinan", Emoji: "🍸"},
@@ -249,6 +245,8 @@ var all = []Preset{
 			{Name: "Ro", Emoji: "🧭"},
 			{Name: "Barclay", Emoji: "🎭"},
 			{Name: "Q", Emoji: "🃏"},
+			{Name: "Spot", Emoji: "🐈"},
+			{Name: "Lore", Emoji: "😈"},
 		},
 	},
 	{
@@ -256,15 +254,13 @@ var all = []Preset{
 		Name:   "Avengers",
 		Source: "Marvel",
 		Emoji:  "🛡️",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Iron Man", Emoji: "🦾"},
 			{Name: "Captain America", Emoji: "🛡️"},
 			{Name: "Thor", Emoji: "🔨"},
 			{Name: "Hulk", Emoji: "💚"},
 			{Name: "Black Widow", Emoji: "🕷️"},
 			{Name: "Hawkeye", Emoji: "🏹"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Spider-Man", Emoji: "🕸️"},
 			{Name: "Black Panther", Emoji: "🐆"},
 			{Name: "Doctor Strange", Emoji: "🔮"},
@@ -273,6 +269,8 @@ var all = []Preset{
 			{Name: "Ant-Man", Emoji: "🐜"},
 			{Name: "Falcon", Emoji: "🦅"},
 			{Name: "Wasp", Emoji: "🐝"},
+			{Name: "Captain Marvel", Emoji: "🌟"},
+			{Name: "Nick Fury", Emoji: "👁️"},
 		},
 	},
 	{
@@ -280,15 +278,13 @@ var all = []Preset{
 		Name:   "Westeros",
 		Source: "Game of Thrones",
 		Emoji:  "🐉",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Jon", Emoji: "🐺"},
 			{Name: "Arya", Emoji: "🗡️"},
 			{Name: "Tyrion", Emoji: "🍷"},
 			{Name: "Daenerys", Emoji: "🐉"},
 			{Name: "Sansa", Emoji: "🍋"},
 			{Name: "Cersei", Emoji: "🦁"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Ned", Emoji: "❄️"},
 			{Name: "Bran", Emoji: "🌳"},
 			{Name: "Jaime", Emoji: "🤚"},
@@ -297,6 +293,8 @@ var all = []Preset{
 			{Name: "Samwell", Emoji: "📜"},
 			{Name: "Varys", Emoji: "🕷️"},
 			{Name: "Hodor", Emoji: "🚪"},
+			{Name: "Littlefinger", Emoji: "🪙"},
+			{Name: "The Hound", Emoji: "🐕"},
 		},
 	},
 	{
@@ -304,15 +302,13 @@ var all = []Preset{
 		Name:   "Ghibli",
 		Source: "Studio Ghibli",
 		Emoji:  "🍃",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Totoro", Emoji: "☂️"},
 			{Name: "Chihiro", Emoji: "🛁"},
 			{Name: "Kiki", Emoji: "🧹"},
 			{Name: "Howl", Emoji: "🏰"},
 			{Name: "Sophie", Emoji: "👵"},
 			{Name: "Ponyo", Emoji: "🐠"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Calcifer", Emoji: "🔥"},
 			{Name: "Jiji", Emoji: "🐈\u200d⬛"},
 			{Name: "Haku", Emoji: "🐉"},
@@ -321,6 +317,8 @@ var all = []Preset{
 			{Name: "Ashitaka", Emoji: "🦌"},
 			{Name: "Porco", Emoji: "🐷"},
 			{Name: "No-Face", Emoji: "🎭"},
+			{Name: "Catbus", Emoji: "🚌"},
+			{Name: "Yubaba", Emoji: "💰"},
 		},
 	},
 	{
@@ -328,15 +326,13 @@ var all = []Preset{
 		Name:   "Olympus",
 		Source: "Greek mythology",
 		Emoji:  "🏛️",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Zeus", Emoji: "⚡"},
 			{Name: "Athena", Emoji: "🦉"},
 			{Name: "Apollo", Emoji: "☀️"},
 			{Name: "Hermes", Emoji: "🪽"},
 			{Name: "Artemis", Emoji: "🌙"},
 			{Name: "Poseidon", Emoji: "🔱"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Hera", Emoji: "🦚"},
 			{Name: "Ares", Emoji: "⚔️"},
 			{Name: "Aphrodite", Emoji: "💘"},
@@ -345,6 +341,8 @@ var all = []Preset{
 			{Name: "Dionysus", Emoji: "🍇"},
 			{Name: "Hades", Emoji: "💀"},
 			{Name: "Persephone", Emoji: "🌸"},
+			{Name: "Prometheus", Emoji: "🔥"},
+			{Name: "Heracles", Emoji: "🦁"},
 		},
 	},
 	{
@@ -352,15 +350,13 @@ var all = []Preset{
 		Name:   "Kanto",
 		Source: "Pokémon",
 		Emoji:  "🔴",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Pikachu", Emoji: "⚡"},
 			{Name: "Charmander", Emoji: "🔥"},
 			{Name: "Bulbasaur", Emoji: "🌱"},
 			{Name: "Squirtle", Emoji: "💧"},
 			{Name: "Eevee", Emoji: "🌟"},
 			{Name: "Snorlax", Emoji: "😴"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Jigglypuff", Emoji: "🎤"},
 			{Name: "Psyduck", Emoji: "🦆"},
 			{Name: "Gengar", Emoji: "👻"},
@@ -369,6 +365,8 @@ var all = []Preset{
 			{Name: "Onix", Emoji: "🪨"},
 			{Name: "Magikarp", Emoji: "🐟"},
 			{Name: "Dragonite", Emoji: "🐲"},
+			{Name: "Mew", Emoji: "💗"},
+			{Name: "Lapras", Emoji: "🌊"},
 		},
 	},
 	{
@@ -376,15 +374,13 @@ var all = []Preset{
 		Name:   "Galactica",
 		Source: "Battlestar Galactica",
 		Emoji:  "🛸",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Adama", Emoji: "🎖️"},
 			{Name: "Starbuck", Emoji: "💥"},
 			{Name: "Apollo", Emoji: "✈️"},
 			{Name: "Roslin", Emoji: "🗳️"},
 			{Name: "Baltar", Emoji: "🧠"},
 			{Name: "Tigh", Emoji: "🥃"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Helo", Emoji: "🪂"},
 			{Name: "Athena", Emoji: "🦉"},
 			{Name: "Boomer", Emoji: "💣"},
@@ -393,6 +389,8 @@ var all = []Preset{
 			{Name: "Tyrol", Emoji: "🔧"},
 			{Name: "Six", Emoji: "💃"},
 			{Name: "Anders", Emoji: "🎸"},
+			{Name: "Zarek", Emoji: "✊"},
+			{Name: "Cally", Emoji: "🪛"},
 		},
 	},
 	{
@@ -400,15 +398,13 @@ var all = []Preset{
 		Name:   "Survey Corps",
 		Source: "Attack on Titan",
 		Emoji:  "🪽",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Eren", Emoji: "🔥"},
 			{Name: "Mikasa", Emoji: "🧣"},
 			{Name: "Armin", Emoji: "📘"},
 			{Name: "Levi", Emoji: "🧹"},
 			{Name: "Hange", Emoji: "🔬"},
 			{Name: "Erwin", Emoji: "🎖️"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Jean", Emoji: "🐴"},
 			{Name: "Sasha", Emoji: "🥔"},
 			{Name: "Connie", Emoji: "🏃"},
@@ -417,6 +413,8 @@ var all = []Preset{
 			{Name: "Annie", Emoji: "💎"},
 			{Name: "Zeke", Emoji: "🐒"},
 			{Name: "Bertholdt", Emoji: "🌋"},
+			{Name: "Falco", Emoji: "🕊️"},
+			{Name: "Gabi", Emoji: "🎯"},
 		},
 	},
 	{
@@ -424,15 +422,13 @@ var all = []Preset{
 		Name:   "Konoha",
 		Source: "Naruto",
 		Emoji:  "🍥",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Naruto", Emoji: "🍜"},
 			{Name: "Sasuke", Emoji: "⚡"},
 			{Name: "Sakura", Emoji: "🌸"},
 			{Name: "Kakashi", Emoji: "📕"},
 			{Name: "Hinata", Emoji: "💜"},
 			{Name: "Itachi", Emoji: "🐦\u200d⬛"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Shikamaru", Emoji: "♟️"},
 			{Name: "Gaara", Emoji: "🏜️"},
 			{Name: "Rock Lee", Emoji: "🥋"},
@@ -441,6 +437,8 @@ var all = []Preset{
 			{Name: "Neji", Emoji: "👁️"},
 			{Name: "Choji", Emoji: "🍖"},
 			{Name: "Ino", Emoji: "🌼"},
+			{Name: "Minato", Emoji: "💛"},
+			{Name: "Orochimaru", Emoji: "🐍"},
 		},
 	},
 	{
@@ -448,15 +446,13 @@ var all = []Preset{
 		Name:   "MLB Legends",
 		Source: "Baseball",
 		Emoji:  "⚾",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Ruth", Emoji: "👶"},
 			{Name: "Ohtani", Emoji: "🦄"},
 			{Name: "Robinson", Emoji: "🌟"},
 			{Name: "Mays", Emoji: "👋"},
 			{Name: "Aaron", Emoji: "🔨"},
 			{Name: "Jeter", Emoji: "🧢"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Judge", Emoji: "⚖️"},
 			{Name: "Gehrig", Emoji: "🐎"},
 			{Name: "Ichiro", Emoji: "🎯"},
@@ -465,6 +461,8 @@ var all = []Preset{
 			{Name: "Williams", Emoji: "🪵"},
 			{Name: "Ripken", Emoji: "🦾"},
 			{Name: "Rivera", Emoji: "🚪"},
+			{Name: "Cobb", Emoji: "🍑"},
+			{Name: "Griffey", Emoji: "🧒"},
 		},
 	},
 	{
@@ -472,15 +470,13 @@ var all = []Preset{
 		Name:   "NFL Legends",
 		Source: "Football",
 		Emoji:  "🏈",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Brady", Emoji: "🐐"},
 			{Name: "Mahomes", Emoji: "🪄"},
 			{Name: "Rice", Emoji: "🙌"},
 			{Name: "Montana", Emoji: "😎"},
 			{Name: "Payton", Emoji: "🍬"},
 			{Name: "Sanders", Emoji: "🌀"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Brown", Emoji: "💪"},
 			{Name: "Deion", Emoji: "💎"},
 			{Name: "Taylor", Emoji: "💥"},
@@ -489,6 +485,8 @@ var all = []Preset{
 			{Name: "Gronk", Emoji: "🎉"},
 			{Name: "Lewis", Emoji: "🐦\u200d⬛"},
 			{Name: "White", Emoji: "⛪"},
+			{Name: "Marino", Emoji: "🐬"},
+			{Name: "Elway", Emoji: "🐴"},
 		},
 	},
 	{
@@ -496,15 +494,13 @@ var all = []Preset{
 		Name:   "NHL Legends",
 		Source: "Hockey",
 		Emoji:  "🏒",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Gretzky", Emoji: "👑"},
 			{Name: "Lemieux", Emoji: "🍄"},
 			{Name: "Orr", Emoji: "✈️"},
 			{Name: "Howe", Emoji: "🏒"},
 			{Name: "Crosby", Emoji: "🧒"},
 			{Name: "Ovechkin", Emoji: "🚨"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Bure", Emoji: "🚀"},
 			{Name: "McDavid", Emoji: "🏎️"},
 			{Name: "Messier", Emoji: "🫎"},
@@ -513,6 +509,8 @@ var all = []Preset{
 			{Name: "Jágr", Emoji: "💇"},
 			{Name: "Selänne", Emoji: "⚡"},
 			{Name: "Lidström", Emoji: "🧠"},
+			{Name: "Brodeur", Emoji: "🥅"},
+			{Name: "Bossy", Emoji: "🎯"},
 		},
 	},
 	{
@@ -520,15 +518,13 @@ var all = []Preset{
 		Name:   "Free Agents",
 		Source: "Feeling chaotic?",
 		Emoji:  "🎲",
-		ATeam: []roster.Member{
+		Members: []roster.Member{
 			{Name: "Gandalf", Emoji: "🧙"},
 			{Name: "Mario", Emoji: "🍄"},
 			{Name: "Hermione", Emoji: "📚"},
 			{Name: "Picard", Emoji: "🍵"},
 			{Name: "Totoro", Emoji: "☂️"},
 			{Name: "Yoda", Emoji: "🐸"},
-		},
-		BTeam: []roster.Member{
 			{Name: "Kirby", Emoji: "⭐"},
 			{Name: "Tyrion", Emoji: "🍷"},
 			{Name: "Dwight", Emoji: "🐻"},
@@ -537,6 +533,8 @@ var all = []Preset{
 			{Name: "Zeus", Emoji: "⚡"},
 			{Name: "Chihiro", Emoji: "🛁"},
 			{Name: "Han", Emoji: "🚀"},
+			{Name: "Jordan", Emoji: "🐐"},
+			{Name: "Leia", Emoji: "🍩"},
 		},
 	},
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -39,7 +40,7 @@ func TestAuth(t *testing.T) {
 func TestOwnersCantSeeOrChangeEachOthersData(t *testing.T) {
 	t.Parallel()
 	a, b := newOwner(t), newOwner(t)
-	createRoster(a, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(a, "work", members("Gandalf", "Frodo"))
 	repoHash := fakeRepoHash("piazzatron/rostr")
 	call[linkResponse](a, "PUT", "/v1/links/"+repoHash, map[string]any{"repo": fakeCiphertext("piazzatron/rostr"), "roster": "work"}, http.StatusOK)
 	session := a.session("s1")
@@ -57,8 +58,8 @@ func TestOwnersCantSeeOrChangeEachOthersData(t *testing.T) {
 	}
 
 	// B can't change any of it
-	callError(b, "PUT", "/v1/rosters/work", map[string]any{"aTeam": members("Mario")}, http.StatusNotFound, "roster_not_found")
-	callError(b, "PUT", "/v1/rosters/work/cast", map[string]any{"aTeam": members("Mario")}, http.StatusNotFound, "roster_not_found")
+	callError(b, "PUT", "/v1/rosters/work", map[string]any{"members": members("Mario")}, http.StatusNotFound, "roster_not_found")
+	callError(b, "PUT", "/v1/rosters/work/cast", map[string]any{"members": members("Mario")}, http.StatusNotFound, "roster_not_found")
 	callError(b, "DELETE", "/v1/rosters/work", nil, http.StatusNotFound, "roster_not_found")
 	callError(b, "DELETE", "/v1/links/"+repoHash, nil, http.StatusNotFound, "link_not_found")
 	callError(b, "POST", "/v1/agents/bench", map[string]any{"session": session}, http.StatusNotFound, "not_drafted")
@@ -69,7 +70,7 @@ func TestOwnersCantSeeOrChangeEachOthersData(t *testing.T) {
 	callError(b, "PUT", "/v1/links/"+repoHash, map[string]any{"repo": fakeCiphertext("x"), "roster": "work"}, http.StatusNotFound, "roster_not_found")
 
 	// B's own roster with the same name and the same session ID stay separate
-	createRoster(b, "work", members("Mario"), nil)
+	createRoster(b, "work", members("Mario"))
 	if d := draftSessionNamed(b, session); d.Name != "Mario" {
 		t.Fatalf("B drafted %s", d.Name)
 	}
@@ -91,9 +92,9 @@ func importBody(token string) map[string]any {
 		"authToken": token,
 		"import": map[string]any{
 			"rosters": []map[string]any{
-				{"name": "work", "emojiMode": "off", "aTeam": members("Gandalf", "Frodo"), "bTeam": members("Boromir"),
+				{"name": "work", "emojiMode": "off", "members": members("Gandalf", "Frodo", "Boromir"),
 					"createdAt": "2026-01-01T00:00:00Z"},
-				{"name": "games", "aTeam": members("Mario", "Luigi"), "createdAt": "2026-02-01T00:00:00Z"},
+				{"name": "games", "members": members("Mario", "Luigi"), "createdAt": "2026-02-01T00:00:00Z"},
 			},
 			"settings": map[string]any{"defaultRoster": "games", "draftExpiry": "48h"},
 			"links": []map[string]any{
@@ -148,7 +149,7 @@ func TestImportWithoutDatesKeepsListOrder(t *testing.T) {
 	t.Parallel()
 	c := &client{t: t, handler: testHandler, token: newToken()}
 	settings := call[settingsResponse](c, "POST", "/v1/register", map[string]any{"authToken": c.token, "import": map[string]any{
-		"rosters": []map[string]any{{"name": "Smash Bros", "aTeam": members("Mario")}, {"name": "Pokémon", "aTeam": members("Pikachu")}},
+		"rosters": []map[string]any{{"name": "Smash Bros", "members": members("Mario")}, {"name": "Pokémon", "members": members("Pikachu")}},
 	}}, http.StatusCreated)
 	if settings.DefaultRoster == nil || *settings.DefaultRoster != "Smash Bros" {
 		t.Fatalf("default: %v, want the first roster listed", settings.DefaultRoster)
@@ -187,9 +188,9 @@ func TestImportIsAtomic(t *testing.T) {
 func TestDisbandCascadesAndPromotesOldestRoster(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "first", members("Gandalf"), nil)
-	createRoster(c, "second", members("Mario"), nil)
-	createRoster(c, "third", members("Pikachu"), nil)
+	createRoster(c, "first", members("Gandalf"))
+	createRoster(c, "second", members("Mario"))
+	createRoster(c, "third", members("Pikachu"))
 	call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"defaultRoster": "second"}, http.StatusOK)
 	repoHash := fakeRepoHash("piazzatron/rostr")
 	call[linkResponse](c, "PUT", "/v1/links/"+repoHash, map[string]any{"repo": fakeCiphertext("r"), "roster": "second"}, http.StatusOK)
@@ -239,14 +240,14 @@ func TestDisbandCascadesAndPromotesOldestRoster(t *testing.T) {
 func TestReplaceCastKeepsNameLinksDefaultAndDraftEmoji(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", []member{{"Gandalf", "🧙"}, {"Frodo", "💍"}}, nil)
+	createRoster(c, "work", []member{{"Gandalf", "🧙"}, {"Frodo", "💍"}})
 	repoHash := fakeRepoHash("piazzatron/rostr")
 	call[linkResponse](c, "PUT", "/v1/links/"+repoHash, map[string]any{"repo": fakeCiphertext("r"), "roster": "work"}, http.StatusOK)
 	session := c.session("s1")
 	draftSessionNamed(c, session)
 
 	r := call[rosterResponse](c, "PUT", "/v1/rosters/work/cast",
-		map[string]any{"emojiMode": "off", "aTeam": []member{{"Mario", "🍄"}, {"Luigi", "🟢"}}}, http.StatusOK)
+		map[string]any{"emojiMode": "off", "members": []member{{"Mario", "🍄"}, {"Luigi", "🟢"}}}, http.StatusOK)
 	if r.Name != "work" || !r.IsDefault || r.LinkedProjects != 1 || r.ActiveDrafts != 1 || r.EmojiMode != "off" {
 		t.Fatalf("after replace: %+v", r)
 	}
@@ -254,16 +255,16 @@ func TestReplaceCastKeepsNameLinksDefaultAndDraftEmoji(t *testing.T) {
 		t.Fatalf("link: %+v", link)
 	}
 
-	// The drafted agent keeps its name and stored emoji, with no team in the new cast
+	// The drafted agent keeps its name and stored emoji, though they're no longer in the cast
 	l := list(c)
 	drafted := l.Rosters[0].Drafted
-	if len(drafted) != 1 || drafted[0].Name != "Gandalf" || drafted[0].Emoji != "🧙" || drafted[0].Team != nil {
+	if len(drafted) != 1 || drafted[0].Name != "Gandalf" || drafted[0].Emoji != "🧙" {
 		t.Fatalf("drafted after replace: %+v", drafted)
 	}
 	if idle := l.Rosters[0].Idle; len(idle) != 2 || idle[0].Name != "Mario" {
 		t.Fatalf("idle after replace: %+v", idle)
 	}
-	if d := call[draftResponse](c, "GET", "/v1/sessions/"+session, nil, http.StatusOK); d.Emoji != "🧙" || d.Team != nil {
+	if d := call[draftResponse](c, "GET", "/v1/sessions/"+session, nil, http.StatusOK); d.Emoji != "🧙" {
 		t.Fatalf("session after replace: %+v", d)
 	}
 
@@ -277,31 +278,31 @@ func TestReplaceCastKeepsNameLinksDefaultAndDraftEmoji(t *testing.T) {
 func TestEditRefusesToRenameOrRemoveDraftedMembers(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
 	session := c.session("s1")
 	draftSessionNamed(c, session) // Gandalf
 
-	callError(c, "PUT", "/v1/rosters/work", map[string]any{"aTeam": members("Frodo")}, http.StatusConflict, "member_drafted")
-	callError(c, "PUT", "/v1/rosters/work", map[string]any{"aTeam": members("Gandalf the White", "Frodo")}, http.StatusConflict, "member_drafted")
-	callError(c, "PUT", "/v1/rosters/work", map[string]any{"aTeam": members("gandalf", "Frodo")}, http.StatusConflict, "member_drafted")
+	callError(c, "PUT", "/v1/rosters/work", map[string]any{"members": members("Frodo")}, http.StatusConflict, "member_drafted")
+	callError(c, "PUT", "/v1/rosters/work", map[string]any{"members": members("Gandalf the White", "Frodo")}, http.StatusConflict, "member_drafted")
+	callError(c, "PUT", "/v1/rosters/work", map[string]any{"members": members("gandalf", "Frodo")}, http.StatusConflict, "member_drafted")
 
-	// Changing a drafted member's emoji or team, or anyone else, is fine
+	// Changing a drafted member's emoji or place in the order, or anyone else, is fine
 	r := call[rosterResponse](c, "PUT", "/v1/rosters/work",
-		map[string]any{"emojiMode": "only", "aTeam": members("Sam"), "bTeam": []member{{"Gandalf", "🪄"}}}, http.StatusOK)
-	if r.EmojiMode != "only" || len(r.ATeam) != 1 || r.BTeam[0].Emoji != "🪄" {
+		map[string]any{"emojiMode": "only", "members": []member{{"Sam", "⭐"}, {"Gandalf", "🪄"}}}, http.StatusOK)
+	if r.EmojiMode != "only" || len(r.Members) != 2 || r.Members[0].Name != "Sam" || r.Members[1].Emoji != "🪄" {
 		t.Fatalf("edit: %+v", r)
 	}
 
 	// Once released, Gandalf can go
 	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"name": "Gandalf"}, http.StatusOK)
-	call[rosterResponse](c, "PUT", "/v1/rosters/work", map[string]any{"aTeam": members("Sam")}, http.StatusOK)
+	call[rosterResponse](c, "PUT", "/v1/rosters/work", map[string]any{"members": members("Sam")}, http.StatusOK)
 }
 
 func TestPublicListShape(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", []member{{"Gandalf", "🧙"}, {"Frodo", "💍"}}, []member{{"Boromir", "🛡️"}})
-	createRoster(c, "empty", members("Nobody"), nil)
+	createRoster(c, "work", []member{{"Gandalf", "🧙"}, {"Frodo", "💍"}, {"Boromir", "🛡️"}})
+	createRoster(c, "empty", members("Nobody"))
 	draft(c, map[string]any{"session": c.session("s1"), "task": fakeCiphertext("t"),
 		"repoHash": fakeRepoHash("a/b"), "repo": fakeCiphertext("a/b")})
 
@@ -313,8 +314,7 @@ func TestPublicListShape(t *testing.T) {
 		Rosters []struct {
 			Name      string           `json:"name"`
 			EmojiMode string           `json:"emojiMode"`
-			ATeam     []member         `json:"aTeam"`
-			BTeam     []member         `json:"bTeam"`
+			Members   []member         `json:"members"`
 			IsDefault bool             `json:"isDefault"`
 			CreatedAt time.Time        `json:"createdAt"`
 			Drafted   []map[string]any `json:"drafted"`
@@ -330,16 +330,16 @@ func TestPublicListShape(t *testing.T) {
 
 	// Each roster has its cast and whether it's the default
 	work, empty := raw.Rosters[0], raw.Rosters[1]
-	if len(work.ATeam) != 2 || work.ATeam[1].Name != "Frodo" || len(work.BTeam) != 1 || work.BTeam[0].Emoji != "🛡️" ||
-		!work.IsDefault || work.CreatedAt.IsZero() || empty.IsDefault || len(empty.ATeam) != 1 || empty.BTeam == nil {
+	if len(work.Members) != 3 || work.Members[1].Name != "Frodo" || work.Members[2].Emoji != "🛡️" ||
+		!work.IsDefault || work.CreatedAt.IsZero() || empty.IsDefault || len(empty.Members) != 1 {
 		t.Fatalf("casts: %s", rec.Body.String())
 	}
 
 	drafted := raw.Rosters[0].Drafted
-	if len(drafted) != 1 || !slices.Equal(sortedKeys(drafted[0]), []string{"draftedAt", "emoji", "name", "repo", "restingSince", "task", "team"}) {
+	if len(drafted) != 1 || !slices.Equal(sortedKeys(drafted[0]), []string{"draftedAt", "emoji", "name", "repo", "restingSince", "task"}) {
 		t.Fatalf("drafted: %v", drafted)
 	}
-	if drafted[0]["name"] != "Gandalf" || drafted[0]["emoji"] != "🧙" || drafted[0]["team"] != "a" || drafted[0]["restingSince"] != nil ||
+	if drafted[0]["name"] != "Gandalf" || drafted[0]["emoji"] != "🧙" || drafted[0]["restingSince"] != nil ||
 		drafted[0]["task"] != fakeCiphertext("t") || drafted[0]["repo"] != fakeCiphertext("a/b") {
 		t.Fatalf("drafted: %v", drafted[0])
 	}
@@ -348,8 +348,8 @@ func TestPublicListShape(t *testing.T) {
 	}
 
 	idle := raw.Rosters[0].Idle
-	if len(idle) != 2 || !slices.Equal(sortedKeys(idle[0]), []string{"emoji", "name", "team"}) ||
-		idle[0]["name"] != "Frodo" || idle[1]["name"] != "Boromir" || idle[1]["team"] != "b" {
+	if len(idle) != 2 || !slices.Equal(sortedKeys(idle[0]), []string{"emoji", "name"}) ||
+		idle[0]["name"] != "Frodo" || idle[1]["name"] != "Boromir" || idle[1]["emoji"] != "🛡️" {
 		t.Fatalf("idle: %v", idle)
 	}
 
@@ -461,20 +461,30 @@ func TestErrorsAndStatusCodes(t *testing.T) {
 
 	// Bad bodies
 	callError(c, "POST", "/v1/rosters", "{not json", http.StatusBadRequest, "invalid_request")
-	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "aTeam": members("A"), "extra": 1}, http.StatusBadRequest, "invalid_request")
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "members": members("A"), "extra": 1}, http.StatusBadRequest, "invalid_request")
 	callError(c, "POST", "/v1/rosters", `{"name":"`+strings.Repeat("x", maxBodyBytes)+`"}`, http.StatusRequestEntityTooLarge, "too_large")
 	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x"}, http.StatusBadRequest, "invalid_request")
-	callError(c, "POST", "/v1/rosters", map[string]any{"name": " ", "aTeam": members("A")}, http.StatusBadRequest, "invalid_request")
-	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "emojiMode": "loud", "aTeam": members("A")}, http.StatusBadRequest, "invalid_request")
-	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "aTeam": []member{{"A", ""}}}, http.StatusBadRequest, "invalid_request")
-	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "aTeam": members("Éowyn"), "bTeam": members("eowyn")}, http.StatusBadRequest, "invalid_request")
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": " ", "members": members("A")}, http.StatusBadRequest, "invalid_request")
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "emojiMode": "loud", "members": members("A")}, http.StatusBadRequest, "invalid_request")
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "members": []member{{"A", ""}}}, http.StatusBadRequest, "invalid_request")
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "members": members("Éowyn", "eowyn")}, http.StatusBadRequest, "invalid_request")
+	if e := callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "members": []member{}}, http.StatusBadRequest, "invalid_request"); e.Error.Message != "members needs at least one member." {
+		t.Fatalf("empty members: %q", e.Error.Message)
+	}
+	tooMany := make([]string, maxMembers+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprint("Member ", i)
+	}
+	if e := callError(c, "POST", "/v1/rosters", map[string]any{"name": "x", "members": members(tooMany...)}, http.StatusBadRequest, "invalid_request"); !strings.Contains(e.Error.Message, "at most 200") {
+		t.Fatalf("too many members: %q", e.Error.Message)
+	}
 
 	// No rosters yet
 	callError(c, "POST", "/v1/agents/draft", map[string]any{"session": c.session("s")}, http.StatusNotFound, "no_rosters")
 
 	// Roster names are unique ignoring case and accents, and found the same way
-	createRoster(c, "Pokémon", members("Pikachu"), nil)
-	callError(c, "POST", "/v1/rosters", map[string]any{"name": "POKEMON", "aTeam": members("A")}, http.StatusConflict, "roster_exists")
+	createRoster(c, "Pokémon", members("Pikachu"))
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": "POKEMON", "members": members("A")}, http.StatusConflict, "roster_exists")
 	if r := call[rosterResponse](c, "GET", "/v1/rosters/pokemon", nil, http.StatusOK); r.Name != "Pokémon" {
 		t.Fatalf("loose lookup: %+v", r)
 	}
@@ -513,8 +523,8 @@ func TestErrorsAndStatusCodes(t *testing.T) {
 func TestReleaseAndTaskByName(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Éowyn", "Gandalf"), nil)
-	createRoster(c, "home", members("Gandalf"), nil)
+	createRoster(c, "work", members("Éowyn", "Gandalf"))
+	createRoster(c, "home", members("Gandalf"))
 	draftSessionNamed(c, c.session("s1")) // Éowyn
 	draftSessionNamed(c, c.session("s2")) // Gandalf
 	draftSessionNamed(c, c.session("s3")) // Éowyn 2
@@ -543,7 +553,7 @@ func TestReleaseAndTaskByName(t *testing.T) {
 func TestTaskBySessionBumpsLastSeen(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
+	createRoster(c, "work", members("Gandalf"))
 	session := c.session("s1")
 	draftSessionNamed(c, session)
 	execSQL(t, `update drafts set last_seen_at = now() - interval '1 day' where session_id = $1`, session)
@@ -560,8 +570,8 @@ func TestTaskBySessionBumpsLastSeen(t *testing.T) {
 func TestLinksPickTheDraftRoster(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
-	createRoster(c, "games", members("Mario"), nil)
+	createRoster(c, "work", members("Gandalf"))
+	createRoster(c, "games", members("Mario"))
 	repoHash := fakeRepoHash("piazzatron/rostr")
 	repo := fakeCiphertext("piazzatron/rostr")
 
@@ -601,8 +611,8 @@ func TestLinksPickTheDraftRoster(t *testing.T) {
 func TestSettings(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
-	createRoster(c, "games", members("Mario"), nil)
+	createRoster(c, "work", members("Gandalf"))
+	createRoster(c, "games", members("Mario"))
 
 	s := call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"defaultRoster": "Games", "draftExpiry": "48h"}, http.StatusOK)
 	if *s.DefaultRoster != "games" || s.DraftExpiry != "2d" {

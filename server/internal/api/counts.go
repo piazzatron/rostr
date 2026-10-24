@@ -18,7 +18,7 @@ func queryLiveCounts(ctx context.Context, db querier) (liveCounts, error) {
 		)
 		select
 		  (select count(*) from active),
-		  (select count(*) from rosters r cross join jsonb_array_elements(r.a_team || r.b_team) m
+		  (select count(*) from rosters r cross join jsonb_array_elements(r.members) m
 		   where not exists (
 		     select 1 from active a
 		     where a.roster_id = r.id and a.copy = 1 and lower(a.member_name) = lower(m->>'name')))`,

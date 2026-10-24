@@ -17,7 +17,6 @@ import (
 type draftJSON struct {
 	Name    string `json:"name"`
 	Emoji   string `json:"emoji"`
-	Team    string `json:"team"`
 	Roster  string `json:"roster"`
 	Display string `json:"display"`
 }
@@ -27,7 +26,7 @@ func newDraftCommand() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "draft",
-		Short: "Draft the next free member for this session, A team first",
+		Short: "Draft the next free member for this session",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -46,7 +45,7 @@ func newDraftCommand() *cobra.Command {
 			}
 			if asJSON {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(draftJSON{
-					Name: d.Name(), Emoji: d.Emoji, Team: d.Team, Roster: d.Roster, Display: d.Display(),
+					Name: d.Name(), Emoji: d.Emoji, Roster: d.Roster, Display: d.Display(),
 				})
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), d.Display())
@@ -56,7 +55,7 @@ func newDraftCommand() *cobra.Command {
 	cmd.Flags().StringVar(&task, "task", "", "what the agent is working on")
 	sessionFlag(cmd, &session)
 	cmd.Flags().StringVar(&rosterFlag, "roster", "", "draft from this roster instead of the project's")
-	cmd.Flags().BoolVar(&asJSON, "json", false, `print {"name", "emoji", "team", "roster", "display"}`)
+	cmd.Flags().BoolVar(&asJSON, "json", false, `print {"name", "emoji", "roster", "display"}`)
 	return cmd
 }
 

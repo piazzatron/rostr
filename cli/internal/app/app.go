@@ -35,6 +35,9 @@ func Execute() int {
 	case errors.As(err, &missing):
 		fmt.Fprintf(os.Stderr, "%s %s\n\n%s", styleErrorPrefix.Render("rostr:"), err, cmd.UsageString())
 		return 1
+	case errors.Is(err, store.ErrUnauthorized):
+		fmt.Fprintf(os.Stderr, "%s %s. %s\n", styleErrorPrefix.Render("rostr:"), err, deadKeyHelp())
+		return 1
 	default:
 		fmt.Fprintln(os.Stderr, styleErrorPrefix.Render("rostr:")+" "+err.Error())
 		return 1
@@ -128,6 +131,15 @@ func hasCloudKey() bool {
 	}
 	_, err := os.Stat(paths.Credentials())
 	return err == nil
+}
+
+// deadKeyHelp says how to get going again when the API doesn't recognize this machine's key.
+func deadKeyHelp() string {
+	if os.Getenv("ROSTR_KEY") != "" {
+		return "Its cloud setup may have been deleted: set ROSTR_KEY to another key, or unset it to use rostr locally"
+	}
+	return "Its cloud setup may have been deleted: run `rostr cloud on` to use another key or start a new setup, " +
+		"or `rostr uninstall` to remove rostr"
 }
 
 // loadCloudKey reads the rostr key from ROSTR_KEY, or else the credentials file.

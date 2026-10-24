@@ -4,12 +4,11 @@ import { SUBMIT_ROSTER_URL } from "../consts";
 import { PRESET_ROSTERS } from "../data/rosters";
 ---
 
-<Layout title="rostr pre-built rosters" description="Every pre-built rostr roster, with its A team and B team.">
+<Layout title="rostr pre-built rosters" description="Every pre-built rostr roster and all its members.">
   <section class="rosters-hero">
     <h1>Pre-built rosters</h1>
     <p class="lede">
-      Pick one with <code>rostr assemble --preset &lt;id&gt;</code>, or let <code>rostr assemble</code> walk you
-      through it. Made one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
+      Set one up with <code>rostr assemble</code>. Made one you love? <a class="accent-link" href={SUBMIT_ROSTER_URL}>Submit your own →</a>
     </p>
     <nav class="franchises" aria-label="Franchises">
       {PRESET_ROSTERS.map((roster) => (
@@ -30,10 +29,10 @@ import { PRESET_ROSTERS } from "../data/rosters";
             </span>
             <code class="roster-card-id">{roster.id}</code>
           </header>
-          <b class="team-label">A team</b>
-          <div class="chips">{roster.aTeam.map((member) => <span class="chip chip-a">{member}</span>)}</div>
-          <b class="team-label team-label-b">B team</b>
-          <div class="chips">{roster.bTeam.map((member) => <span class="chip chip-b">{member}</span>)}</div>
+          <b class="members-label">{roster.members.length} members</b>
+          <div class="chips">
+            {roster.members.map((member) => <span class="chip">{member}</span>)}
+          </div>
         </article>
       ))}
     </div>
@@ -103,25 +102,13 @@ import { PRESET_ROSTERS } from "../data/rosters";
     margin-left: auto;
   }
 
-  .team-label {
+  .members-label {
     display: block;
     margin: 0 0 6px;
     color: var(--accent);
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-  }
-
-  .team-label-b {
-    margin-top: 12px;
-    color: var(--muted);
-  }
-
-  /* The B team is gray, like on the home page */
-  .chip-b {
-    border-color: color-mix(in srgb, var(--muted) 30%, transparent);
-    background: color-mix(in srgb, var(--muted) 12%, var(--surface));
-    color: var(--muted);
   }
 
   @media (max-width: 640px) {

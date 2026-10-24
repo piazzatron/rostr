@@ -35,7 +35,6 @@ type draftedAgentJSON struct {
 	Name       string    `json:"name"`
 	Emoji      string    `json:"emoji"`
 	Display    string    `json:"display"`
-	Team       string    `json:"team"`
 	Task       string    `json:"task"`
 	Repo       string    `json:"repo"`
 	Session    string    `json:"session,omitempty"` // not in cloud mode, whose listing leaves sessions out
@@ -49,7 +48,6 @@ type benchMemberJSON struct {
 	Name    string `json:"name"`
 	Emoji   string `json:"emoji"`
 	Display string `json:"display"`
-	Team    string `json:"team"`
 }
 
 func newStatsCommand() *cobra.Command {
@@ -122,7 +120,7 @@ func buildListing(rosters []store.Roster, drafts []store.Draft) listJSON {
 			}
 			busy[d.Member] = true
 			agent := draftedAgentJSON{
-				Name: d.Name(), Emoji: d.Emoji, Display: d.Display(), Team: d.Team, Task: d.Task, Repo: d.Repo,
+				Name: d.Name(), Emoji: d.Emoji, Display: d.Display(), Task: d.Task, Repo: d.Repo,
 				Session: d.SessionID, DraftedAt: d.DraftedAt, LastSeenAt: d.LastSeenAt, RestingSince: d.RestingSince,
 			}
 			if d.RestingSince.IsZero() {
@@ -131,10 +129,10 @@ func buildListing(rosters []store.Roster, drafts []store.Draft) listJSON {
 				entry.Resting = append(entry.Resting, agent)
 			}
 		}
-		for _, m := range r.Members() {
+		for _, m := range r.Members {
 			if !busy[m.Name] {
 				entry.Bench = append(entry.Bench, benchMemberJSON{
-					Name: m.Name, Emoji: m.Emoji, Display: roster.Display(m.Emoji, m.Name, 1, r.EmojiMode), Team: r.Team(m.Name),
+					Name: m.Name, Emoji: m.Emoji, Display: roster.Display(m.Emoji, m.Name, 1, r.EmojiMode),
 				})
 			}
 		}

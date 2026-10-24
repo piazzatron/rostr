@@ -29,7 +29,7 @@ func restingSinceOf(c *client, name string) *time.Time {
 func TestTurnsMarkADraftResting(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf"), nil)
+	createRoster(c, "work", members("Gandalf"))
 	s := c.session("s")
 	draftSessionNamed(c, s)
 	now := time.Now()
@@ -69,7 +69,7 @@ func TestTurnsMarkADraftResting(t *testing.T) {
 func TestDraftTakesTheLongestRestingNameBeforeCopies(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Samwise"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo", "Samwise"))
 	gandalf, frodo, samwise := c.session("gandalf"), c.session("frodo"), c.session("samwise")
 	draftSessionNamed(c, gandalf)
 	draftSessionNamed(c, frodo)
@@ -103,7 +103,7 @@ func TestDraftTakesTheLongestRestingNameBeforeCopies(t *testing.T) {
 func TestDraftPrefersAFreeNameToAResting(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
 	gandalf := c.session("gandalf")
 	draftSessionNamed(c, gandalf)
 	execSQL(t, `update drafts set turn_ended_at = now() - interval '1 hour' where session_id = $1`, gandalf)
@@ -121,7 +121,7 @@ func TestDraftPrefersAFreeNameToAResting(t *testing.T) {
 func TestIdleDraftsRestUntilTheirFirstTurn(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
 	opened, prompted := c.session("opened"), c.session("prompted")
 	draft(c, map[string]any{"session": opened, "idle": true})   // Gandalf
 	draft(c, map[string]any{"session": prompted, "idle": true}) // Frodo

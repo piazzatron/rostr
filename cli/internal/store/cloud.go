@@ -53,8 +53,8 @@ func NewCloud(baseURL string, key crypto.Key) (*Cloud, error) {
 	}, nil
 }
 
-// APIError is an error response from the rostr API. It wraps ErrNotFound, ErrNameTaken, or ErrNoRosters for the codes
-// that mean those.
+// APIError is an error response from the rostr API. It wraps ErrNotFound, ErrNameTaken, ErrNoRosters, or
+// ErrUnauthorized for the codes that mean those.
 type APIError struct {
 	Status  int
 	Code    string
@@ -83,6 +83,7 @@ var apiErrorKinds = map[string]error{
 	"not_drafted":      ErrNotFound,
 	"roster_exists":    ErrNameTaken,
 	"no_rosters":       ErrNoRosters,
+	"unauthorized":     ErrUnauthorized,
 }
 
 func (c *Cloud) Close() error {
@@ -98,7 +99,7 @@ func (c *Cloud) Register(ctx context.Context, setup Setup) error {
 	rosters := make([]map[string]any, len(setup.Rosters))
 	var previous time.Time
 	for i, r := range setup.Rosters {
-		rosters[i] = map[string]any{"name": r.Name, "emojiMode": r.EmojiMode, "aTeam": r.ATeam, "bTeam": nonNil(r.BTeam)}
+		rosters[i] = map[string]any{"name": r.Name, "emojiMode": r.EmojiMode, "members": r.Members}
 		if r.CreatedAt.IsZero() {
 			continue
 		}
@@ -159,25 +160,16 @@ func (c *Cloud) Rosters(ctx context.Context) ([]Roster, error) {
 	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
 		return nil, err
 	}
-	return c.listedRosters(ctx, listing)
+	return listedRosters(listing), nil
 }
 
-// listedRosters is the listing's rosters, oldest first. A server from before the listing had casts leaves them out,
-// so then each cast comes from its roster's own endpoint.
-func (c *Cloud) listedRosters(ctx context.Context, listing apiListing) ([]Roster, error) {
+// listedRosters is the listing's rosters, oldest first.
+func listedRosters(listing apiListing) []Roster {
 	out := make([]Roster, len(listing.Rosters))
 	for i, r := range listing.Rosters {
-		if r.ATeam == nil {
-			full, err := c.Roster(ctx, r.Name)
-			if err != nil {
-				return nil, err
-			}
-			out[i] = full
-			continue
-		}
-		out[i] = Roster{Name: r.Name, EmojiMode: r.EmojiMode, ATeam: r.ATeam, BTeam: nonNil(r.BTeam), CreatedAt: r.CreatedAt}
+		out[i] = Roster{Name: r.Name, EmojiMode: r.EmojiMode, Members: r.Members, CreatedAt: r.CreatedAt}
 	}
-	return out, nil
+	return out
 }
 
 // Stats reads everything `rostr stats` shows from the listing, in one call.
@@ -186,28 +178,15 @@ func (c *Cloud) Stats(ctx context.Context) (Stats, error) {
 	if err := c.call(ctx, "GET", "/v1/stats", nil, &listing); err != nil {
 		return Stats{}, err
 	}
-	rosters, err := c.listedRosters(ctx, listing)
-	if err != nil {
-		return Stats{}, err
-	}
 	drafts, err := c.listedDrafts(listing)
 	if err != nil {
 		return Stats{}, err
 	}
-	stats := Stats{Rosters: rosters, Drafts: drafts}
-	oldServer := false
+	stats := Stats{Rosters: listedRosters(listing), Drafts: drafts}
 	for _, r := range listing.Rosters {
 		if r.IsDefault {
 			stats.DefaultRoster = r.Name
 		}
-		oldServer = oldServer || r.ATeam == nil
-	}
-	if oldServer {
-		settings, err := c.Settings(ctx)
-		if err != nil {
-			return Stats{}, err
-		}
-		stats.DefaultRoster = settings.DefaultRoster
 	}
 	return stats, nil
 }
@@ -222,12 +201,12 @@ func (c *Cloud) CreateRoster(ctx context.Context, r Roster) (Roster, error) {
 	if r.Name == "" {
 		return Roster{}, errors.New("a roster needs a name")
 	}
-	if err := roster.ValidateCast(r.ATeam, r.BTeam, r.EmojiMode); err != nil {
+	if err := roster.ValidateCast(r.Members, r.EmojiMode); err != nil {
 		return Roster{}, err
 	}
 	var created apiRoster
 	err := c.call(ctx, "POST", "/v1/rosters", map[string]any{
-		"name": r.Name, "emojiMode": r.EmojiMode, "aTeam": r.ATeam, "bTeam": nonNil(r.BTeam),
+		"name": r.Name, "emojiMode": r.EmojiMode, "members": r.Members,
 	}, &created)
 	if err != nil {
 		return Roster{}, err
@@ -235,22 +214,22 @@ func (c *Cloud) CreateRoster(ctx context.Context, r Roster) (Roster, error) {
 	return created.toRoster(), nil
 }
 
-func (c *Cloud) ReplaceCast(ctx context.Context, rosterName string, aTeam, bTeam []roster.Member) error {
+func (c *Cloud) ReplaceCast(ctx context.Context, rosterName string, members []roster.Member) error {
 	r, err := c.roster(ctx, rosterName)
 	if err != nil {
 		return err
 	}
-	if err := roster.ValidateCast(aTeam, bTeam, r.EmojiMode); err != nil {
+	if err := roster.ValidateCast(members, r.EmojiMode); err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name)+"/cast", castBody(r.EmojiMode, aTeam, bTeam), nil)
+	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name)+"/cast", castBody(r.EmojiMode, members), nil)
 }
 
-func (c *Cloud) EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, aTeam, bTeam []roster.Member) error {
-	if err := roster.ValidateCast(aTeam, bTeam, mode); err != nil {
+func (c *Cloud) EditRoster(ctx context.Context, rosterName string, mode roster.EmojiMode, members []roster.Member) error {
+	if err := roster.ValidateCast(members, mode); err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(rosterName), castBody(mode, aTeam, bTeam), nil)
+	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(rosterName), castBody(mode, members), nil)
 }
 
 func (c *Cloud) SetEmojiMode(ctx context.Context, rosterName string, mode roster.EmojiMode) error {
@@ -258,10 +237,10 @@ func (c *Cloud) SetEmojiMode(ctx context.Context, rosterName string, mode roster
 	if err != nil {
 		return err
 	}
-	if err := roster.ValidateCast(r.ATeam, r.BTeam, mode); err != nil {
+	if err := roster.ValidateCast(r.Members, mode); err != nil {
 		return err
 	}
-	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name), castBody(mode, r.ATeam, r.BTeam), nil)
+	return c.call(ctx, "PUT", "/v1/rosters/"+url.PathEscape(r.Name), castBody(mode, r.Members), nil)
 }
 
 func (c *Cloud) Usage(ctx context.Context, rosterName string) (Usage, error) {
@@ -483,7 +462,7 @@ func (c *Cloud) listedDrafts(listing apiListing) ([]Draft, error) {
 			member, copy := splitAgentName(d.Name)
 			draft := Draft{
 				Roster: r.Name, EmojiMode: r.EmojiMode, Member: member, Emoji: d.Emoji, Copy: copy,
-				Team: strings.ToUpper(deref(d.Team)), DraftedAt: d.DraftedAt,
+				DraftedAt: d.DraftedAt,
 			}
 			if d.RestingSince != nil {
 				draft.RestingSince = *d.RestingSince
@@ -607,7 +586,7 @@ func (c *Cloud) draftCall(ctx context.Context, method, path string, body any) (D
 	}
 	return Draft{
 		Roster: d.Roster, EmojiMode: roster.EmojiMode(d.EmojiMode), Member: d.Name, Emoji: d.Emoji, Copy: d.Copy,
-		Team: strings.ToUpper(deref(d.Team)), SessionID: d.Session, Repo: repo, Task: task, DraftedAt: d.DraftedAt,
+		SessionID: d.Session, Repo: repo, Task: task, DraftedAt: d.DraftedAt,
 	}, nil
 }
 
@@ -657,8 +636,7 @@ func (c *Cloud) decrypt(value *string) (string, error) {
 type apiRoster struct {
 	Name           string           `json:"name"`
 	EmojiMode      roster.EmojiMode `json:"emojiMode"`
-	ATeam          []roster.Member  `json:"aTeam"`
-	BTeam          []roster.Member  `json:"bTeam"`
+	Members        []roster.Member  `json:"members"`
 	IsDefault      bool             `json:"isDefault"`
 	ActiveDrafts   int              `json:"activeDrafts"`
 	LinkedProjects int              `json:"linkedProjects"`
@@ -666,14 +644,13 @@ type apiRoster struct {
 }
 
 func (r apiRoster) toRoster() Roster {
-	return Roster{Name: r.Name, EmojiMode: r.EmojiMode, ATeam: r.ATeam, BTeam: nonNil(r.BTeam), CreatedAt: r.CreatedAt}
+	return Roster{Name: r.Name, EmojiMode: r.EmojiMode, Members: r.Members, CreatedAt: r.CreatedAt}
 }
 
 type apiDraft struct {
 	Name      string    `json:"name"`
 	Emoji     string    `json:"emoji"`
 	Copy      int       `json:"copy"`
-	Team      *string   `json:"team"`
 	Roster    string    `json:"roster"`
 	EmojiMode string    `json:"emojiMode"`
 	Session   string    `json:"session"`
@@ -696,14 +673,12 @@ type apiListing struct {
 	Rosters []struct {
 		Name      string           `json:"name"`
 		EmojiMode roster.EmojiMode `json:"emojiMode"`
-		ATeam     []roster.Member  `json:"aTeam"`
-		BTeam     []roster.Member  `json:"bTeam"`
+		Members   []roster.Member  `json:"members"`
 		IsDefault bool             `json:"isDefault"`
 		CreatedAt time.Time        `json:"createdAt"`
 		Drafted   []struct {
 			Name         string     `json:"name"`
 			Emoji        string     `json:"emoji"`
-			Team         *string    `json:"team"`
 			Task         *string    `json:"task"`
 			Repo         *string    `json:"repo"`
 			DraftedAt    time.Time  `json:"draftedAt"`
@@ -712,8 +687,8 @@ type apiListing struct {
 	} `json:"rosters"`
 }
 
-func castBody(mode roster.EmojiMode, aTeam, bTeam []roster.Member) map[string]any {
-	return map[string]any{"emojiMode": mode, "aTeam": aTeam, "bTeam": nonNil(bTeam)}
+func castBody(mode roster.EmojiMode, members []roster.Member) map[string]any {
+	return map[string]any{"emojiMode": mode, "members": members}
 }
 
 // agentBody targets one drafted agent by its name with copy number ("Gandalf 2"), in one roster.
@@ -733,13 +708,6 @@ func splitAgentName(name string) (string, int) {
 	}
 	copy, _ := strconv.Atoi(m[2])
 	return m[1], copy
-}
-
-func nonNil(members []roster.Member) []roster.Member {
-	if members == nil {
-		return []roster.Member{}
-	}
-	return members
 }
 
 func deref(s *string) string {

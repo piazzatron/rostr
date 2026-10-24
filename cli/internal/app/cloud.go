@@ -97,8 +97,9 @@ func newConfigKeyCommand() *cobra.Command {
 
 // runCloudOn moves this machine's setup to the cloud under a new key, or joins an existing cloud setup with a key
 // pasted at a hidden prompt. Without a terminal there's no prompt, so it can only move a local setup that has rosters.
+// A saved key the API no longer recognizes gets replaced.
 func runCloudOn(ctx context.Context, out io.Writer) error {
-	if hasCloudKey() {
+	if hasCloudKey() && (os.Getenv("ROSTR_KEY") != "" || !savedKeyIsDead(ctx)) {
 		return errors.New("this machine is already in cloud mode")
 	}
 	local, err := readLocalSetup(ctx)
@@ -149,7 +150,7 @@ func runCloudOn(ctx context.Context, out io.Writer) error {
 // moveSetupToCloud generates a key and uploads the setup with it in one request. Only once that succeeds does it save
 // the key and delete the local database, so a failed upload leaves the local setup as it was.
 func moveSetupToCloud(ctx context.Context, out io.Writer, setup store.Setup) error {
-	if _, err := registerInCloud(ctx, setup); err != nil {
+	if err := registerInCloud(ctx, setup); err != nil {
 		return err
 	}
 	if len(setup.Rosters) == 0 {
@@ -165,27 +166,27 @@ func moveSetupToCloud(ctx context.Context, out io.Writer, setup store.Setup) err
 }
 
 // registerInCloud creates a cloud owner under a new key with setup uploaded in the same request, then saves the key
-// and deletes the local database. It returns the new key.
-func registerInCloud(ctx context.Context, setup store.Setup) (crypto.Key, error) {
+// and deletes the local database.
+func registerInCloud(ctx context.Context, setup store.Setup) error {
 	key, err := crypto.GenerateKey()
 	if err != nil {
-		return key, err
+		return err
 	}
 	cloud, err := newCloudStore(key) // registering warms its cache for this machine's first session
 	if err != nil {
-		return key, err
+		return err
 	}
 	if err := cloud.Register(ctx, setup); err != nil {
-		return key, fmt.Errorf("uploading to the rostr API failed, so your local setup is untouched: %w", err)
+		return fmt.Errorf("uploading to the rostr API failed, so your local setup is untouched: %w", err)
 	}
 
 	if err := saveCredentials(key); err != nil {
-		return key, fmt.Errorf("your setup is in the cloud, but saving its key failed (your local setup is untouched): %w", err)
+		return fmt.Errorf("your setup is in the cloud, but saving its key failed (your local setup is untouched): %w", err)
 	}
 	if err := removeLocalDatabase(); err != nil {
-		return key, fmt.Errorf("your setup is in the cloud and its key is saved, but deleting the local database failed: %w", err)
+		return fmt.Errorf("your setup is in the cloud and its key is saved, but deleting the local database failed: %w", err)
 	}
-	return key, nil
+	return nil
 }
 
 // joinCloudWithKey checks an existing key with the API, and saves it.
@@ -218,6 +219,20 @@ func joinCloudWithKey(ctx context.Context, out io.Writer, key crypto.Key) error 
 	return nil
 }
 
+// savedKeyIsDead reports whether the API doesn't recognize the saved key, as happens once its cloud setup is deleted.
+func savedKeyIsDead(ctx context.Context) bool {
+	key, err := loadCloudKey()
+	if err != nil {
+		return false
+	}
+	cloud, err := newCloudStore(key)
+	if err != nil {
+		return false
+	}
+	_, err = cloud.Settings(ctx)
+	return errors.Is(err, store.ErrUnauthorized)
+}
+
 // readLocalSetup reads the local database's whole setup, without creating the database if there isn't one.
 func readLocalSetup(ctx context.Context) (store.Setup, error) {
 	if _, err := os.Stat(paths.Database()); errors.Is(err, os.ErrNotExist) {
@@ -236,7 +251,19 @@ func saveCredentials(key crypto.Key) error {
 	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
 		return err
 	}
+	if err := backUpCredentials(); err != nil {
+		return err
+	}
 	return os.WriteFile(paths.Credentials(), []byte(key.String()+"\n"), 0o600)
+}
+
+// backUpCredentials moves a saved key to credentials.old before it's replaced or removed. Only a key the API rejected
+// gets replaced, and the API may only have rejected it because ROSTR_API_URL points at the wrong server, so it's kept.
+func backUpCredentials() error {
+	if err := os.Rename(paths.Credentials(), paths.Credentials()+".old"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // removeLocalDatabase deletes the local database and SQLite's files beside it.
@@ -247,15 +274,6 @@ func removeLocalDatabase() error {
 		}
 	}
 	return nil
-}
-
-// printNewKey shows a new cloud setup's key, at a terminal only so it stays out of agents' transcripts, and what it's for.
-func printNewKey(out io.Writer, key crypto.Key) {
-	fmt.Fprintf(out, "\nYour rostr key:\n\n  %s\n\n", styleBold.Render(key.String()))
-	fmt.Fprintln(out, "Keep it secret: it's how your machines find your setup, and it encrypts your tasks and repo names.")
-	fmt.Fprintln(out, "  • Another machine: run `rostr cloud on` there and paste it.")
-	fmt.Fprintln(out, "  • A cloud environment: set it as the ROSTR_KEY environment variable.")
-	fmt.Fprintf(out, "It's saved in %s, and `rostr config key` shows it again.\n", paths.Credentials())
 }
 
 func printKeySaved(out io.Writer) {

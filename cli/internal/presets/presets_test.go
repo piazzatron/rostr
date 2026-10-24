@@ -10,16 +10,16 @@ import (
 func TestFreeAgentsIsARandomMix(t *testing.T) {
 	site, _ := ByID(FreeAgentsID)
 	free := FreeAgents()
-	if len(free.ATeam) != len(site.ATeam) || len(free.BTeam) != len(site.BTeam) {
-		t.Fatalf("teams of %d and %d", len(free.ATeam), len(free.BTeam))
+	if len(free.Members) != len(site.Members) {
+		t.Fatalf("%d members, want %d", len(free.Members), len(site.Members))
 	}
-	if err := roster.ValidateCast(free.ATeam, free.BTeam, roster.EmojiOnly); err != nil {
+	if err := roster.ValidateCast(free.Members, roster.EmojiOnly); err != nil {
 		t.Fatal(err)
 	}
 	for range 10 {
-		if !slices.Equal(FreeAgents().ATeam, free.ATeam) {
+		if !slices.Equal(FreeAgents().Members, free.Members) {
 			return
 		}
 	}
-	t.Fatal("the same A team every time")
+	t.Fatal("the same cast every time")
 }

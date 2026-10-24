@@ -43,7 +43,7 @@ func TestWritesPushLiveCounts(t *testing.T) {
 
 	// Registering, creating a roster, and drafting within half a second make one push
 	call[settingsResponse](c, "POST", "/v1/register", map[string]any{"authToken": c.token}, http.StatusCreated)
-	createRoster(c, "work", members("Gandalf"), nil)
+	createRoster(c, "work", members("Gandalf"))
 	draftSessionNamed(c, c.session("s1"))
 	pushes.next(t)
 	pushes.none(t)

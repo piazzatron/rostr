@@ -17,7 +17,7 @@ func TestRequestLog(t *testing.T) {
 		Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
 	c := &client{t: t, handler: handler, token: newToken()}
 	call[settingsResponse](c, "POST", "/v1/register", map[string]any{"authToken": c.token}, http.StatusCreated)
-	call[rosterResponse](c, "POST", "/v1/rosters", map[string]any{"name": "logs", "aTeam": members("Ada", "Bo")}, http.StatusCreated)
+	call[rosterResponse](c, "POST", "/v1/rosters", map[string]any{"name": "logs", "members": members("Ada", "Bo")}, http.StatusCreated)
 	call[draftResponse](c, "POST", "/v1/agents/draft", map[string]any{"session": c.session("s")}, http.StatusOK)
 	callError(c, "GET", "/v1/rosters/nope", nil, http.StatusNotFound, "roster_not_found")
 	c.do("GET", "/health", nil)

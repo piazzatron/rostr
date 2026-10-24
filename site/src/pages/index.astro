@@ -84,18 +84,18 @@ const COMMAND_GROUP_CARDS = [
 
 // The "Build on it" dashboard example uses the Smash Bros roster
 const DASHBOARD_ROSTER = PRESET_ROSTERS.find((roster) => roster.id === "smash-bros")!;
-// What GET /v1/stats gives a dashboard: each drafted agent's name, emoji, team, task, repo, and when it was drafted
-// (here, minutes ago), and everyone idle
+// What GET /v1/stats gives a dashboard: each drafted agent's name, emoji, task, repo, and when it was drafted (here,
+// minutes ago), and everyone idle
 const DASHBOARD_MEMBERS = [
-  { emoji: "🍄", name: "Mario", team: "A", task: "Ship the onboarding redesign", repo: "acme/web", minutes: 25 },
-  { emoji: "🗡️", name: "Link", team: "A", task: "Fix flaky checkout test", repo: "acme/api", minutes: 8 },
-  { emoji: "⭐", name: "Kirby", team: "A", task: "Upgrade the image pipeline", repo: "acme/api", minutes: 124 },
-  { emoji: "🚀", name: "Samus", team: "A", task: "Add rate limiting to the API", repo: "acme/billing", minutes: 50 },
+  { emoji: "🍄", name: "Mario", task: "Ship the onboarding redesign", repo: "acme/web", minutes: 25 },
+  { emoji: "🗡️", name: "Link", task: "Fix flaky checkout test", repo: "acme/api", minutes: 8 },
+  { emoji: "⭐", name: "Kirby", task: "Upgrade the image pipeline", repo: "acme/api", minutes: 124 },
+  { emoji: "🚀", name: "Samus", task: "Add rate limiting to the API", repo: "acme/billing", minutes: 50 },
 ];
-const DASHBOARD_IDLE = [
-  ...DASHBOARD_ROSTER.aTeam.map((member) => ({ member, team: "A" })),
-  ...DASHBOARD_ROSTER.bTeam.map((member) => ({ member, team: "B" })),
-].filter(({ member }) => !DASHBOARD_MEMBERS.some((working) => member.endsWith(` ${working.name}`)));
+// The idle members in the order they'd be drafted: here no one else has been drafted yet, so roster order
+const DASHBOARD_IDLE = DASHBOARD_ROSTER.members.filter(
+  (member) => !DASHBOARD_MEMBERS.some((working) => member.endsWith(` ${working.name}`)),
+);
 // Tasks the demo deals out when an agent's task changes or a new one is drafted
 const DASHBOARD_TASKS = [
   "Write the invoices migration",
@@ -144,7 +144,6 @@ const LIST_JSON_EXAMPLE = `{
         {
           "name": "Gandalf",
           "emoji": "🧙",
-          "team": "A",
           "task": "Fix auth redirect loop",
           "repo": "acme/api",
           "draftedAt": "2026-10-19T03:12:00Z"
@@ -153,8 +152,7 @@ const LIST_JSON_EXAMPLE = `{
       "idle": [
         {
           "name": "Aragorn",
-          "emoji": "👑",
-          "team": "A"
+          "emoji": "👑"
         }
       ]
     }
@@ -254,8 +252,8 @@ const LIST_JSON_EXAMPLE = `{
     <section class="section">
       <h2>Squad up</h2>
       <p class="section-lede">
-        Pick a pre-built roster or <code>rostr assemble</code> your own. Every roster has an <span class="team-label team-a">A team</span> and a{" "}
-        <span class="team-label team-b">B team</span>. Every agent gets its own emoji (which you can turn off).
+        Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
+        turn off).
       </p>
       <ul class="rosters">
         {HOME_GRID_ROSTERS.map((roster) => (
@@ -272,14 +270,10 @@ const LIST_JSON_EXAMPLE = `{
               <strong>{roster.name}</strong>
               <small>{roster.source}</small>
             </span>
-            <div class="roster-teams" role="tooltip">
-              <b>A team</b>
+            <div class="roster-members" role="tooltip">
+              <b>{roster.members.length} members</b>
               <div class="chips">
-                {roster.aTeam.map((member, index) => <span class="chip chip-a" style={`--i: ${index}`}>{member}</span>)}
-              </div>
-              <b>B team</b>
-              <div class="chips">
-                {roster.bTeam.map((member, index) => <span class="chip" style={`--i: ${index + 6}`}>{member}</span>)}
+                {roster.members.map((member) => <span class="chip">{member}</span>)}
               </div>
             </div>
           </li>
@@ -290,11 +284,12 @@ const LIST_JSON_EXAMPLE = `{
             <strong>Your own</strong>
             <small>Any list of names</small>
           </span>
-          <div class="roster-teams" role="tooltip">
-            <b>A team</b>
-            <div class="chips"><span class="chip chip-a" style="--i: 0">⭐ Your six favorites</span></div>
-            <b>B team</b>
-            <div class="chips"><span class="chip" style="--i: 1">🪑 Everyone else</span></div>
+          <div class="roster-members" role="tooltip">
+            <b>As many as you like</b>
+            <div class="chips">
+              <span class="chip">⭐ Your favorites</span>
+              <span class="chip">🪑 Everyone else</span>
+            </div>
           </div>
         </li>
       </ul>
@@ -302,13 +297,12 @@ const LIST_JSON_EXAMPLE = `{
         <a href="/rosters">See all rosters / submit your own →</a>
       </p>
 
-      <div class="cards team-cards">
+      <div class="cards roster-cards">
         <div class="card">
-          <h3>🅰️ A team, B team</h3>
+          <h3>🎚️ Pick your team size</h3>
           <p>
-            Twenty names are too many to get to know. <Rostr /> always drafts from your small{" "}
-            <span class="team-label team-a">A team</span> first, and only calls up the{" "}
-            <span class="team-label team-b">B team</span> when your starters are busy.
+            Twenty names are too many to get to know. Start with a team of a roster's best-known names (4, 8, or 16), or
+            take everyone. Then pick anyone else you'd rather have.
           </p>
         </div>
         <div class="card">
@@ -398,7 +392,6 @@ const LIST_JSON_EXAMPLE = `{
                   <div class="agent-top">
                     <span class="agent-emoji">{member.emoji}</span>
                     <strong class="agent-name">{member.name}</strong>
-                    <span class:list={["agent-team", { "agent-team-b": member.team === "B" }]}>{member.team} team</span>
                   </div>
                   <p class="agent-task">{member.task}</p>
                   <div class="agent-meta">
@@ -410,13 +403,11 @@ const LIST_JSON_EXAMPLE = `{
             </div>
             <div class="dashboard-bench">
               <span class="bench-label">On the bench</span>
-              {DASHBOARD_IDLE.map(({ member, team }) => (
-                <span class="chip" data-team={team}>{member}</span>
-              ))}
+              {DASHBOARD_IDLE.map((member) => <span class="chip">{member}</span>)}
             </div>
           </div>
         </div>
-        <figcaption>A team dashboard built on <code>rostr stats --json</code>.</figcaption>
+        <figcaption>A dashboard for your team, built on <code>rostr stats --json</code>.</figcaption>
       </figure>
       <div class="cards build-cards">
         <div class="card">
@@ -663,9 +654,9 @@ const LIST_JSON_EXAMPLE = `{
     window.addEventListener("scroll", showSlackNotificationAfterScroll, { passive: true });
     showSlackNotificationAfterScroll();
 
-    // Keep each roster's A team / B team popover on screen by nudging it left when it would overflow
+    // Keep each roster's members popover on screen by nudging it left when it would overflow
     document.querySelectorAll<HTMLElement>(".rosters li").forEach((tile) => {
-      const popover = tile.querySelector<HTMLElement>(".roster-teams");
+      const popover = tile.querySelector<HTMLElement>(".roster-members");
       if (!popover) return;
       // Measured a frame later, once the hover style has made the popover visible. Layout sizes (offsetLeft and
       // offsetWidth) ignore the fade-in's slide.
@@ -725,31 +716,27 @@ const LIST_JSON_EXAMPLE = `{
         replay(card, "is-updated");
       };
 
-      // The card's agent is released to the front of the bench, and a bench agent is drafted into the card: from the A
-      // team while any of them are free, as rostr does
+      // The bench is in draft order, so the agent drafted into the card is the first one: the free member drafted
+      // least recently, never-drafted first, as rostr does. The card's agent was just drafted, so they go back to the
+      // end of the bench.
       const swapAgent = (card: HTMLElement) => {
-        const chips = [...bench.querySelectorAll<HTMLElement>(".chip:not(.is-leaving)")];
-        const aTeam = chips.filter((chip) => chip.dataset.team === "A");
-        const incoming = pick(aTeam.length > 0 ? aTeam : chips);
+        const incoming = bench.querySelector<HTMLElement>(".chip:not(.is-leaving)");
+        if (!incoming) return;
         const [emoji, ...name] = (incoming.textContent ?? "").split(" ");
         const released = document.createElement("span");
         released.className = "chip";
-        released.dataset.team = part(card, "team").textContent?.startsWith("B") ? "B" : "A";
         released.textContent = `${part(card, "emoji").textContent} ${part(card, "name").textContent}`;
-        const team = incoming.dataset.team ?? "A";
 
         incoming.classList.add("is-leaving");
         card.classList.add("is-leaving");
         setTimeout(() => {
           incoming.remove();
-          bench.querySelector(".bench-label")!.after(released);
+          bench.append(released);
           replay(released, "is-new");
 
           const current = new Set(cards.map((other) => part(other, "task").textContent));
           part(card, "emoji").textContent = emoji;
           part(card, "name").textContent = name.join(" ");
-          part(card, "team").textContent = `${team} team`;
-          part(card, "team").classList.toggle("agent-team-b", team === "B");
           part(card, "task").textContent = pick(tasks.filter((task) => !current.has(task)));
           part(card, "repo").textContent = pick(repos);
           draftedAt.set(card, Date.now());

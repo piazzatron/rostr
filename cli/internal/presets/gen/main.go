@@ -36,23 +36,22 @@ func main() {
 
 var (
 	presetPattern = regexp.MustCompile(`(?s)emoji:\s*"([^"]*)",\s*id:\s*"([^"]*)",\s*name:\s*"([^"]*)",\s*` +
-		`source:\s*"([^"]*)",.*?aTeam:\s*\[([^\]]*)\],\s*bTeam:\s*\[([^\]]*)\]`)
+		`source:\s*"([^"]*)",.*?members:\s*\[([^\]]*)\]`)
 	idPattern     = regexp.MustCompile(`\bid:\s*"`)
 	stringPattern = regexp.MustCompile(`"([^"]*)"`)
 )
 
 // ParseRostersTS reads the preset list out of rosters.ts. It relies on the file's fixed field order (emoji, id,
-// name, source, ..., aTeam, bTeam) and fails if it finds a different number of presets than `id:` fields.
+// name, source, ..., members) and fails if it finds a different number of presets than `id:` fields.
 func ParseRostersTS(source string) ([]presets.Preset, error) {
 	var out []presets.Preset
 	for _, m := range presetPattern.FindAllStringSubmatch(source, -1) {
 		out = append(out, presets.Preset{
-			Emoji:  m[1],
-			ID:     m[2],
-			Name:   m[3],
-			Source: m[4],
-			ATeam:  parseMembers(m[5]),
-			BTeam:  parseMembers(m[6]),
+			Emoji:   m[1],
+			ID:      m[2],
+			Name:    m[3],
+			Source:  m[4],
+			Members: parseMembers(m[5]),
 		})
 	}
 	if want := len(idPattern.FindAllString(source, -1)); len(out) != want || want == 0 {
@@ -76,7 +75,7 @@ func render(all []presets.Preset) []byte {
 	b.WriteString("var all = []Preset{\n")
 	for _, p := range all {
 		fmt.Fprintf(&b, "{\nID: %q,\nName: %q,\nSource: %q,\nEmoji: %q,\n", p.ID, p.Name, p.Source, p.Emoji)
-		fmt.Fprintf(&b, "ATeam: %s,\nBTeam: %s,\n},\n", renderMembers(p.ATeam), renderMembers(p.BTeam))
+		fmt.Fprintf(&b, "Members: %s,\n},\n", renderMembers(p.Members))
 	}
 	b.WriteString("}\n")
 
