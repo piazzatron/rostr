@@ -2,6 +2,8 @@
 # Runs the end-to-end tests: starts Postgres and the API server with Docker Compose (as their own compose project, on
 # their own ports, so a dev stack is left alone), runs the tests in this folder against them with the real CLI, and
 # tears everything down, volumes included. Extra arguments go to `go test`, e.g. tests/run.sh -run TestFirstSetup.
+# With ROSTR_E2E_PREBUILT=1 it uses an image already built and tagged rostr-e2e-server instead of building one (CI builds
+# it with a layer cache first).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,7 +21,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker compose up -d --build --wait
+build=--build
+if [ "${ROSTR_E2E_PREBUILT:-}" = 1 ]; then
+  build=--no-build
+fi
+docker compose up -d "$build" --wait
 
 cd tests
 ROSTR_E2E_API_URL="http://localhost:$SERVER_PORT" \
