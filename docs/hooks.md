@@ -66,13 +66,15 @@ Same shape, with Codex's limits (`hook_codex.go`):
 
 Best-effort with a 1-second limit per command (`cli/internal/pane`). Whenever the agent is drafted, re-told, or
 renamed, rostr reports the display name to herdr (`herdr pane report-metadata --agent <claude|codex>
---display-agent`), or in tmux sets the pane option `@rostr` and renames a single-pane window. `SessionEnd` undoes
-both.
+--display-agent`), or in tmux sets the pane option `@rostr` and renames a single-pane window, even one the user
+named (a pane sharing its window shows the name in the title the agent sets). `SessionEnd` undoes both.
 
 A Codex hook run by the daemon doesn't know its pane, and the app-server protocol doesn't tie threads to clients. But
 rostr has just named the thread, and Codex's default terminal title is `<thread name> | <project>`. So rostr labels
 the one Codex pane in `herdr pane list` (else `tmux list-panes -a`) whose title shows the name as a whole word,
-retrying for up to a second while the title catches up. No match, or more than one, and it labels nothing.
+retrying for up to a second while the title catches up. It skips panes already labeled with the name, since a
+resting thread keeps its name in its title after the name is drafted again. No match, or more than one, and it labels
+nothing.
 `SessionEnd` clears the pane labeled with the released name. A custom `tui.terminal_title` needs `thread-name`.
 
 ## Upgrading

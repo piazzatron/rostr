@@ -31,7 +31,8 @@ const titleWait = time.Second
 
 // Label shows display on the session's pane: through herdr inside herdr, otherwise through tmux inside tmux. A Codex
 // hook that its shared daemon ran can't tell its pane from its environment, so it labels the one Codex pane whose
-// terminal title shows display, which is there because rostr names the Codex thread after the session.
+// terminal title shows display, which is there because rostr names the Codex thread after the session. It skips panes
+// already labeled display: a resting thread keeps its name in its title and label after the name is drafted again.
 func Label(ctx context.Context, agent Agent, display string) {
 	if paneEnvTrusted(agent) {
 		switch multiplexer() {
@@ -42,7 +43,7 @@ func Label(ctx context.Context, agent Agent, display string) {
 		}
 		return
 	}
-	titled := func(title, _ string) bool { return showsName(title, display) }
+	titled := func(title, label string) bool { return label != display && showsName(title, display) }
 	switch where, id := findPane(ctx, agent, titled, titleWait); where {
 	case herdr:
 		herdrLabel(ctx, id, agent, display)
