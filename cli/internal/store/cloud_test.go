@@ -196,7 +196,7 @@ func TestCloudMapsAPIErrors(t *testing.T) {
 	respond(401, "unauthorized")
 	var apiErr *APIError
 	if _, err := cloud.Settings(ctx); !errors.As(err, &apiErr) || apiErr.Code != "unauthorized" ||
-		err.Error() != "the rostr API doesn't recognize your rostr key" {
+		!errors.Is(err, ErrUnauthorized) || err.Error() != "the rostr API doesn't recognize your rostr key" {
 		t.Errorf("unauthorized: %v", err)
 	}
 	respond(409, "member_drafted")

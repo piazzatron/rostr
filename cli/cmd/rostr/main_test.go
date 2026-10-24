@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -859,6 +861,50 @@ func TestCloudModeWithoutTheAPI(t *testing.T) {
 	if out := s.ok(s.home, nil, "presets"); !strings.HasPrefix(out, "fellowship") || !strings.Contains(out, "free-agents") {
 		t.Fatalf("presets: %s", out)
 	}
+}
+
+func TestCloudModeWithADeadKey(t *testing.T) {
+	// An API that recognizes no key, as when the key's cloud setup has been deleted
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"error": {"code": "unauthorized", "message": "Unknown key."}}`)
+	}))
+	defer api.Close()
+	apiURL := []string{"ROSTR_API_URL=" + api.URL}
+	envKey := append([]string{"ROSTR_KEY=" + unregisteredKey}, apiURL...)
+
+	// A machine in cloud mode with the hooks installed, whose saved key no longer works
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+	credentials := filepath.Join(s.home, ".config", "rostr", "credentials")
+	if err := os.WriteFile(credentials, []byte(unregisteredKey+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(s.home, ".config", "rostr", "rostr.db")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Errors say how to get going again, which depends on where the key comes from
+	s.fails(s.home, apiURL, "doesn't recognize your rostr key. Its cloud setup may have been deleted: run `rostr cloud on`", "stats")
+	s.fails(s.home, envKey, "set ROSTR_KEY to another key", "stats")
+
+	// cloud on replaces a dead saved key (here, without a terminal, it stops at having nothing to move), but not ROSTR_KEY
+	s.fails(s.home, apiURL, "no local rosters to move", "cloud", "on")
+	s.fails(s.home, envKey, "already in cloud mode", "cloud", "on")
+
+	// uninstall has no cloud setup to delete, so it cleans up this machine
+	out := s.ok(s.home, apiURL, "uninstall", "--yes")
+	if !strings.Contains(out, "no cloud setup left to delete") || !strings.Contains(out, "Removed hooks in") {
+		t.Fatalf("uninstall: %s", out)
+	}
+	if _, err := os.Stat(credentials); !os.IsNotExist(err) {
+		t.Fatalf("credentials still there: %v", err)
+	}
+	// The API may have rejected the key only because it was the wrong server, so the key is kept
+	if old, _ := os.ReadFile(credentials + ".old"); string(old) != unregisteredKey+"\n" {
+		t.Fatalf("credentials.old: %q", old)
+	}
+	s.fails(s.home, nil, "No rosters yet", "stats")
 }
 
 func TestCodexHooks(t *testing.T) {

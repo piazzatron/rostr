@@ -53,8 +53,8 @@ func NewCloud(baseURL string, key crypto.Key) (*Cloud, error) {
 	}, nil
 }
 
-// APIError is an error response from the rostr API. It wraps ErrNotFound, ErrNameTaken, or ErrNoRosters for the codes
-// that mean those.
+// APIError is an error response from the rostr API. It wraps ErrNotFound, ErrNameTaken, ErrNoRosters, or
+// ErrUnauthorized for the codes that mean those.
 type APIError struct {
 	Status  int
 	Code    string
@@ -83,6 +83,7 @@ var apiErrorKinds = map[string]error{
 	"not_drafted":      ErrNotFound,
 	"roster_exists":    ErrNameTaken,
 	"no_rosters":       ErrNoRosters,
+	"unauthorized":     ErrUnauthorized,
 }
 
 func (c *Cloud) Close() error {
