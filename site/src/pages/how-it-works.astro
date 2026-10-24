@@ -185,14 +185,21 @@ import Rostr from "../components/Rostr.astro";
       The title tool is also the only option in Remote Control and cloud sessions, where a hook's title doesn't show up
       at all (a <a href="https://github.com/anthropics/claude-code/issues/104473">known Claude Code bug</a>).
     </p>
-    <h3>Why the call's position changes</h3>
+    <h3>When in the reply the title gets set</h3>
     <p>
-      Any tool call normally makes Claude reply again, so a title call would leave one more message after your answer.
-      In Local sessions, the agent makes the call at the end of its answer, and <Rostr />'s PostToolUse hook ends the
-      turn right after it. Remote Control and cloud sessions show Claude's progress updates, and an answer written just
-      before a tool call can show up there twice, so the agent makes the call first and the answer ends the turn as
-      usual.
+      After any tool call, Claude normally writes another message, so a title call could leave an extra message after
+      your answer. To avoid that:
     </p>
+    <ul class="terse-list">
+      <li>
+        <strong>Local sessions:</strong> the agent answers first and sets the title last. <Rostr />'s PostToolUse hook
+        then ends the turn, so your answer stays the last message.
+      </li>
+      <li>
+        <strong>Remote Control and cloud sessions:</strong> the agent sets the title first, then answers. Setting it last
+        doesn't work there, because those apps can show the answer twice.
+      </li>
+    </ul>
   </section>
 
   <section class="section">
