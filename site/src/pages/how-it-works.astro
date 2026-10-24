@@ -78,6 +78,12 @@ import Rostr from "../components/Rostr.astro";
       Slack messages), to keep the name out of code and commits, and to run <code>rostr task</code> when its work
       changes. After compaction, the hook tells the agent again, with the same name.
     </p>
+    <p>
+      Every name belongs to a session ID from the agent. Hooks get it in their input, but a command the agent runs
+      itself, like <code>rostr task</code> or <code>rostr stats</code>, needs another way to know which session it's in.
+      In Claude Code, the start hook sets <code>ROSTR_SESSION</code> to the session's ID in the environment of every
+      command the agent runs. Codex already sets <code>CODEX_THREAD_ID</code>, so <Rostr /> reads that instead.
+    </p>
   </section>
 
   <section class="section">
