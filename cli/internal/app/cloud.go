@@ -209,7 +209,6 @@ func joinCloudWithKey(ctx context.Context, out io.Writer, key crypto.Key) error 
 	if err := removeLocalDatabase(); err != nil {
 		return err
 	}
-	cloud.RefreshNext(ctx) // warms the cache, so this machine's first session drafts without waiting on the API
 	if settings.DefaultRoster == "" {
 		fmt.Fprintln(out, "This machine is in cloud mode now. Run `rostr assemble` to make your first roster.")
 	} else {

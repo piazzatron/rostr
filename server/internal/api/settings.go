@@ -11,23 +11,25 @@ import (
 type settingsResponse struct {
 	DefaultRoster *string `json:"defaultRoster"`
 	DraftExpiry   string  `json:"draftExpiry"`
-	AutoDraft     bool    `json:"autoDraft"`
 }
 
 // settingsPatch changes the fields that are set and leaves the rest alone.
 type settingsPatch struct {
 	DefaultRoster *string `json:"defaultRoster"`
 	DraftExpiry   *string `json:"draftExpiry"`
-	AutoDraft     *bool   `json:"autoDraft"`
 }
 
+// loadSettings is the owner's settings, or 401 when there's no such owner.
 func loadSettings(ctx context.Context, q querier, ownerID string) (settingsResponse, error) {
 	var resp settingsResponse
 	var expiryHours int
 	err := q.QueryRow(ctx, `
-		select r.name, (extract(epoch from o.draft_expiry) / 3600)::int, o.auto_draft
+		select r.name, (extract(epoch from o.draft_expiry) / 3600)::int
 		from owners o left join rosters r on r.id = o.default_roster_id
-		where o.id = $1`, ownerID).Scan(&resp.DefaultRoster, &expiryHours, &resp.AutoDraft)
+		where o.id = $1`, ownerID).Scan(&resp.DefaultRoster, &expiryHours)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return resp, errUnauthorized
+	}
 	resp.DraftExpiry = formatExpiryHours(expiryHours)
 	return resp, err
 }
@@ -54,11 +56,6 @@ func applySettings(ctx context.Context, tx pgx.Tx, ownerID string, patch setting
 		}
 	}
 
-	if patch.AutoDraft != nil {
-		if _, err := tx.Exec(ctx, `update owners set auto_draft = $2 where id = $1`, ownerID, *patch.AutoDraft); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -124,6 +121,13 @@ func (s *Server) handleListLinks(w http.ResponseWriter, r *http.Request, ownerID
 	if err != nil {
 		return err
 	}
+	if len(links) == 0 {
+		if missing, err := ownerMissing(r.Context(), s.db, ownerID); err != nil {
+			return err
+		} else if missing {
+			return errUnauthorized
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"links": append([]linkResponse{}, links...)})
 	return nil
 }
@@ -137,7 +141,7 @@ func (s *Server) handleGetLink(w http.ResponseWriter, r *http.Request, ownerID s
 		select `+linkColumns+` from project_links l join rosters r on r.id = l.roster_id
 		where l.owner_id = $1 and l.repo_hash = $2`, ownerID, repoHash))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return errLinkNotFound
+		return orUnauthorized(r.Context(), s.db, ownerID, errLinkNotFound)
 	}
 	if err != nil {
 		return err
@@ -201,7 +205,7 @@ func (s *Server) handleDeleteLink(w http.ResponseWriter, r *http.Request, ownerI
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return errLinkNotFound
+		return orUnauthorized(r.Context(), s.db, ownerID, errLinkNotFound)
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil

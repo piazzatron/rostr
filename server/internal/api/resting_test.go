@@ -115,3 +115,27 @@ func TestDraftPrefersAFreeNameToAResting(t *testing.T) {
 		t.Fatal("the resting draft was released while a name was free")
 	}
 }
+
+// A session drafted when it starts, before any prompt, rests like one whose turn ended at the draft: its name can be
+// taken 15 minutes later if it never gets a prompt, and its first turn makes it working.
+func TestIdleDraftsRestUntilTheirFirstTurn(t *testing.T) {
+	t.Parallel()
+	c := newOwner(t)
+	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	opened, prompted := c.session("opened"), c.session("prompted")
+	draft(c, map[string]any{"session": opened, "idle": true})   // Gandalf
+	draft(c, map[string]any{"session": prompted, "idle": true}) // Frodo
+	if restingSinceOf(c, "Gandalf") != nil {
+		t.Fatal("an idle draft rests right away")
+	}
+	execSQL(t, `update drafts set turn_ended_at = turn_ended_at - interval '20 minutes' where session_id = any($1)`,
+		[]string{opened, prompted})
+	turn(c, prompted, false, time.Now())
+
+	if restingSinceOf(c, "Gandalf") == nil || restingSinceOf(c, "Frodo") != nil {
+		t.Fatal("want the never-prompted session resting and the prompted one working")
+	}
+	if d := draftSessionNamed(c, c.session("new")); displayOf(d) != "Gandalf" {
+		t.Fatalf("drafted %s, want the never-prompted session's Gandalf", displayOf(d))
+	}
+}

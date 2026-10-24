@@ -403,8 +403,8 @@ func apiGet(t *testing.T, path, token string, out any) int {
 	return resp.StatusCode
 }
 
-// waitFor polls cond for up to timeout, failing the test if it never holds. Fast drafts confirm with the server in
-// the background, so what the server shows lags a hook's answer by a moment.
+// waitFor polls cond for up to timeout, failing the test if it never holds. Hooks do some of their work in the
+// background (drafting ahead of a first prompt, sending its task), so what the server shows lags a hook by a moment.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -414,11 +414,6 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-}
-
-// nextStatePath is the machine's cached next state, which Fast drafts pick from.
-func (m *machine) nextStatePath() string {
-	return filepath.Join(m.home, ".cache", "rostr", "cloud", "next.json")
 }
 
 // unique makes a string no other test (or earlier run) uses, so database-wide checks only see this test's data.

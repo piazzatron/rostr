@@ -13,9 +13,9 @@ API server write ──▶ POST /update ──▶ LiveCounts Durable Object ─�
    (Postgres)        (shared secret)   (stores the counts)            (browsers on getrostr.sh)
 ```
 
-1. **A write commits.** Every owner write (anything that runs in `withOwnerTx`: drafts, keep-alives, releases, task
-   changes, roster creates, edits, cast replacements, disbands, settings, links, and the lazy expiry inside it) and
-   every registration asks for a push. Nearly all of them can change the counts, and the rest cost one cheap query.
+1. **A write commits.** Every owner write (drafts, keep-alives, releases, task changes, roster creates, edits, cast
+   replacements, disbands, settings, links), every registration, and every run of the background sweep that benches
+   an expired draft asks for a push. Nearly all of them can change the counts, and the rest cost one cheap query.
 2. **Pushes are coalesced.** The first write schedules a push 500ms later; writes in that window ride along. The push
    recomputes the counts with a single query and sends `POST {LIVE_URL}/update` with a 3-second timeout. It runs in the
    background, so a slow or failing Worker never delays a write; failures are logged and the next write tries again.
@@ -27,8 +27,7 @@ API server write ──▶ POST /update ──▶ LiveCounts Durable Object ─�
    counts up or down to each new pair. If the socket fails or closes, it retries after 5s, 10s, 30s, then every 60s.
    With no drafted agents (or no counts yet), the bar stays hidden.
 
-Counts can drift between writes: a draft that passes its owner's expiry stops counting without a write, so the
-sockets show it until the next write anywhere.
+A draft that passes its owner's expiry stops counting when the sweep benches it, within 15 minutes.
 
 ## Configuration
 

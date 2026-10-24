@@ -6,27 +6,29 @@ In local mode (the default, when there's no rostr key), everything lives in one 
 `~/.config/rostr/rostr.db`. SQLite is compiled into the CLI (the pure-Go `modernc.org/sqlite`), so there's nothing to
 install. The schema mirrors the [server schema](server-schema.md) minus owners and encryption: tasks and repo names
 are plaintext here, and `rostr cloud on` encrypts and fingerprints them as it uploads. In cloud mode everything
-lives on the API instead; `credentials` and a cache are kept on disk.
+lives on the API instead; `credentials`, the machine's auto-draft setting, and a cache are kept on disk.
 
 ```
 ~/.config/rostr/
   rostr.db         rosters, project links, drafts, and settings
   credentials      your cloud key (only readable by you), in cloud mode
-  machine-id       a random ID for this machine, sent to the API so it reserves this machine's next picks
+  auto-draft       "on" or "off": this machine's auto-draft setting, in cloud mode (local mode keeps it in rostr.db);
+                   ROSTR_AUTO_DRAFT overrides it
 ~/.cache/rostr/
   keepalive/<session>       the session's last keep-alive bump (the file's modification time)
   hooks/<agent>             the fingerprint of the hooks rostr last installed for claude-code or codex, so a
                             session start can tell when an upgrade changed them (see cli-spec.md, Upgrading)
-  turns/<session>           when the session's last turn ended, and its name and task then, from the Stop hook;
-                            the next prompt or tool call reads it to tell whether the session rested; it's deleted
-                            once the next turn's start is recorded
-  cloud/next.json           cloud mode: the next state to draft from (which roster each project uses, who's idle,
-                            auto-draft), as the API last returned it, plus this machine's unconfirmed picks
-  cloud/sessions/<session>.json   cloud mode: the session's own draft, so later prompts make no call
+  turns/<session>           when the session's last turn ended, and its name and task then, from the Stop hook (or,
+                            for a session drafted when it started, the draft); the next prompt or tool call reads it
+                            to tell whether the session rested; it's deleted once the next turn's start is recorded
+  cloud/sessions/<session>.json   cloud mode: the session's own draft, so later prompts make no call, and whether
+                            the agent has been told its name yet (a session drafted when it starts learns it on its
+                            first prompt)
 ```
 
-The cloud cache is how hooks draft without waiting on the API; see [drafting-latency.md](drafting-latency.md). It
-holds nothing that isn't on the server: delete it and the next write rebuilds it.
+The session cache is how a session drafted when it starts gets its name on its first prompt without waiting on the
+API; see [drafting-latency.md](drafting-latency.md). It holds nothing that isn't on the server: delete it and the next
+prompt asks the server.
 
 ## Schema
 

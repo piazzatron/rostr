@@ -48,6 +48,7 @@ func main() {
 			RequestsPerMinute:    envInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 300),
 			LiveURL:              os.Getenv("LIVE_URL"),
 			LiveSecret:           os.Getenv("LIVE_SECRET"),
+			SweepEvery:           15 * time.Minute,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

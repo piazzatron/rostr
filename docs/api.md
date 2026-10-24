@@ -12,15 +12,12 @@ endpoint is **internal**: only the CLI calls it, and it can change with the CLI.
   `400`. Responses are `application/json`.
 - **Auth:** `Authorization: Bearer <auth token>` on every endpoint except `POST /v1/register` and `GET /health`. The
   auth token is the 32-byte HKDF output with info `auth` (see [Cloud and keys](cli-spec.md#cloud-and-keys)),
-  base64url without padding (43 characters). The server stores only the hex SHA-256 of the 32 decoded bytes.
+  base64url without padding (43 characters). The server stores only the hex SHA-256 of the 32 decoded bytes, which is
+  the owner's ID, so a request needs no lookup to know its owner. A token with no owner (never registered, or its owner
+  disbanded their last roster) gets `401`.
 - **Ciphertext** (marked 🔒 below): AES-256-GCM output, standard base64 with padding: the 12-byte nonce, then the
   ciphertext and 16-byte tag. Decoded length must be 28 bytes to 16 KiB. The server stores and returns these bytes
   as-is and never decrypts them.
-- **Machines:** the CLI sends its random machine ID as `X-Rostr-Machine` (1 to 64 letters, digits, underscores or
-  hyphens) on every call. The server uses it to hold a reservation on the member that machine will draft next, one
-  per roster (see [Reservations](#reservations)). Without the header nothing is reserved for the caller. The CLI
-  leaves it out in Claude Code cloud sessions (`CLAUDE_CODE_REMOTE=true`): each container drafts once and is thrown
-  away, so a reservation would only hold a name for a day.
 - **Fingerprints** (`repoHash`): HMAC-SHA256 of the lowercased `owner/repo` with the fingerprint key, as 64
   lowercase hex characters.
 - **Names:** roster and member names match ignoring case and accents (`eowyn` finds `Éowyn`), in paths and bodies.
@@ -130,10 +127,11 @@ sends CORS headers, so browsers can't call them.
 **Settings**
 
 ```json
-{ "defaultRoster": "work", "draftExpiry": "7d", "autoDraft": true }
+{ "defaultRoster": "work", "draftExpiry": "7d" }
 ```
 
-`defaultRoster` is `null` when there are no rosters.
+`defaultRoster` is `null` when there are no rosters. Auto-draft isn't here: it's a setting of each machine, kept by the
+CLI (see [`rostr config`](cli-spec.md#rostr-config)).
 
 **Link**: a project's roster.
 
@@ -141,59 +139,30 @@ sends CORS headers, so browsers can't call them.
 { "repoHash": "3f2a…64 hex", "repo": "🔒 base64", "roster": "work" }
 ```
 
-**Next**: what a machine needs to draft on its own before telling the server (see
-[drafting-latency.md](drafting-latency.md)). Every draft-changing response (`draft`, `keepalive`, `bench`, `task`)
-carries it as `next`, and `GET /v1/next` returns it alone.
-
-```json
-{
-  "autoDraft": true,
-  "defaultRoster": "work",
-  "links": [{ "repoHash": "3f2a…", "roster": "games" }],
-  "rosters": [
-    { "name": "work", "emojiMode": "on", "idle": [{ "name": "Frodo", "emoji": "💍", "team": "a" }] }
-  ]
-}
-```
-
-`rosters` and their `idle` lists are as in `GET /v1/stats`, except that members other machines hold reservations
-on are left out of `idle`; `reserved` is the member this machine holds, or `null`. `links` carry no ciphertext.
-
-### Reservations
-
-A machine that drafts from its cached next state announces a member before the server knows. So that two machines
-can't announce the same one, the server holds a reservation for each machine, per roster, on the member it will take
-next: the free member drafted least recently, A team first, never a numbered copy. Reservations are made and
-extended, for 24 hours, by every response that carries `next` (`GET /v1/next` and the draft-changing agent
-endpoints), expire on their own, and are dropped when their member's name is drafted by anyone. For other
-machines a reserved member counts as busy (copy 1): their drafts skip it, and their `next` doesn't list it as idle.
-A draft from the holding machine without `preferred` takes its reserved member.
-
 ## Endpoints
 
 | Method and path | Auth | CLI use |
 |---|---|---|
 | `GET /health` | none | Deploy and compose healthchecks |
 | `POST /v1/register` | none | `cloud on` (new setup), `assemble --cloud` |
-| `GET /v1/stats` | bearer, **public** | `stats`, finding an agent by name (`bench`, `task`), dashboards |
+| `GET /v1/stats` | bearer, **public** | `stats`, every roster's cast, finding an agent by name (`bench`, `task`), dashboards |
 | `POST /v1/rosters` | bearer | `assemble` (new roster) |
-| `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `stats`, `edit`, `disband` confirmation, `config emoji` |
+| `GET /v1/rosters/{name}` | bearer | Reading a roster's cast and counts: `edit`, `disband` confirmation, `config emoji` |
 | `PUT /v1/rosters/{name}` | bearer | `edit`, `config emoji` |
 | `PUT /v1/rosters/{name}/cast` | bearer | `assemble` (replace a cast) |
 | `DELETE /v1/rosters/{name}` | bearer | `disband` |
-| `GET /v1/settings` | bearer | `config`, the hooks' auto-draft check; checking a pasted key |
-| `PATCH /v1/settings` | bearer | `config default`, `config expiry`, `config auto-draft` |
+| `GET /v1/settings` | bearer | `config`; checking a pasted key |
+| `PATCH /v1/settings` | bearer | `config default`, `config expiry` |
 | `GET /v1/links` | bearer | Listing links |
 | `GET /v1/links/{repoHash}` | bearer | Bare `link`; the project's roster for `edit` and `config emoji` |
 | `PUT /v1/links/{repoHash}` | bearer | `link` |
 | `DELETE /v1/links/{repoHash}` | bearer | `unlink` |
-| `POST /v1/agents/draft` | bearer | `draft`, the draft step, resume, `/draft` |
+| `POST /v1/agents/draft` | bearer | `draft`, drafting a session when it starts, the draft step, resume, `/draft` |
 | `POST /v1/agents/keepalive` | bearer | Prompt-hook keep-alive, compaction, resume with auto-draft off |
 | `POST /v1/agents/bench` | bearer | `bench`, `SessionEnd` |
 | `POST /v1/agents/task` | bearer | `task` |
 | `POST /v1/agents/turn` | bearer | The `Stop` hook, and the next prompt's hook: a session's turn ended or started |
 | `GET /v1/sessions/{session}` | bearer | Looking up a session's draft without bumping it (`task` without a name) |
-| `GET /v1/next` | bearer | Refreshing the local next state after a write whose response doesn't carry it |
 
 ### `GET /health`
 
@@ -222,7 +191,7 @@ Rate-limited per client IP.
         "createdAt": "2026-01-01T00:00:00Z"
       }
     ],
-    "settings": { "defaultRoster": "work", "draftExpiry": "7d", "autoDraft": true },
+    "settings": { "defaultRoster": "work", "draftExpiry": "7d" },
     "links": [{ "repoHash": "3f2a…", "repo": "🔒", "roster": "work" }],
     "drafts": [
       {
@@ -255,7 +224,8 @@ Rate-limited per client IP.
 
 ### `GET /v1/stats` (public, stable)
 
-Every roster with its drafted agents and idle members, in the shape of `rostr stats --json`.
+Every roster with its cast, drafted agents, and idle members, in the shape of `rostr stats --json`. It's everything
+`rostr stats` shows, in one call.
 
 ```json
 {
@@ -263,6 +233,10 @@ Every roster with its drafted agents and idle members, in the shape of `rostr st
     {
       "name": "work",
       "emojiMode": "on",
+      "aTeam": [{ "name": "Gandalf", "emoji": "🧙" }, { "name": "Frodo", "emoji": "💍" }],
+      "bTeam": [],
+      "isDefault": true,
+      "createdAt": "2026-10-20T09:57:14Z",
       "drafted": [
         {
           "name": "Gandalf 2",
@@ -280,6 +254,8 @@ Every roster with its drafted agents and idle members, in the shape of `rostr st
 }
 ```
 
+- `aTeam`, `bTeam`, `isDefault`, and `createdAt` are as in the [Roster](#objects) object. `isDefault` is whether it's
+  the owner's default roster.
 - Rosters are oldest first. `drafted` is oldest draft first; `idle` is in draft order: the order the next drafts
   take them (A team first, least recently drafted first).
 - In `drafted`, `name` includes the copy number (`Gandalf 2`), `emoji` is the one stored on the draft, and `team` is
@@ -289,7 +265,8 @@ Every roster with its drafted agents and idle members, in the shape of `rostr st
 - `restingSince` is when the agent's session finished its last turn, once it has been resting: the turn ended at
   least 15 minutes ago and no new one has started. It's `null` while the agent is working or rested less than that.
   A draft takes a resting agent's name only when no name is free (see `POST /v1/agents/draft`).
-- Drafts past the owner's expiry are left out, even before a write releases them.
+- A draft not seen within its owner's `draftExpiry` is benched by the server's background sweep, which runs every
+  15 minutes, so it can still be listed for up to 15 minutes past its expiry.
 - `drafted` and `idle` are `[]` when empty, never `null`.
 - `task` and `repo` are ciphertext; everything else is plaintext, so a "who's busy" widget needs no key.
 
@@ -377,35 +354,31 @@ Links a project, replacing any existing link.
 ### `POST /v1/agents/draft`
 
 ```json
-{ "session": "5f0c…", "roster": "work", "repoHash": "3f2a…", "repo": "🔒", "task": "🔒", "preferred": "Ginny", "avoid": ["Frodo"] }
+{ "session": "5f0c…", "roster": "work", "repoHash": "3f2a…", "repo": "🔒", "task": "🔒", "idle": true }
 ```
 
 Only `session` (1 to 256 bytes) is required. `roster` is the `--roster` flag. `repoHash` and `repo` (the current
-project) come together or not at all. `task` is the placeholder or `--task`. `preferred` is a member the CLI already
-told the session it is, picked from its cached next state; `avoid` (at most 200 names) is the members it has told
-other sessions but not confirmed yet.
+project) come together or not at all. `task` is the placeholder or `--task`. `idle` means the session hasn't had a turn
+yet: the CLI drafts a session when it starts, ahead of its first prompt. An idle draft counts as a turn that ended at
+the draft, so a session opened and never prompted rests after 15 minutes (see `POST /v1/agents/turn`) and its name can
+be taken.
 
-In one transaction, holding the owner's lock:
+A draft reads what it needs in one round trip to the database, picks the member, and writes the draft in a second. It
+takes no database lock: the unique indexes on active drafts (one per name and copy, one per session) stop two drafts
+from taking the same name or session, and a draft whose write loses that race starts over. Drafts for one owner on one
+server instance take turns.
 
-1. Release the owner's drafts not seen within `draftExpiry`, and delete drafts released more than 7 days ago.
-2. **Same session:** if the session has an active draft in any of the owner's rosters, bump its last-seen time, set
+1. **Same session:** if the session has an active draft in any of the owner's rosters, bump its last-seen time, set
    `task` if one was sent, and return it.
-3. **Resume:** if the session had a draft before, its member is still in that roster's cast, and that member and
+2. **Resume:** if the session had a draft before, its member is still in that roster's cast, and that member and
    copy are free, draft them again in the same roster, with the new `repo` and `task` if sent, or the old ones if not.
-   With `preferred`, this applies only when the preferred member is who the session had.
-4. **Otherwise**, pick the roster: `roster` if sent, else the project's link for `repoHash`, else the default.
-   - With `preferred` naming a member of its cast, or else with the member this machine holds a reservation on:
-     draft them if their name is free, else their lowest free copy (`Ginny 2`), so the session keeps a name it
-     recognizes.
-   - Else draft the free member drafted least recently, A team first, leaving out members other machines hold
-     reservations on and `avoid`.
-   - If all are busy, held or avoided, take the name (copy 1) of the member who has rested longest: their draft is
-     benched and the new session gets the member, so the resting session loses the name (see
-     `POST /v1/agents/turn`).
-   - With no one resting, a free copy 2 (`avoid` included), then 3, and so on.
-   Then hold a reservation for the machine on its next pick in every roster.
+3. **Otherwise**, pick the roster: `roster` if sent, else the project's link for `repoHash`, else the default.
+   - Draft the free member drafted least recently, A team first.
+   - If all are busy, take the name (copy 1) of the member who has rested longest: their draft is benched and the new
+     session gets the member, so the resting session loses the name (see `POST /v1/agents/turn`).
+   - With no one resting, a free copy 2, then 3, and so on.
 
-**`200`** with the Draft, plus `next`. Errors: `400`, `404 roster_not_found`, `404 no_rosters`.
+**`200`** with the Draft. Errors: `400`, `401`, `404 roster_not_found`, `404 no_rosters`.
 
 ### `POST /v1/agents/keepalive`
 
@@ -413,10 +386,9 @@ In one transaction, holding the owner's lock:
 { "session": "5f0c…" }
 ```
 
-Steps 1 to 3 of drafting, never step 4: it bumps the session's active draft, or, if it expired, reclaims the same
+Steps 1 and 2 of drafting, never step 3: it bumps the session's active draft, or, if it expired, reclaims the same
 member when they're free. It never gives the session a different member, so the hourly prompt-hook keep-alive and the
-compaction re-tell use it. **`200`** with the Draft plus `next`, or **`404 not_drafted`**, meaning the session stays
-unnamed.
+compaction re-tell use it. **`200`** with the Draft, or **`404 not_drafted`**, meaning the session stays unnamed.
 
 ### `POST /v1/agents/bench`
 
@@ -433,7 +405,7 @@ Or by name, across all the owner's rosters, optionally narrowed with `roster` (`
 ```
 
 Send exactly one of `session` and `name`. A name matches the drafted display name (`Gandalf`, or `Gandalf 2` for a
-copy), ignoring case and accents. **`200`** with the benched Draft plus `next`. Errors: `400`, `404 not_drafted` (nothing to
+copy), ignoring case and accents. **`200`** with the benched Draft. Errors: `400`, `404 not_drafted` (nothing to
 bench, for example after `disband`; the CLI treats it as done), `404 roster_not_found`, `409 ambiguous_name` (with
 `rosters`).
 
@@ -445,7 +417,7 @@ The same target as bench (`session`, or `name` with optional `roster`), plus the
 { "session": "5f0c…", "task": "🔒" }
 ```
 
-Sets the task and bumps last-seen. **`200`** with the Draft plus `next`. Errors: as for bench.
+Sets the task and bumps last-seen. **`200`** with the Draft. Errors: as for bench.
 
 ### `POST /v1/agents/turn`
 
@@ -462,7 +434,3 @@ has no active draft, as when another session took its name while it rested.
 ### `GET /v1/sessions/{session}`
 
 The session's active draft, without bumping it. **`200`** with the Draft, or **`404 not_drafted`**.
-
-### `GET /v1/next`
-
-Holds (or extends) the machine's reservations, then returns the Next object. **`200`**.

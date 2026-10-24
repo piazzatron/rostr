@@ -14,9 +14,7 @@ func queryLiveCounts(ctx context.Context, db querier) (liveCounts, error) {
 	var counts liveCounts
 	err := db.QueryRow(ctx, `
 		with active as (
-		  select d.roster_id, d.member_name, d.copy
-		  from drafts d join owners o on o.id = d.owner_id
-		  where d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry
+		  select d.roster_id, d.member_name, d.copy from drafts d where d.benched_at is null
 		)
 		select
 		  (select count(*) from active),

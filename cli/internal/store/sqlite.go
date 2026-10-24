@@ -497,6 +497,19 @@ func (s *SQLite) SessionDraft(ctx context.Context, sessionID string) (*Draft, er
 	return out, err
 }
 
+func (s *SQLite) Stats(ctx context.Context) (Stats, error) {
+	rosters, err := s.Rosters(ctx)
+	if err != nil {
+		return Stats{}, err
+	}
+	drafts, err := s.ActiveDrafts(ctx)
+	if err != nil {
+		return Stats{}, err
+	}
+	settings, err := s.Settings(ctx)
+	return Stats{Rosters: rosters, Drafts: drafts, DefaultRoster: settings.DefaultRoster}, err
+}
+
 func (s *SQLite) ActiveDrafts(ctx context.Context) ([]Draft, error) {
 	var out []Draft
 	err := s.write(ctx, func(tx *sql.Tx) error {
@@ -991,6 +1004,9 @@ func readSettings(ctx context.Context, q querier) (Settings, error) {
 		case "draft_expiry":
 			settings.Expiry = value
 		}
+	}
+	if on, ok := autoDraftOverride(); ok {
+		settings.AutoDraft = on
 	}
 	return settings, rows.Err()
 }

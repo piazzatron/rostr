@@ -26,6 +26,7 @@ type Config struct {
 	RequestsPerMinute    int    // per auth token
 	LiveURL              string // the live Worker's base URL; nothing is pushed unless both it and LiveSecret are set
 	LiveSecret           string
+	SweepEvery           time.Duration // how often the background sweep expires and prunes drafts; 0 runs none
 }
 
 // Server serves the rostr API.
@@ -33,6 +34,7 @@ type Server struct {
 	db                  *pgxpool.Pool
 	registrationLimiter *rateLimiter
 	requestLimiter      *rateLimiter
+	draftLocks          ownerLocks
 	live                *livePusher // nil when live counts are off
 }
 
@@ -45,6 +47,9 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 	}
 	if cfg.LiveURL != "" && cfg.LiveSecret != "" {
 		s.live = &livePusher{url: cfg.LiveURL, secret: cfg.LiveSecret, delay: 500 * time.Millisecond, db: db}
+	}
+	if cfg.SweepEvery > 0 {
+		go s.sweepEvery(cfg.SweepEvery)
 	}
 
 	mux := http.NewServeMux()
@@ -75,7 +80,6 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 	mux.Handle("POST /v1/agents/task", s.authed(s.handleSetTask))
 	mux.Handle("POST /v1/agents/turn", s.authed(s.handleTurn))
 	mux.Handle("GET /v1/sessions/{session}", s.authed(s.handleGetSession))
-	mux.Handle("GET /v1/next", s.authed(s.handleGetNext))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &apiError{http.StatusNotFound, "not_found", "No such endpoint.", nil})
@@ -94,7 +98,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // ownerHandler handles a request from an authenticated owner. A returned error is written as the error response.
 type ownerHandler func(w http.ResponseWriter, r *http.Request, ownerID string) error
 
-// authed resolves the bearer token to an owner, applying the per-token rate limit, then runs h.
+// authed applies the per-token rate limit and runs h with the owner the bearer token names: an owner's ID is the hash
+// of their auth token, so there's nothing to look up. Handlers answer 401 when they find no such owner (see
+// ownerMissing), checking only when a query comes back empty, so a known owner's request costs nothing extra.
 func (s *Server) authed(h ownerHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearerToken(r)
@@ -103,69 +109,87 @@ func (s *Server) authed(h ownerHandler) http.Handler {
 			return
 		}
 
-		hash := hashAuthToken(token)
-		if allowed, retryAfter := s.requestLimiter.allow(hash); !allowed {
+		ownerID := hashAuthToken(token)
+		if allowed, retryAfter := s.requestLimiter.allow(ownerID); !allowed {
 			writeRateLimited(w, retryAfter)
 			return
 		}
-
-		var ownerID string
-		err := s.db.QueryRow(r.Context(), `select id from owners where auth_token_hash = $1`, hash).Scan(&ownerID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, errUnauthorized)
-			return
-		}
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-
 		if err := h(w, r, ownerID); err != nil {
 			writeError(w, err)
 		}
 	})
 }
 
-// withOwnerTx runs fn in a transaction holding the owner's row lock, so each owner's writes run one at a time. Before
-// fn runs, it releases the owner's drafts not seen within their draft expiry and deletes drafts released more than 7
-// days ago. This is the only cleanup; there's no background job. Once the transaction commits, it pushes live counts:
-// nearly every owner write can change the counts, and pushes are coalesced.
+// ownerMissing reports whether there's no owner with this ID: the token was never registered, or its owner disbanded
+// their last roster. Handlers call it when a query finds nothing, to answer 401 rather than an empty result.
+func ownerMissing(ctx context.Context, q querier, ownerID string) (bool, error) {
+	var exists bool
+	err := q.QueryRow(ctx, `select exists (select 1 from owners where id = $1)`, ownerID).Scan(&exists)
+	return !exists, err
+}
+
+// orUnauthorized turns notFound into 401 when the owner doesn't exist.
+func orUnauthorized(ctx context.Context, q querier, ownerID string, notFound error) error {
+	missing, err := ownerMissing(ctx, q, ownerID)
+	if err != nil {
+		return err
+	}
+	if missing {
+		return errUnauthorized
+	}
+	return notFound
+}
+
+// withOwnerTx runs fn in a transaction holding the owner's row lock, so each owner's roster, link, and settings writes
+// run one at a time (drafts don't take it: see draftSession). With no owner row it answers 401. Once the transaction commits,
+// it pushes live counts: nearly every owner write can change the counts, and pushes are coalesced.
 func (s *Server) withOwnerTx(ctx context.Context, ownerID string, fn func(tx pgx.Tx) error) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `select 1 from owners where id = $1 for update`, ownerID); err != nil {
-			return err
-		}
-
-		// Expire stale drafts
-		_, err := tx.Exec(ctx, `
-			update drafts d set benched_at = now()
-			from rosters r, owners o
-			where d.roster_id = r.id and r.owner_id = $1 and o.id = $1
-			  and d.benched_at is null and d.last_seen_at < now() - o.draft_expiry`, ownerID)
+		tag, err := tx.Exec(ctx, `select 1 from owners where id = $1 for update`, ownerID)
 		if err != nil {
 			return err
 		}
-
-		// Prune released drafts past the 7-day resume window, and expired reservations
-		_, err = tx.Exec(ctx, `
-			delete from drafts d using rosters r
-			where d.roster_id = r.id and r.owner_id = $1 and d.benched_at < now() - interval '7 days'`, ownerID)
-		if err != nil {
-			return err
+		if tag.RowsAffected() == 0 {
+			return errUnauthorized
 		}
-		_, err = tx.Exec(ctx, `
-			delete from reservations v using rosters r
-			where v.roster_id = r.id and r.owner_id = $1 and v.expires_at <= now()`, ownerID)
-		if err != nil {
-			return err
-		}
-
 		return fn(tx)
 	})
 	if err == nil {
 		s.live.notify()
 	}
 	return err
+}
+
+// sweepEvery runs sweepDrafts every interval for as long as the server runs, pushing live counts when it changed
+// anything. A failed sweep is logged and tried again next time.
+func (s *Server) sweepEvery(interval time.Duration) {
+	for range time.Tick(interval) {
+		changed, err := sweepDrafts(context.Background(), s.db)
+		if err != nil {
+			log.Printf("sweep drafts: %v", err)
+			continue
+		}
+		if changed {
+			s.live.notify()
+		}
+	}
+}
+
+// sweepDrafts is the only cleanup: it benches drafts not seen within their owner's draft expiry, freeing their names,
+// and deletes drafts benched more than 7 days ago, past the window a resumed session can ask for its old name back.
+// Every instance sweeps; the statements are safe to run at once. changed reports whether it benched any draft.
+func sweepDrafts(ctx context.Context, db querier) (changed bool, err error) {
+	batch := &pgx.Batch{}
+	batch.Queue(`
+		update drafts d set benched_at = now() from owners o
+		where o.id = d.owner_id and d.benched_at is null and d.last_seen_at < now() - o.draft_expiry`).Exec(
+		func(tag pgconn.CommandTag) error {
+			changed = tag.RowsAffected() > 0
+			return nil
+		})
+	batch.Queue(`delete from drafts where benched_at < now() - interval '7 days'`)
+	err = db.SendBatch(ctx, batch).Close()
+	return changed, err
 }
 
 func withPublicCORS(h http.Handler) http.Handler {

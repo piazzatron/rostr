@@ -18,6 +18,7 @@ type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 }
 
 type rosterRow struct {
@@ -120,8 +121,7 @@ func rosterDetails(ctx context.Context, q querier, ownerID string, r rosterRow) 
 	err := q.QueryRow(ctx, `
 		select
 		  coalesce((select default_roster_id = $2 from owners where id = $1), false),
-		  (select count(*) from drafts d join owners o on o.id = $1
-		   where d.roster_id = $2 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry),
+		  (select count(*) from drafts d where d.roster_id = $2 and d.benched_at is null),
 		  (select count(*) from project_links where roster_id = $2)`,
 		ownerID, r.ID).Scan(&resp.IsDefault, &resp.ActiveDrafts, &resp.LinkedProjects)
 	return resp, err
@@ -165,6 +165,10 @@ func (s *Server) handleCreateRoster(w http.ResponseWriter, r *http.Request, owne
 
 func (s *Server) handleGetRoster(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	roster, err := findRosterByName(r.Context(), s.db, ownerID, r.PathValue("name"))
+	var notFound *apiError
+	if errors.As(err, &notFound) && notFound.code == "roster_not_found" {
+		return orUnauthorized(r.Context(), s.db, ownerID, err)
+	}
 	if err != nil {
 		return err
 	}
@@ -322,41 +326,37 @@ type idleMember struct {
 type listedRoster struct {
 	Name      string        `json:"name"`
 	EmojiMode string        `json:"emojiMode"`
+	ATeam     []member      `json:"aTeam"`
+	BTeam     []member      `json:"bTeam"`
+	IsDefault bool          `json:"isDefault"`
+	CreatedAt time.Time     `json:"createdAt"`
 	Drafted   []listedDraft `json:"drafted"`
 	Idle      []idleMember  `json:"idle"`
 }
 
-// handleStats is the public GET /v1/stats: every roster with its drafted agents and idle members, in the
+// handleStats is the public GET /v1/stats: every roster with its cast, drafted agents, and idle members, in the
 // shape of `rostr stats --json`. Tasks and repos are ciphertext.
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	listed, err := listRosters(r.Context(), s.db, ownerID)
 	if err != nil {
 		return err
 	}
+	if len(listed) == 0 {
+		if missing, err := ownerMissing(r.Context(), s.db, ownerID); err != nil {
+			return err
+		} else if missing {
+			return errUnauthorized
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"rosters": listed})
 	return nil
 }
 
-// listRosters is every roster with its drafted agents and idle members, oldest roster first.
+// listRosters is every roster with its drafted agents and idle members, oldest roster first, in one round trip.
 func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster, error) {
-	rows, err := q.Query(ctx,
-		`select `+rosterColumns+` from rosters r where r.owner_id = $1 order by r.created_at, r.name`, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	rosters, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (rosterRow, error) { return scanRoster(row) })
-	if err != nil {
-		return nil, err
-	}
-
-	// Active drafts, leaving out any past the owner's expiry that the next write will release
-	rows, err = q.Query(ctx, `
-		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at, `+restingSince+`
-		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
-		where r.owner_id = $1 and d.benched_at is null and d.last_seen_at >= now() - o.draft_expiry
-		order by d.drafted_at, d.id`, ownerID)
-	if err != nil {
-		return nil, err
+	type listingRoster struct {
+		rosterRow
+		isDefault bool
 	}
 	type activeDraft struct {
 		rosterID, memberName, memberEmoji string
@@ -365,24 +365,67 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 		draftedAt                         time.Time
 		restingSince                      *time.Time
 	}
-	drafts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (activeDraft, error) {
-		var d activeDraft
-		err := row.Scan(&d.rosterID, &d.memberName, &d.memberEmoji, &d.copy, &d.task, &d.repo, &d.draftedAt, &d.restingSince)
-		return d, err
+	batch := &pgx.Batch{}
+	var rosters []listingRoster
+	var drafts []activeDraft
+	last := map[string]map[string]time.Time{} // by roster ID, then member name key
+
+	batch.Queue(`
+		select `+rosterColumns+`, coalesce(o.default_roster_id = r.id, false)
+		from rosters r join owners o on o.id = r.owner_id
+		where r.owner_id = $1 order by r.created_at, r.name`, ownerID).Query(func(rows pgx.Rows) error {
+		var err error
+		rosters, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (listingRoster, error) {
+			var r listingRoster
+			err := row.Scan(&r.ID, &r.Name, &r.EmojiMode, &r.ATeam, &r.BTeam, &r.CreatedAt, &r.isDefault)
+			return r, err
+		})
+		return err
 	})
-	if err != nil {
+
+	// Active drafts
+	batch.Queue(`
+		select d.roster_id, d.member_name, d.member_emoji, d.copy, d.task, d.repo, d.drafted_at, `+restingSince+`
+		from drafts d where d.owner_id = $1 and d.benched_at is null
+		order by d.drafted_at, d.id`, ownerID).Query(func(rows pgx.Rows) error {
+		var err error
+		drafts, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (activeDraft, error) {
+			var d activeDraft
+			err := row.Scan(&d.rosterID, &d.memberName, &d.memberEmoji, &d.copy, &d.task, &d.repo, &d.draftedAt, &d.restingSince)
+			return d, err
+		})
+		return err
+	})
+
+	// When each member was last drafted, as lastDrafted gives for one roster
+	batch.Queue(`
+		select d.roster_id, d.member_name, max(d.drafted_at) from drafts d
+		where d.owner_id = $1 group by d.roster_id, d.member_name`, ownerID).Query(func(rows pgx.Rows) error {
+		_, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
+			var rosterID, name string
+			var at time.Time
+			if err := row.Scan(&rosterID, &name, &at); err != nil {
+				return struct{}{}, err
+			}
+			if last[rosterID] == nil {
+				last[rosterID] = map[string]time.Time{}
+			}
+			last[rosterID][nameKey(name)] = at
+			return struct{}{}, nil
+		})
+		return err
+	})
+
+	if err := q.SendBatch(ctx, batch).Close(); err != nil {
 		return nil, err
 	}
 
-	// A member is idle when their name (copy 1) is free, since that's who the next draft can pick; they're listed in
-	// the order drafts would take them (see freeMember)
+	// A member is idle when their name (copy 1) is free, since that's who the next draft can pick; they're listed
+	// in the order drafts would take them (see freeMember)
 	listed := make([]listedRoster, 0, len(rosters))
 	for _, roster := range rosters {
-		last, err := lastDrafted(ctx, q, roster.ID)
-		if err != nil {
-			return nil, err
-		}
-		entry := listedRoster{Name: roster.Name, EmojiMode: roster.EmojiMode, Drafted: []listedDraft{}, Idle: []idleMember{}}
+		entry := listedRoster{Name: roster.Name, EmojiMode: roster.EmojiMode, ATeam: roster.ATeam, BTeam: roster.BTeam,
+			IsDefault: roster.isDefault, CreatedAt: roster.CreatedAt, Drafted: []listedDraft{}, Idle: []idleMember{}}
 		busy := map[string]bool{}
 		for _, d := range drafts {
 			if d.rosterID != roster.ID {
@@ -404,7 +447,7 @@ func listRosters(ctx context.Context, q querier, ownerID string) ([]listedRoster
 		for _, team := range [][]member{roster.ATeam, roster.BTeam} {
 			taken := map[string]bool{}
 			for {
-				m, ok := leastRecentlyDrafted(team, func(m member) bool { return busy[nameKey(m.Name)] || taken[nameKey(m.Name)] }, last)
+				m, ok := leastRecentlyDrafted(team, func(m member) bool { return busy[nameKey(m.Name)] || taken[nameKey(m.Name)] }, last[roster.ID])
 				if !ok {
 					break
 				}

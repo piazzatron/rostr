@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,41 +66,48 @@ func newStatsCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			rosters, err := requireRosters(ctx, st)
+			stats, err := st.Stats(ctx)
 			if err != nil {
 				return err
 			}
+			if len(stats.Rosters) == 0 {
+				return errNoRosters
+			}
+			rosters := stats.Rosters
 			if names := splitNames(args); len(names) > 0 {
 				rosters = nil
 				for _, name := range names {
-					r, err := st.Roster(ctx, name)
+					r, err := pickRoster(ctx, st, stats.Rosters, name)
 					if err != nil {
 						return err
 					}
 					rosters = append(rosters, r)
 				}
 			}
-			drafts, err := st.ActiveDrafts(ctx)
-			if err != nil {
-				return err
-			}
 
-			listing := buildListing(rosters, drafts)
+			listing := buildListing(rosters, stats.Drafts)
 			if asJSON {
 				encoder := json.NewEncoder(cmd.OutOrStdout())
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(listing)
 			}
-			settings, err := st.Settings(ctx)
-			if err != nil {
-				return err
-			}
-			printListing(cmd.OutOrStdout(), listing, settings.DefaultRoster, time.Now())
+			printListing(cmd.OutOrStdout(), listing, stats.DefaultRoster, time.Now())
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, `print {"rosters": [{"name", "emojiMode", "drafted", "resting", "bench"}]}`)
 	return cmd
+}
+
+// pickRoster finds a named roster among rosters, matching loosely, or else asks the store, whose error says it
+// doesn't exist.
+func pickRoster(ctx context.Context, st store.Store, rosters []store.Roster, name string) (store.Roster, error) {
+	for _, r := range rosters {
+		if roster.NamesMatch(r.Name, name) {
+			return r, nil
+		}
+	}
+	return st.Roster(ctx, name)
 }
 
 func buildListing(rosters []store.Roster, drafts []store.Draft) listJSON {

@@ -235,15 +235,21 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 	}
 	s.fails(s.home, nil, `no agent named "ada" is drafted`, "bench", "ada")
 	// names are separated by commas, since they can have spaces the shell splits apart
-	s.draft(s.home, "s4", "--roster", "play")
-	s.draft(s.home, "s5", "--roster", "play")
-	if d := s.draft(s.home, "s6", "--roster", "play"); d.Name != "Ada 2" {
-		t.Fatalf("draft copy: %+v", d)
+	s.draft(s.home, "s4", "--roster", "play") // Grace, never drafted
+	s.draft(s.home, "s5", "--roster", "play") // Ada
+	// The copy goes to whoever was drafted longer ago, timed to the second, so a tie gives Ada (roster order) and a
+	// second boundary between s4 and s5 gives Grace
+	copy := s.draft(s.home, "s6", "--roster", "play")
+	other := map[string]string{"Ada 2": "Grace", "Grace 2": "Ada"}[copy.Name]
+	if other == "" {
+		t.Fatalf("draft copy: %+v", copy)
 	}
-	if out := s.ok(s.home, nil, "bench", "ada", "2,", "grace"); out != "Benched Ada 2 from the play roster.\nBenched Grace from the play roster.\n" {
+	member, number, _ := strings.Cut(copy.Name, " ")
+	want := "Benched " + copy.Name + " from the play roster.\nBenched " + other + " from the play roster.\n"
+	if out := s.ok(s.home, nil, "bench", strings.ToLower(member), number+",", strings.ToLower(other)); out != want {
 		t.Fatalf("bench copy: %q", out)
 	}
-	s.ok(s.home, nil, "bench", "ada", "--roster", "play")
+	s.ok(s.home, nil, "bench", strings.ToLower(member), "--roster", "play")
 	if out := s.ok(s.home, session("s2"), "bench"); out != "Benched 🧙 Gandalf from the work roster.\n" {
 		t.Fatalf("bench by session: %q", out)
 	}

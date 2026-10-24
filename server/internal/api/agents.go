@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type draftResponse struct {
@@ -49,29 +52,25 @@ var errNotDrafted = &apiError{http.StatusNotFound, "not_drafted", "No active dra
 
 var errNoRosters = &apiError{http.StatusNotFound, "no_rosters", "No rosters yet. Run `rostr assemble`.", nil}
 
-// draftInput is what drafting knows about a session. task and repo are ciphertext. preferred is a member the
-// machine already announced to the session, drafted on its own from its copy of the idle list; avoid is the members
-// it has announced to other sessions but not confirmed yet.
+// draftInput is what drafting knows about a session. task and repo are ciphertext. idle means the session hasn't had a
+// turn yet (it's drafted when it starts, before its first prompt), so it rests like a session whose turn just ended.
 type draftInput struct {
-	session   string
-	roster    *string
-	repoHash  *string
-	repo      []byte
-	task      []byte
-	preferred *string
-	avoid     []string
-	machine   string
+	session  string
+	roster   *string
+	repoHash *string
+	repo     []byte
+	task     []byte
+	idle     bool
 }
 
 func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var req struct {
-		Session   string   `json:"session"`
-		Roster    *string  `json:"roster"`
-		RepoHash  *string  `json:"repoHash"`
-		Repo      *string  `json:"repo"`
-		Task      *string  `json:"task"`
-		Preferred *string  `json:"preferred"`
-		Avoid     []string `json:"avoid"`
+		Session  string  `json:"session"`
+		Roster   *string `json:"roster"`
+		RepoHash *string `json:"repoHash"`
+		Repo     *string `json:"repo"`
+		Task     *string `json:"task"`
+		Idle     bool    `json:"idle"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		return err
@@ -87,46 +86,17 @@ func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID str
 	if err != nil {
 		return err
 	}
-	if req.Preferred != nil {
-		if _, err := validateName("preferred", *req.Preferred); err != nil {
-			return err
-		}
-	}
-	if len(req.Avoid) > maxMembers {
-		return invalidRequest("avoid has too many names.")
-	}
 
-	machine, err := machineID(r)
+	in := draftInput{req.Session, req.Roster, repoHash, repo, task, req.Idle}
+	unlock := s.draftLocks.lock(ownerID)
+	resp, err := draftSession(r.Context(), s.db, ownerID, in, true)
+	unlock()
 	if err != nil {
 		return err
 	}
-	in := draftInput{req.Session, req.Roster, repoHash, repo, task, req.Preferred, req.Avoid, machine}
-	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
-		return draftSession(r.Context(), tx, ownerID, in)
-	})
-	if err != nil {
-		return err
-	}
+	s.live.notify()
 	writeJSON(w, http.StatusOK, resp)
 	return nil
-}
-
-// draftTx runs a draft-changing write in the owner's transaction, reserves the machine's next picks, and returns the
-// draft with the owner's next state.
-func (s *Server) draftTx(ctx context.Context, ownerID, machine string, fn func(tx pgx.Tx) (draftResponse, error)) (draftWithNext, error) {
-	var resp draftWithNext
-	err := s.withOwnerTx(ctx, ownerID, func(tx pgx.Tx) error {
-		var err error
-		if resp.draftResponse, err = fn(tx); err != nil {
-			return err
-		}
-		if err := reserveNext(ctx, tx, ownerID, machine); err != nil {
-			return err
-		}
-		resp.Next, err = loadNext(ctx, tx, ownerID, machine)
-		return err
-	})
-	return resp, err
 }
 
 // handleKeepAlive bumps the session's draft, or reclaims its last member if the draft expired and they're free. It
@@ -141,93 +111,74 @@ func (s *Server) handleKeepAlive(w http.ResponseWriter, r *http.Request, ownerID
 	if err := validateSession(req.Session); err != nil {
 		return err
 	}
-
-	machine, err := machineID(r)
+	unlock := s.draftLocks.lock(ownerID)
+	resp, err := draftSession(r.Context(), s.db, ownerID, draftInput{session: req.Session}, false)
+	unlock()
 	if err != nil {
 		return err
 	}
-	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
-		resp, found, err := reclaimSession(r.Context(), tx, ownerID, draftInput{session: req.Session})
-		if err == nil && !found {
-			return resp, errNotDrafted
-		}
-		return resp, err
-	})
-	if err != nil {
-		return err
-	}
+	s.live.notify()
 	writeJSON(w, http.StatusOK, resp)
 	return nil
 }
 
-// draftSession gives the session a member. It runs inside withOwnerTx, which has already expired stale drafts:
-//  1. same session, same name, via reclaimSession;
-//  2. resume, also via reclaimSession, when the preferred member (if any) is who the session had;
-//  3. the preferred member if they're in the cast, or the member the machine holds a reservation on: their name if
-//     it's free, else their lowest free copy, so a session announced as Ginny becomes Ginny 2 rather than someone
-//     else;
-//  4. otherwise the free member drafted least recently, A team first, skipping members other machines hold
-//     reservations on and the ones this machine has announced to other sessions (avoid);
-//  5. when no name is free, the member whose draft has rested longest, whose session loses the name;
-//  6. otherwise numbered copies, the same way as 4.
-func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (draftResponse, error) {
-	resp, found, err := reclaimSession(ctx, tx, ownerID, in)
-	if err != nil || found {
+// draftAttempts is how many times draftSession tries before giving up on a race it keeps losing.
+const draftAttempts = 10
+
+// draftSession gives the session a member in two round trips: one batch reads everything drafting needs, the member is
+// picked here, and one batch writes the draft. It takes no database lock. Callers hold the owner's draft lock, so drafts
+// on one instance take turns; across instances, the unique indexes on active drafts (one per name and copy, one per
+// session) stop two drafts racing for the same name or session, and the one whose write fails starts over, seeing the
+// other's draft. With newMember false it only bumps or resumes the session's own draft (keep-alive).
+func draftSession(ctx context.Context, db *pgxpool.Pool, ownerID string, in draftInput, newMember bool) (draftResponse, error) {
+	for attempt := 1; ; attempt++ {
+		resp, err := tryDraft(ctx, db, ownerID, in, newMember)
+		if attempt < draftAttempts && lostRace(err) {
+			// A random wait, so two instances drafting in step don't keep picking the same name
+			select {
+			case <-ctx.Done():
+				return draftResponse{}, ctx.Err()
+			case <-time.After(time.Duration(rand.IntN(5*attempt)+1) * time.Millisecond):
+			}
+			continue
+		}
 		return resp, err
 	}
+}
 
-	roster, err := resolveDraftRoster(ctx, tx, ownerID, in)
-	if err != nil {
-		return draftResponse{}, err
-	}
-	busy, err := busySlots(ctx, tx, roster.ID)
-	if err != nil {
-		return draftResponse{}, err
-	}
-	last, err := lastDrafted(ctx, tx, roster.ID)
-	if err != nil {
-		return draftResponse{}, err
-	}
-	all, err := reservations(ctx, tx, ownerID)
-	if err != nil {
-		return draftResponse{}, err
-	}
-	reservedByOthers(all, roster.ID, in.machine, busy)
-	preferred := ownReservation(all, roster.ID, in.machine)
-	for _, name := range in.avoid {
-		// The machine announced its reserved member to another session, whose confirmation is on its way
-		if nameKey(name) == nameKey(preferred) {
-			preferred = ""
-		}
-	}
-	if in.preferred != nil {
-		preferred = *in.preferred
-	}
-	if preferred != "" {
-		if m, _, inCast := roster.findMember(preferred); inCast {
-			copy := 1
-			for busy[slot{nameKey(m.Name), copy}] {
-				copy++
-			}
-			return insertReservedDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
-		}
-	}
-	for _, name := range in.avoid {
-		busy[slot{nameKey(name), 1}] = true
-	}
-	m, copy := freeMember(roster, busy, last)
+// lostRace reports whether a draft's write failed because another write got there first: a name or session taken by
+// another draft, or a roster disbanded meanwhile.
+func lostRace(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "23505" || pgErr.Code == "23503") // unique_violation, foreign_key_violation
+}
 
-	// Every name is taken: before handing out a copy, take the name of the member who has rested longest
-	if copy > 1 {
-		rested, ok, err := takeRestingMember(ctx, tx, roster)
-		if err != nil {
-			return draftResponse{}, err
-		}
-		if ok {
-			m, copy = rested, 1
-		}
-	}
-	return insertReservedDraft(ctx, tx, newDraft{ownerID, roster.ID, m, copy, in.session, in.repoHash, in.repo, in.task})
+// draftState is what one draft attempt reads.
+type draftState struct {
+	existing      *draftResponse // the session's active draft, already bumped
+	ownerFound    bool
+	defaultRoster *string
+	linkedRoster  *string
+	rosters       []rosterRow
+	previous      *previousDraft
+	active        []activeDraft
+	last          map[string]map[string]time.Time // by roster ID, then member name key
+}
+
+// previousDraft is the session's most recent draft, for a resume.
+type previousDraft struct {
+	rosterID, memberName string
+	copy                 int
+	repoHash             *string
+	repo, task           []byte
+}
+
+// activeDraft is one of the owner's active drafts. restingSince is set for a resting one (see restingSince).
+type activeDraft struct {
+	id               int64
+	rosterID, member string
+	copy             int
+	restingSince     *time.Time
 }
 
 // restingSince is when a draft (aliased d) started resting, or null: its session's turn ended, after it last started,
@@ -235,139 +186,173 @@ func draftSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput)
 const restingSince = `case when d.turn_ended_at <= now() - interval '15 minutes'
 	and d.turn_ended_at > coalesce(d.turn_started_at, '-infinity') then d.turn_ended_at end`
 
-// takeRestingMember releases the roster's longest-resting draft of a member's own name (copy 1) whose member is still
-// in the cast, and returns that member. ok is false when none is resting.
-func takeRestingMember(ctx context.Context, tx pgx.Tx, roster rosterRow) (member, bool, error) {
-	rows, err := tx.Query(ctx, `
-		select d.id, d.member_name from drafts d
-		where d.roster_id = $1 and d.copy = 1 and d.benched_at is null and (`+restingSince+`) is not null
-		order by d.turn_ended_at, d.id`, roster.ID)
+func tryDraft(ctx context.Context, db *pgxpool.Pool, ownerID string, in draftInput, newMember bool) (draftResponse, error) {
+	st, err := readDraftState(ctx, db, ownerID, in)
 	if err != nil {
-		return member{}, false, err
+		return draftResponse{}, err
 	}
-	type resting struct {
-		id   int64
-		name string
+	if st.existing != nil {
+		return *st.existing, nil
 	}
-	drafts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (resting, error) {
-		var d resting
-		err := row.Scan(&d.id, &d.name)
-		return d, err
+	if !st.ownerFound {
+		return draftResponse{}, errUnauthorized
+	}
+
+	// Resume: the session's previous member, if they're still in the cast and free. The resumed draft keeps the
+	// session's repo and task unless new ones were sent.
+	if p := st.previous; p != nil {
+		if roster, ok := st.roster(p.rosterID); ok {
+			if m, _, inCast := roster.findMember(p.memberName); inCast && !st.busy(roster.ID)[slot{nameKey(m.Name), p.copy}] {
+				d := newDraft{ownerID, roster, m, p.copy, in.session, p.repoHash, p.repo, p.task, in.idle}
+				if in.repoHash != nil {
+					d.repoHash, d.repo = in.repoHash, in.repo
+				}
+				if in.task != nil {
+					d.task = in.task
+				}
+				return writeDraft(ctx, db, d, nil)
+			}
+		}
+	}
+	if !newMember {
+		return draftResponse{}, errNotDrafted
+	}
+
+	roster, err := st.draftRoster(in)
+	if err != nil {
+		return draftResponse{}, err
+	}
+	busy := st.busy(roster.ID)
+	m, copy := freeMember(roster, busy, st.last[roster.ID])
+
+	// Every name is taken: before handing out a copy, take the name of the member who has rested longest
+	var taking *int64
+	if copy > 1 {
+		if resting, ok := st.longestResting(roster); ok {
+			m, copy, taking = resting.member, 1, &resting.id
+		}
+	}
+	return writeDraft(ctx, db, newDraft{ownerID, roster, m, copy, in.session, in.repoHash, in.repo, in.task, in.idle}, taking)
+}
+
+// readDraftState reads what a draft needs in one round trip. Its first statement bumps the session's active draft, if
+// it has one, which is all a draft of an already-drafted session does.
+func readDraftState(ctx context.Context, db *pgxpool.Pool, ownerID string, in draftInput) (draftState, error) {
+	st := draftState{last: map[string]map[string]time.Time{}}
+	batch := &pgx.Batch{}
+	batch.Queue(`
+		update drafts d set last_seen_at = now(), task = coalesce($3, d.task) from rosters r
+		where r.id = d.roster_id and d.owner_id = $1 and d.session_id = $2 and d.benched_at is null
+		returning `+draftColumns, ownerID, in.session, in.task).Query(func(rows pgx.Rows) error {
+		for rows.Next() {
+			_, d, err := scanDraft(rows)
+			if err != nil {
+				return err
+			}
+			st.existing = &d
+		}
+		return rows.Err()
 	})
-	if err != nil {
-		return member{}, false, err
+	batch.Queue(`select default_roster_id from owners where id = $1`, ownerID).Query(func(rows pgx.Rows) error {
+		for rows.Next() {
+			st.ownerFound = true
+			if err := rows.Scan(&st.defaultRoster); err != nil {
+				return err
+			}
+		}
+		return rows.Err()
+	})
+	batch.Queue(`select `+rosterColumns+` from rosters r where r.owner_id = $1 order by r.created_at, r.name`, ownerID).Query(
+		func(rows pgx.Rows) error {
+			var err error
+			st.rosters, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (rosterRow, error) { return scanRoster(row) })
+			return err
+		})
+	if in.repoHash != nil {
+		batch.Queue(`select roster_id from project_links where owner_id = $1 and repo_hash = $2`, ownerID, *in.repoHash).Query(
+			func(rows pgx.Rows) error {
+				for rows.Next() {
+					if err := rows.Scan(&st.linkedRoster); err != nil {
+						return err
+					}
+				}
+				return rows.Err()
+			})
 	}
-	for _, d := range drafts {
-		m, _, inCast := roster.findMember(d.name)
-		if !inCast {
+	batch.Queue(`
+		select d.roster_id, d.member_name, d.copy, d.repo_hash, d.repo, d.task from drafts d
+		where d.owner_id = $1 and d.session_id = $2
+		order by d.drafted_at desc, d.id desc limit 1`, ownerID, in.session).Query(func(rows pgx.Rows) error {
+		for rows.Next() {
+			var p previousDraft
+			if err := rows.Scan(&p.rosterID, &p.memberName, &p.copy, &p.repoHash, &p.repo, &p.task); err != nil {
+				return err
+			}
+			st.previous = &p
+		}
+		return rows.Err()
+	})
+	batch.Queue(`
+		select d.id, d.roster_id, d.member_name, d.copy, `+restingSince+` from drafts d
+		where d.owner_id = $1 and d.benched_at is null
+		order by d.turn_ended_at, d.id`, ownerID).Query(func(rows pgx.Rows) error {
+		var err error
+		st.active, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (activeDraft, error) {
+			var d activeDraft
+			err := row.Scan(&d.id, &d.rosterID, &d.member, &d.copy, &d.restingSince)
+			return d, err
+		})
+		return err
+	})
+	batch.Queue(`
+		select d.roster_id, d.member_name, max(d.drafted_at) from drafts d
+		where d.owner_id = $1 group by d.roster_id, d.member_name`, ownerID).Query(func(rows pgx.Rows) error {
+		for rows.Next() {
+			var rosterID, name string
+			var at time.Time
+			if err := rows.Scan(&rosterID, &name, &at); err != nil {
+				return err
+			}
+			if st.last[rosterID] == nil {
+				st.last[rosterID] = map[string]time.Time{}
+			}
+			st.last[rosterID][nameKey(name)] = at
+		}
+		return rows.Err()
+	})
+	err := db.SendBatch(ctx, batch).Close()
+	return st, err
+}
+
+func (st draftState) roster(id string) (rosterRow, bool) {
+	for _, r := range st.rosters {
+		if r.ID == id {
+			return r, true
+		}
+	}
+	return rosterRow{}, false
+}
+
+// draftRoster picks the roster for a session's first draft: the named roster, else the project's linked roster, else
+// the default.
+func (st draftState) draftRoster(in draftInput) (rosterRow, error) {
+	if in.roster != nil {
+		for _, r := range st.rosters {
+			if nameKey(r.Name) == nameKey(*in.roster) {
+				return r, nil
+			}
+		}
+		return rosterRow{}, rosterNotFound(*in.roster)
+	}
+	for _, id := range []*string{st.linkedRoster, st.defaultRoster} {
+		if id == nil {
 			continue
 		}
-		_, err := tx.Exec(ctx, `update drafts set benched_at = now() where id = $1`, d.id)
-		return m, err == nil, err
-	}
-	return member{}, false, nil
-}
-
-// insertReservedDraft inserts a draft and drops the reservations on its member's name, now taken.
-func insertReservedDraft(ctx context.Context, tx pgx.Tx, d newDraft) (draftResponse, error) {
-	if d.copy == 1 {
-		if err := releaseReservations(ctx, tx, d.rosterID, d.member.Name); err != nil {
-			return draftResponse{}, err
+		if r, ok := st.roster(*id); ok {
+			return r, nil
 		}
 	}
-	return insertDraft(ctx, tx, d)
-}
-
-// reclaimSession returns the session's active draft in any of the owner's rosters, bumping its last-seen time (and
-// setting its task, if given). Failing that, it re-drafts the session's previous member from the same roster if they're
-// still in the cast and free. found is false when neither applies.
-func reclaimSession(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (draftResponse, bool, error) {
-	// Same session, same name
-	var id int64
-	err := tx.QueryRow(ctx, `
-		update drafts d set last_seen_at = now(), task = coalesce($3, d.task)
-		from rosters r
-		where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.benched_at is null
-		returning d.id`, ownerID, in.session, in.task).Scan(&id)
-	if err == nil {
-		resp, err := loadDraft(ctx, tx, id)
-		return resp, err == nil, err
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return draftResponse{}, false, err
-	}
-	// Resume: the session's most recent member, from the same roster
-	var prev struct {
-		rosterID, memberName string
-		copy                 int
-		repoHash             *string
-		repo, task           []byte
-	}
-	err = tx.QueryRow(ctx, `
-		select d.roster_id, d.member_name, d.copy, d.repo_hash, d.repo, d.task
-		from drafts d join rosters r on r.id = d.roster_id
-		where r.owner_id = $1 and d.session_id = $2
-		order by d.drafted_at desc, d.id desc
-		limit 1`, ownerID, in.session).Scan(&prev.rosterID, &prev.memberName, &prev.copy, &prev.repoHash, &prev.repo, &prev.task)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return draftResponse{}, false, nil
-	}
-	if err != nil {
-		return draftResponse{}, false, err
-	}
-	// A session told a preferred member resumes only if that's who it had; anyone else is drafted fresh
-	if in.preferred != nil && nameKey(*in.preferred) != nameKey(prev.memberName) {
-		return draftResponse{}, false, nil
-	}
-
-	roster, err := scanRoster(tx.QueryRow(ctx, `select `+rosterColumns+` from rosters r where r.id = $1`, prev.rosterID))
-	if err != nil {
-		return draftResponse{}, false, err
-	}
-	m, _, inCast := roster.findMember(prev.memberName)
-	if !inCast {
-		return draftResponse{}, false, nil
-	}
-	busy, err := busySlots(ctx, tx, roster.ID)
-	if err != nil || busy[slot{nameKey(m.Name), prev.copy}] {
-		return draftResponse{}, false, err
-	}
-
-	// The resumed draft keeps the session's repo and task unless new ones were sent
-	repoHash, repo, task := prev.repoHash, prev.repo, prev.task
-	if in.repoHash != nil {
-		repoHash, repo = in.repoHash, in.repo
-	}
-	if in.task != nil {
-		task = in.task
-	}
-	resp, err := insertDraft(ctx, tx, newDraft{ownerID, roster.ID, m, prev.copy, in.session, repoHash, repo, task})
-	return resp, err == nil, err
-}
-
-// resolveDraftRoster picks the roster for a session's first draft: the named roster, else the project's linked
-// roster, else the default.
-func resolveDraftRoster(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (rosterRow, error) {
-	if in.roster != nil {
-		return findRosterByName(ctx, tx, ownerID, *in.roster)
-	}
-
-	if in.repoHash != nil {
-		roster, err := scanRoster(tx.QueryRow(ctx, `
-			select `+rosterColumns+` from rosters r join project_links l on l.roster_id = r.id
-			where l.owner_id = $1 and l.repo_hash = $2`, ownerID, *in.repoHash))
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return roster, err
-		}
-	}
-
-	roster, err := scanRoster(tx.QueryRow(ctx, `
-		select `+rosterColumns+` from rosters r join owners o on o.default_roster_id = r.id
-		where o.id = $1`, ownerID))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return rosterRow{}, errNoRosters
-	}
-	return roster, err
+	return rosterRow{}, errNoRosters
 }
 
 // slot is a member (by name key) and copy number.
@@ -376,22 +361,35 @@ type slot struct {
 	copy int
 }
 
-func busySlots(ctx context.Context, tx pgx.Tx, rosterID string) (map[slot]bool, error) {
-	rows, err := tx.Query(ctx, `select member_name, copy from drafts where roster_id = $1 and benched_at is null`, rosterID)
-	if err != nil {
-		return nil, err
-	}
-	slots, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (slot, error) {
-		var name string
-		var copy int
-		err := row.Scan(&name, &copy)
-		return slot{nameKey(name), copy}, err
-	})
+// busy is the roster's names and copies held by active drafts.
+func (st draftState) busy(rosterID string) map[slot]bool {
 	busy := map[slot]bool{}
-	for _, s := range slots {
-		busy[s] = true
+	for _, d := range st.active {
+		if d.rosterID == rosterID {
+			busy[slot{nameKey(d.member), d.copy}] = true
+		}
 	}
-	return busy, err
+	return busy
+}
+
+// restingMember is a resting draft whose name a new draft can take.
+type restingMember struct {
+	id     int64
+	member member
+}
+
+// longestResting is the roster's longest-resting draft of a member's own name (copy 1) whose member is still in the
+// cast. ok is false when none is resting.
+func (st draftState) longestResting(roster rosterRow) (restingMember, bool) {
+	for _, d := range st.active { // ordered by when their turns ended
+		if d.rosterID != roster.ID || d.copy != 1 || d.restingSince == nil {
+			continue
+		}
+		if m, _, inCast := roster.findMember(d.member); inCast {
+			return restingMember{d.id, m}, true
+		}
+	}
+	return restingMember{}, false
 }
 
 // freeMember picks the free copy-1 member drafted least recently (never-drafted first, then roster order), A team
@@ -424,46 +422,41 @@ func leastRecentlyDrafted(team []member, isBusy func(member) bool, last map[stri
 	return best, found
 }
 
-// lastDrafted is when each of a roster's members was last drafted, by name key, for members drafted within the
-// 7-day retention of released drafts.
-func lastDrafted(ctx context.Context, q querier, rosterID string) (map[string]time.Time, error) {
-	rows, err := q.Query(ctx, `select member_name, max(drafted_at) from drafts where roster_id = $1 group by member_name`, rosterID)
-	if err != nil {
-		return nil, err
-	}
-	last := map[string]time.Time{}
-	_, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
-		var name string
-		var at time.Time
-		err := row.Scan(&name, &at)
-		last[nameKey(name)] = at
-		return struct{}{}, err
-	})
-	return last, err
-}
-
 type newDraft struct {
 	ownerID  string
-	rosterID string
+	roster   rosterRow
 	member   member
 	copy     int
 	session  string
 	repoHash *string
 	repo     []byte
 	task     []byte
+	idle     bool
 }
 
-func insertDraft(ctx context.Context, tx pgx.Tx, d newDraft) (draftResponse, error) {
-	var id int64
-	err := tx.QueryRow(ctx, `
-		insert into drafts (owner_id, roster_id, member_name, member_emoji, copy, session_id, repo_hash, repo, task)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		returning id`,
-		d.ownerID, d.rosterID, d.member.Name, d.member.Emoji, d.copy, d.session, d.repoHash, d.repo, d.task).Scan(&id)
-	if err != nil {
-		return draftResponse{}, err
+// writeDraft inserts a draft in one round trip, first benching the resting draft whose name it takes, if any. The two
+// statements run as one implicit transaction: if the resting draft's session woke meanwhile, the bench changes nothing,
+// the insert hits the unique index on its name, and neither is kept.
+func writeDraft(ctx context.Context, db *pgxpool.Pool, d newDraft, taking *int64) (draftResponse, error) {
+	resp := draftResponse{
+		Name: d.member.Name, Emoji: d.member.Emoji, Copy: d.copy, Team: d.roster.team(d.member.Name), Roster: d.roster.Name,
+		EmojiMode: d.roster.EmojiMode, Session: d.session, Task: encodeCiphertext(d.task), Repo: encodeCiphertext(d.repo),
 	}
-	return loadDraft(ctx, tx, id)
+	batch := &pgx.Batch{}
+	if taking != nil {
+		batch.Queue(`update drafts d set benched_at = now() where d.id = $1 and d.benched_at is null and (`+restingSince+`) is not null`,
+			*taking)
+	}
+	// An idle session's turn "ended" at its draft, so it rests if no prompt comes
+	batch.Queue(`
+		insert into drafts (owner_id, roster_id, member_name, member_emoji, copy, session_id, repo_hash, repo, task,
+		                    turn_ended_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, case when $10 then now() end)
+		returning drafted_at`,
+		d.ownerID, d.roster.ID, d.member.Name, d.member.Emoji, d.copy, d.session, d.repoHash, d.repo, d.task, d.idle).QueryRow(
+		func(row pgx.Row) error { return row.Scan(&resp.DraftedAt) })
+	err := db.SendBatch(ctx, batch).Close()
+	return resp, err
 }
 
 // agentTarget picks an active draft: the session's, or a member by name ("Gandalf 2" for a copy) across the owner's
@@ -551,19 +544,17 @@ func (s *Server) handleBench(w http.ResponseWriter, r *http.Request, ownerID str
 		return err
 	}
 
-	machine, err := machineID(r)
-	if err != nil {
-		return err
-	}
-	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
+	var resp draftResponse
+	err := s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
 		id, err := findTargetDraftID(r.Context(), tx, ownerID, req)
 		if err != nil {
-			return draftResponse{}, err
+			return err
 		}
 		if _, err := tx.Exec(r.Context(), `update drafts set benched_at = now() where id = $1`, id); err != nil {
-			return draftResponse{}, err
+			return err
 		}
-		return loadDraft(r.Context(), tx, id)
+		resp, err = loadDraft(r.Context(), tx, id)
+		return err
 	})
 	if err != nil {
 		return err
@@ -589,20 +580,18 @@ func (s *Server) handleSetTask(w http.ResponseWriter, r *http.Request, ownerID s
 		return err
 	}
 
-	machine, err := machineID(r)
-	if err != nil {
-		return err
-	}
-	resp, err := s.draftTx(r.Context(), ownerID, machine, func(tx pgx.Tx) (draftResponse, error) {
+	var resp draftResponse
+	err = s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
 		id, err := findTargetDraftID(r.Context(), tx, ownerID, req.agentTarget)
 		if err != nil {
-			return draftResponse{}, err
+			return err
 		}
 		_, err = tx.Exec(r.Context(), `update drafts set task = $2, last_seen_at = now() where id = $1`, id, task)
 		if err != nil {
-			return draftResponse{}, err
+			return err
 		}
-		return loadDraft(r.Context(), tx, id)
+		resp, err = loadDraft(r.Context(), tx, id)
+		return err
 	})
 	if err != nil {
 		return err
@@ -613,6 +602,7 @@ func (s *Server) handleSetTask(w http.ResponseWriter, r *http.Request, ownerID s
 
 // handleTurn records that the session's turn started or ended, at the client's time but never later than now, and
 // bumps the draft's last-seen time. Each time only moves forward, so a report that arrives late can't undo a newer one.
+// Every turn reports, so it's one statement, without the owner lock.
 func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	var req struct {
 		Session string    `json:"session"`
@@ -633,19 +623,15 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request, ownerID stri
 	if req.Ended {
 		column = "turn_ended_at"
 	}
-	err := s.withOwnerTx(r.Context(), ownerID, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(r.Context(), `
-			update drafts d set `+column+` = greatest(d.`+column+`, least($3::timestamptz, now())), last_seen_at = now()
-			from rosters r
-			where r.id = d.roster_id and r.owner_id = $1 and d.session_id = $2 and d.benched_at is null`,
-			ownerID, req.Session, req.At)
-		if err == nil && tag.RowsAffected() == 0 {
-			return errNotDrafted
-		}
-		return err
-	})
+	tag, err := s.db.Exec(r.Context(), `
+		update drafts d set `+column+` = greatest(d.`+column+`, least($3::timestamptz, now())), last_seen_at = now()
+		where d.owner_id = $1 and d.session_id = $2 and d.benched_at is null`,
+		ownerID, req.Session, req.At)
 	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return orUnauthorized(r.Context(), s.db, ownerID, errNotDrafted)
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
@@ -654,12 +640,10 @@ func (s *Server) handleTurn(w http.ResponseWriter, r *http.Request, ownerID stri
 // handleGetSession returns the session's active draft, without bumping it.
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request, ownerID string) error {
 	_, resp, err := scanDraft(s.db.QueryRow(r.Context(), `
-		select `+draftColumns+`
-		from drafts d join rosters r on r.id = d.roster_id join owners o on o.id = r.owner_id
-		where r.owner_id = $1 and d.session_id = $2 and d.benched_at is null
-		  and d.last_seen_at >= now() - o.draft_expiry`, ownerID, r.PathValue("session")))
+		select `+draftColumns+` from drafts d join rosters r on r.id = d.roster_id
+		where d.owner_id = $1 and d.session_id = $2 and d.benched_at is null`, ownerID, r.PathValue("session")))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return errNotDrafted
+		return orUnauthorized(r.Context(), s.db, ownerID, errNotDrafted)
 	}
 	if err != nil {
 		return err

@@ -159,21 +159,14 @@ func Title(display, task string) string {
 	return display + " · " + task
 }
 
-// Identity is what the agent is told whenever it's drafted or re-told its name. The task command names the session
-// explicitly, so it works even where ROSTR_SESSION isn't set (a session started before the hooks were installed).
-// Renamed tells the agent that the server confirmed a different name than it was told: the member it announced was
-// taken by a session that started at the same time.
-func Renamed(display, from string) string {
-	return fmt.Sprintf("rostr renamed this session: you're %s now, not %s (another session that started at the same "+
-		"time got that name first). Sign as %s from now on.", display, from, display)
-}
-
 // RenamedAfterRest tells the agent that another session took its name while it was resting.
 func RenamedAfterRest(display, from string) string {
 	return fmt.Sprintf("rostr renamed this session: you're %s now, not %s (another session took that name while this "+
 		"one was resting). Sign as %s from now on.", display, from, display)
 }
 
+// Identity is what the agent is told whenever it's drafted or re-told its name. The task command names the session
+// explicitly, so it works even where ROSTR_SESSION isn't set (a session started before the hooks were installed).
 func Identity(display, rosterName, sessionID string) string {
 	return strings.Join([]string{
 		fmt.Sprintf("You're %s for this session (drafted by rostr from the %q roster).", display, rosterName),

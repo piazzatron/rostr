@@ -105,7 +105,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := fastDraftSession(cmd.Context(), st, session, workingDir(), "")
+			d, err := hookDraftSession(cmd.Context(), st, session, workingDir(), "")
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil

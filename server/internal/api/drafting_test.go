@@ -120,13 +120,15 @@ func TestDraftResumesPreviousMemberWhenFree(t *testing.T) {
 		t.Fatalf("resume gave %s with task %v, want Frodo with the old task", resumed.Name, resumed.Task)
 	}
 
-	// s1's Gandalf gets taken by s3 (Sam, never drafted, would be next, but s3 asks for Gandalf), so s1 can't resume
-	// and gets the next free member
-	if d := draft(c, map[string]any{"session": s3, "preferred": "Gandalf"}); d.Name != "Gandalf" {
-		t.Fatalf("s3 drafted %s, want Gandalf", d.Name)
+	// s1's Gandalf gets taken (Sam, never drafted, goes first, then Gandalf), so s1 can't resume and gets a copy
+	if d := draftSessionNamed(c, s3); d.Name != "Sam" {
+		t.Fatalf("s3 drafted %s, want Sam", d.Name)
 	}
-	if d := draftSessionNamed(c, s1); d.Name != "Sam" {
-		t.Fatalf("s1 drafted %s, want Sam", d.Name)
+	if d := draftSessionNamed(c, c.session("s4")); d.Name != "Gandalf" {
+		t.Fatalf("s4 drafted %s, want Gandalf", d.Name)
+	}
+	if d := draftSessionNamed(c, s1); d.Copy == 1 {
+		t.Fatalf("s1 drafted %s, want a copy", displayOf(d))
 	}
 }
 
@@ -145,7 +147,7 @@ func TestDraftResumesFromTheSessionsOriginalRoster(t *testing.T) {
 	}
 }
 
-func TestDraftExpiresStaleDraftsUsingOwnersExpiry(t *testing.T) {
+func TestSweepBenchesDraftsPastTheirOwnersExpiry(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
 	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
@@ -156,25 +158,20 @@ func TestDraftExpiresStaleDraftsUsingOwnersExpiry(t *testing.T) {
 	draftSessionNamed(c, recent) // Frodo
 	execSQL(t, `update drafts set last_seen_at = now() - interval '3 hours' where session_id = $1`, stale)
 	execSQL(t, `update drafts set last_seen_at = now() - interval '1 hour' where session_id = $1`, recent)
+	sweep(t)
 
-	// Reads leave out the expired draft before any write releases it
 	if names := draftedNames(list(c), "work"); len(names) != 1 || names[0] != "Frodo" {
 		t.Fatalf("list shows %v drafted, want [Frodo]", names)
 	}
-
-	// The next draft releases the stale one and takes its member
-	if d := draftSessionNamed(c, c.session("new")); d.Name != "Gandalf" {
-		t.Fatalf("drafted %s, want Gandalf (freed by expiry)", d.Name)
-	}
-	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is not null`, stale); n != 1 {
-		t.Fatal("stale draft wasn't released")
-	}
 	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is null`, recent); n != 1 {
-		t.Fatal("recent draft was released")
+		t.Fatal("recent draft was benched")
+	}
+	if d := draftSessionNamed(c, c.session("new")); d.Name != "Gandalf" {
+		t.Fatalf("drafted %s, want Gandalf (freed by the sweep)", d.Name)
 	}
 }
 
-func TestDraftPrunesBenchedDraftsAfterSevenDays(t *testing.T) {
+func TestSweepPrunesBenchedDraftsAfterSevenDays(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
 	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
@@ -186,21 +183,20 @@ func TestDraftPrunesBenchedDraftsAfterSevenDays(t *testing.T) {
 	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": recent}, http.StatusOK)
 	execSQL(t, `update drafts set benched_at = now() - interval '8 days' where session_id = $1`, old)
 	execSQL(t, `update drafts set benched_at = now() - interval '6 days' where session_id = $1`, recent)
-
-	draftSessionNamed(c, c.session("trigger"))
+	sweep(t)
 
 	if n := queryInt(t, `select count(*) from drafts where session_id = $1`, old); n != 0 {
-		t.Fatal("draft released 8 days ago wasn't deleted")
+		t.Fatal("draft benched 8 days ago wasn't deleted")
 	}
 	if n := queryInt(t, `select count(*) from drafts where session_id = $1`, recent); n != 1 {
-		t.Fatal("draft released 6 days ago was deleted")
+		t.Fatal("draft benched 6 days ago was deleted")
 	}
 }
 
 func TestKeepAliveNeverDraftsADifferentMember(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	createRoster(c, "work", members("Gandalf"), nil)
 	call[settingsResponse](c, "PATCH", "/v1/settings", map[string]any{"draftExpiry": "1h"}, http.StatusOK)
 	s1, s2 := c.session("s1"), c.session("s2")
 
@@ -219,14 +215,16 @@ func TestKeepAliveNeverDraftsADifferentMember(t *testing.T) {
 
 	// An expired draft whose member is free is reclaimed
 	execSQL(t, `update drafts set last_seen_at = now() - interval '2 hours' where session_id = $1`, s1)
+	sweep(t)
 	if d := call[draftResponse](c, "POST", "/v1/agents/keepalive", map[string]any{"session": s1}, http.StatusOK); d.Name != "Gandalf" {
 		t.Fatalf("keep-alive after expiry gave %s, want Gandalf back", d.Name)
 	}
 
 	// An expired draft whose member was taken leaves the session unnamed
 	execSQL(t, `update drafts set last_seen_at = now() - interval '2 hours' where session_id = $1`, s1)
-	if d := draft(c, map[string]any{"session": s2, "preferred": "Gandalf"}); d.Name != "Gandalf" {
-		t.Fatalf("s2 drafted %s, want Gandalf", d.Name)
+	sweep(t)
+	if d := draftSessionNamed(c, s2); displayOf(d) != "Gandalf" {
+		t.Fatalf("s2 drafted %s, want Gandalf", displayOf(d))
 	}
 	callError(c, "POST", "/v1/agents/keepalive", map[string]any{"session": s1}, http.StatusNotFound, "not_drafted")
 }
@@ -299,8 +297,8 @@ func TestDatabaseAllowsOneActiveDraftPerSessionAcrossAnOwnersRosters(t *testing.
 		token, _ := decodeAuthToken(a.token)
 		_, err := testDB.Exec(context.Background(), `
 			insert into drafts (owner_id, roster_id, member_name, member_emoji, session_id)
-			select r.owner_id, r.id, 'Mario', '🍄', $2 from rosters r join owners o on o.id = r.owner_id
-			where o.auth_token_hash = $1 and r.name = 'games'`, hashAuthToken(token), session)
+			select r.owner_id, r.id, 'Mario', '🍄', $2 from rosters r where r.owner_id = $1 and r.name = 'games'`,
+			hashAuthToken(token), session)
 		return err
 	}
 	var pgErr *pgconn.PgError
@@ -330,87 +328,100 @@ func TestImportRefusesTwoActiveDraftsForOneSession(t *testing.T) {
 	callError(c, "GET", "/v1/settings", nil, http.StatusUnauthorized, "unauthorized")
 }
 
-func TestDraftPreferredMemberThenTheirCopies(t *testing.T) {
+func TestUnknownTokensGet401(t *testing.T) {
 	t.Parallel()
-	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
+	unknown := &client{t: t, handler: testHandler, token: newToken()}
+	for _, req := range []struct {
+		method, path string
+		body         any
+	}{
+		{"GET", "/v1/stats", nil},
+		{"GET", "/v1/settings", nil},
+		{"GET", "/v1/rosters/work", nil},
+		{"GET", "/v1/links", nil},
+		{"GET", "/v1/links/" + fakeRepoHash("a/b"), nil},
+		{"DELETE", "/v1/links/" + fakeRepoHash("a/b"), nil},
+		{"GET", "/v1/sessions/s1", nil},
+		{"POST", "/v1/agents/draft", map[string]any{"session": "s1"}},
+		{"POST", "/v1/agents/keepalive", map[string]any{"session": "s1"}},
+		{"POST", "/v1/agents/turn", map[string]any{"session": "s1", "ended": true, "at": "2026-01-01T00:00:00Z"}},
+		{"POST", "/v1/agents/bench", map[string]any{"session": "s1"}},
+		{"POST", "/v1/rosters", map[string]any{"name": "work", "aTeam": members("Gandalf")}},
+	} {
+		callError(unknown, req.method, req.path, req.body, http.StatusUnauthorized, "unauthorized")
+	}
 
-	// The preferred member is drafted even when they aren't first; taken, their next copy is, rather than someone else
-	if d := draft(c, map[string]any{"session": c.session("s1"), "preferred": "frodo"}); displayOf(d) != "Frodo" {
-		t.Fatalf("preferred: %s", displayOf(d))
-	}
-	if d := draft(c, map[string]any{"session": c.session("s2"), "preferred": "Frodo"}); displayOf(d) != "Frodo 2" {
-		t.Fatalf("preferred, taken: %s", displayOf(d))
-	}
-	// A preferred member who's left the cast means an ordinary draft
-	if d := draft(c, map[string]any{"session": c.session("s3"), "preferred": "Nobody"}); displayOf(d) != "Gandalf" {
-		t.Fatalf("preferred, not in the cast: %s", displayOf(d))
-	}
-	// Preferred means the session was already told the name, so it beats getting the old name back
-	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session("s3")}, http.StatusOK)
-	if d := draft(c, map[string]any{"session": c.session("s3"), "preferred": "Frodo"}); displayOf(d) != "Frodo 3" {
-		t.Fatalf("preferred over resume: %s", displayOf(d))
-	}
-	// But never a second draft for a session that has one
-	if d := draft(c, map[string]any{"session": c.session("s1"), "preferred": "Gandalf"}); displayOf(d) != "Frodo" {
-		t.Fatalf("preferred for a drafted session: %s", displayOf(d))
-	}
-	// A preferred member who was the session's previous one is a resume, old task included
-	draft(c, map[string]any{"session": c.session("s5"), "task": fakeCiphertext("old task")})
-	call[draftResponse](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session("s5")}, http.StatusOK)
-	if d := draft(c, map[string]any{"session": c.session("s5"), "preferred": "Gandalf"}); displayOf(d) != "Gandalf" || d.Task == nil || *d.Task != fakeCiphertext("old task") {
-		t.Fatalf("preferred resume: %s, task %v", displayOf(d), d.Task)
-	}
-	callError(c, "POST", "/v1/agents/draft", map[string]any{"session": c.session("s4"), "preferred": ""}, http.StatusBadRequest, "invalid_request")
-}
-
-func TestDraftAvoidsMembersAnnouncedElsewhere(t *testing.T) {
-	t.Parallel()
-	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
-
-	if d := draft(c, map[string]any{"session": c.session("s1"), "avoid": []string{"gandalf"}}); displayOf(d) != "Frodo" {
-		t.Fatalf("avoid: %s", displayOf(d))
-	}
-	// With everyone busy or avoided, copies are drafted, avoided members included
-	if d := draft(c, map[string]any{"session": c.session("s2"), "avoid": []string{"Gandalf", "Frodo"}}); displayOf(d) != "Gandalf 2" {
-		t.Fatalf("avoid, all: %s", displayOf(d))
+	// A registered owner with no rosters yet gets an empty listing, not a 401
+	if l := list(newOwner(t)); len(l.Rosters) != 0 {
+		t.Fatalf("new owner: %+v", l)
 	}
 }
 
-func TestDraftResponsesCarryTheNextState(t *testing.T) {
+func TestDraftResponseMatchesTheStoredDraft(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo"), nil)
-	createRoster(c, "games", members("Mario"), nil)
-	repoHash := fakeRepoHash("acme/game")
-	call[linkResponse](c, "PUT", "/v1/links/"+repoHash, map[string]any{"repo": fakeCiphertext("acme/game"), "roster": "games"}, http.StatusOK)
+	createRoster(c, "work", members("Gandalf"), members("Boromir"))
+	repoHash := fakeRepoHash("a/b")
 
-	d := call[draftWithNext](c, "POST", "/v1/agents/draft", map[string]any{"session": c.session("s1")}, http.StatusOK)
-	if displayOf(d.draftResponse) != "Gandalf" || d.Next.DefaultRoster == nil || *d.Next.DefaultRoster != "work" || !d.Next.AutoDraft {
-		t.Fatalf("draft: %+v", d)
+	// A new draft's response is built from what was written, without reading it back
+	d := draft(c, map[string]any{"session": c.session("s1"), "repoHash": repoHash, "repo": fakeCiphertext("a/b"), "task": fakeCiphertext("t")})
+	d2 := draftSessionNamed(c, c.session("s2"))
+	flat := func(d draftResponse) string {
+		deref := func(s *string) string {
+			if s == nil {
+				return "<nil>"
+			}
+			return *s
+		}
+		return fmt.Sprint(d.Name, d.Emoji, d.Copy, deref(d.Team), d.Roster, d.EmojiMode, d.Session, deref(d.Task), deref(d.Repo),
+			d.DraftedAt.UnixMicro())
 	}
-	if len(d.Next.Links) != 1 || d.Next.Links[0] != (nextLink{RepoHash: repoHash, Roster: "games"}) {
-		t.Fatalf("links: %+v", d.Next.Links)
+	for _, want := range []draftResponse{d, d2} {
+		if got := call[draftResponse](c, "GET", "/v1/sessions/"+want.Session, nil, http.StatusOK); flat(got) != flat(want) {
+			t.Fatalf("stored %s, response %s", flat(got), flat(want))
+		}
 	}
-	if len(d.Next.Rosters) != 2 || d.Next.Rosters[0].Name != "work" || len(d.Next.Rosters[0].Idle) != 1 ||
-		d.Next.Rosters[0].Idle[0] != (idleMember{Name: "Frodo", Emoji: "⭐", Team: "a"}) ||
-		d.Next.Rosters[1].Name != "games" || len(d.Next.Rosters[1].Idle) != 1 {
-		t.Fatalf("rosters: %+v", d.Next.Rosters)
+	if *d2.Team != "b" || d.DraftedAt.IsZero() || *d.Task != fakeCiphertext("t") {
+		t.Fatalf("drafts: %+v, %+v", d, d2)
 	}
+}
 
-	// Releasing puts the member back; GET /v1/next gives the same state on its own
-	released := call[draftWithNext](c, "POST", "/v1/agents/bench", map[string]any{"session": c.session("s1")}, http.StatusOK)
-	if idle := released.Next.Rosters[0].Idle; len(idle) != 2 || idle[0].Name != "Frodo" || idle[1].Name != "Gandalf" {
-		t.Fatalf("after release (never-drafted Frodo first): %+v", idle)
+// sweep runs the background sweep once, as the server does every 15 minutes.
+func sweep(t *testing.T) {
+	t.Helper()
+	if _, err := sweepDrafts(context.Background(), testDB); err != nil {
+		t.Fatal(err)
 	}
-	next := call[nextResponse](c, "GET", "/v1/next", nil, http.StatusOK)
-	if len(next.Rosters) != 2 || len(next.Rosters[0].Idle) != 2 || len(next.Links) != 1 {
-		t.Fatalf("next: %+v", next)
+}
+
+// Two server instances drafting for one owner at once don't share a lock; the unique index on active names is what
+// keeps them from drafting the same member.
+func TestConcurrentDraftsAcrossInstancesNeverDraftAMemberTwice(t *testing.T) {
+	t.Parallel()
+	c := newOwner(t)
+	createRoster(c, "work", members("Gandalf", "Frodo", "Sam"), members("Boromir", "Merry"))
+	instances := []*client{c, {t: t, handler: NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000}), token: c.token}}
+
+	const sessions = 20
+	results := make([]draftResponse, sessions)
+	var wg sync.WaitGroup
+	for i := range sessions {
+		wg.Go(func() {
+			rec := instances[i%2].do("POST", "/v1/agents/draft", map[string]any{"session": c.session(fmt.Sprint(i))})
+			if rec.Code != http.StatusOK {
+				t.Errorf("draft %d: status %d: %s", i, rec.Code, rec.Body.String())
+				return
+			}
+			results[i] = decodeDraft(t, rec.Body.Bytes())
+		})
 	}
-	keepAlive := call[draftWithNext](c, "POST", "/v1/agents/keepalive", map[string]any{"session": c.session("s1")}, http.StatusOK)
-	task := call[draftWithNext](c, "POST", "/v1/agents/task", map[string]any{"session": c.session("s1"), "task": fakeCiphertext("x")}, http.StatusOK)
-	if len(keepAlive.Next.Rosters) != 2 || len(task.Next.Rosters) != 2 {
-		t.Fatal("keepalive or task without next")
+	wg.Wait()
+
+	seen := map[string]bool{}
+	for _, d := range results {
+		if seen[displayOf(d)] {
+			t.Fatalf("%s was drafted twice", displayOf(d))
+		}
+		seen[displayOf(d)] = true
 	}
 }
