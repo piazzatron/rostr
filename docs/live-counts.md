@@ -2,9 +2,10 @@
 
 The home page's live bar, "LIVE 128 agents drafted out of 1,530", updates as agents are drafted and released. It's
 pinned to the bottom of the screen, slides up once the visitor scrolls down, and crawls slowly across. The first
-number is `working`; the second is `working` plus `benched`. `working` is the number of active drafts, copies included, leaving out drafts past their
-owner's expiry. `benched` is the number of idle members in every roster: cast members whose name (copy 1) is free, as
-in `idle` from `GET /v1/stats`. The socket is the only way to get them; there's no polling endpoint.
+number is `working`; the second is `working` plus `benched`. `working` is the number of active drafts, copies included
+(an expired draft counts until the sweep benches it). `benched` is the number of idle members in every roster: cast
+members whose name (copy 1) is free. Both come from one query in `server/internal/api/counts.go`. The socket is the
+only way to get them; there's no polling endpoint.
 
 ## Flow
 
@@ -13,11 +14,11 @@ API server write ──▶ POST /update ──▶ LiveCounts Durable Object ─�
    (Postgres)        (shared secret)   (stores the counts)            (browsers on getrostr.sh)
 ```
 
-1. **A write commits.** Every owner write (drafts, keep-alives, releases, task changes, roster creates, edits, cast
-   replacements, disbands, settings, links), every registration, and every run of the background sweep that benches
-   an expired draft asks for a push. Nearly all of them can change the counts, and the rest cost one cheap query.
+1. **A write commits.** Registrations, drafts, keep-alives, every write that runs in `withOwnerTx` (benches, task
+   changes, roster creates, edits, cast replacements, disbands, settings, links), and every run of the background
+   sweep that benches a draft ask for a push. Turn reports don't, since they can't change the counts.
 2. **Pushes are coalesced.** The first write schedules a push 500ms later; writes in that window ride along. The push
-   recomputes the counts with a single query and sends `POST {LIVE_URL}/update` with a 3-second timeout. It runs in the
+   recomputes the counts with a single query and sends `POST {LIVE_URL}/update`, both within 3 seconds. It runs in the
    background, so a slow or failing Worker never delays a write; failures are logged and the next write tries again.
    Pushes from one instance go out one at a time, so the Worker never gets an older count after a newer one.
 3. **The Worker stores and broadcasts.** The `rostr-live` Worker ([`live/`](../live/)) checks the secret and passes

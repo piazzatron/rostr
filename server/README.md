@@ -1,7 +1,7 @@
 # rostr API server
 
-The API at `api.getrostr.sh`: Go (`net/http`, `pgx`) on Postgres. The contract is [docs/api.md](../docs/api.md) and the
-schema is [docs/server-schema.md](../docs/server-schema.md). Migrations in `internal/api/migrations/` are embedded and
+The API at `api.getrostr.sh`: Go (`net/http`, `pgx`) on Postgres. How it fits in is in [docs/cloud.md](../docs/cloud.md) and
+[docs/storage.md](../docs/storage.md). Migrations in `internal/api/migrations/` are embedded and
 run on startup.
 
 Environment:

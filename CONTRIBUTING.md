@@ -24,7 +24,7 @@ CI fails if the two are out of sync.
 | `server/` | The API at api.getrostr.sh (Go, Postgres). See [`server/README.md`](server/README.md) |
 | `site/` | getrostr.sh (Astro) |
 | `tests/` | End-to-end tests: the real CLI against a real server |
-| `docs/` | Design docs. [`docs/cli-spec.md`](docs/cli-spec.md) is the source of truth for how the CLI behaves |
+| `docs/` | High-level docs on how each system works. Start at [`docs/README.md`](docs/README.md) |
 
 ## Building and testing
 
@@ -80,7 +80,7 @@ To try the CLI against your local server, start it with `docker compose up` and 
 ## Making a change
 
 1. For anything bigger than a small fix, open an issue first so we can agree on the approach.
-2. If the change affects how the CLI behaves, update [`docs/cli-spec.md`](docs/cli-spec.md) along with the code, and
+2. If the change alters how a system works, update its doc in [`docs/`](docs/README.md) along with the code, and
    the CLI docs at `site/src/pages/cli.astro` if a command or flag changes.
 3. Add or update tests, and make sure `make check` passes. CI runs the CLI, server, and end-to-end
    suites on every pull request.

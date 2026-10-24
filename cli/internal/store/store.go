@@ -1,6 +1,6 @@
 // Package store defines the storage rostr runs against: rosters, project links, settings, and drafts. Local mode
 // implements it with SQLite (SQLite); cloud mode implements it with the rostr API (Cloud). Drafting itself, including
-// picking the roster for a session's first draft, lives behind this interface, because in cloud mode the server
+// picking the roster, lives behind this interface, because in cloud mode the server
 // drafts.
 package store
 
@@ -68,9 +68,8 @@ type Store interface {
 	SetExpiry(ctx context.Context, expiry string) error
 
 	// Draft gives a session its member: the same one if it has an active draft, its last one if that's free,
-	// otherwise the free member drafted least recently (then numbered copies) of the session's pinned roster. A
-	// session's first draft uses req.Roster, else the linked roster of req.Repo, else the default; with none, the
-	// error is ErrNoRosters.
+	// otherwise the free member drafted least recently (then the longest-resting member's name, then numbered copies)
+	// of req.Roster, else the linked roster of req.Repo, else the default; with none, the error is ErrNoRosters.
 	Draft(ctx context.Context, req DraftRequest) (Draft, error)
 	// Reclaim re-tells a session's name without drafting a new member: its active draft (bumped), else its last
 	// member if still free, else nil.
@@ -133,8 +132,8 @@ type DisbandResult struct {
 // DraftRequest asks for a member for a session.
 type DraftRequest struct {
 	SessionID string
-	Roster    string // the --roster flag, used only for a session's first draft
-	Repo      string // the project the session started in, "" outside git
+	Roster    string // the --roster flag, used only when the session needs a new member
+	Repo      string // the project the session is in, "" outside git
 	Task      string // optional; replaces the task of an existing draft
 	// IfAutoDraft makes a new draft conditional on the auto-draft setting: with it off, the error is ErrAutoDraftOff.
 	// A session that already has a draft gets it back either way.
