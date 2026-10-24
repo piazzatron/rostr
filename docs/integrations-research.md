@@ -98,7 +98,9 @@ Source: [Hooks docs](https://learn.chatgpt.com/docs/hooks).
   ([config reference](https://learn.chatgpt.com/docs/config-file/config-reference),
   [`title_setup.rs`](https://github.com/openai/codex/blob/main/codex-rs/tui/src/bottom_pane/title_setup.rs)).
   With `["spinner", "thread-name", "project"]`, the rostr name reaches tmux and herdr from the right pane, even
-  under the daemon. Under GNU Screen, Codex converts titles to ASCII, which drops emoji.
+  under the daemon. Under GNU Screen, Codex converts titles to ASCII, which drops emoji. (Codex 0.164, checked
+  2026-10-24 with no `terminal_title` set: the title is `<thread name> | <project>` once the thread has a name, and
+  a `thread/name/set` from another client changes it at once.)
 
 ### Skills and slash commands
 
@@ -204,9 +206,13 @@ There's no plugin. Inside the existing `rostr hook claude-code …` handlers:
   in the background with a short timeout, ignoring failures. Optionally add `--title "<display> · <task>"`.
 - **Session end:** run the same command with `--clear-display-agent --clear-title`.
 - **Codex:** skip until #48500 is fixed, unless Codex runs with `--no-daemon`. Document the sidebar row option
-  instead. (Done: rostr labels with `--agent codex` when the nearest `codex` ancestor of the hook isn't an
-  `app-server`. Checked against Codex 0.164: a daemon that a TUI auto-starts stays that TUI's child, so "the pane's
-  shell is an ancestor" alone would label the first pane with every other pane's names.)
+  instead. (Done differently, checked against Codex 0.164 and herdr 0.9.5: the app-server protocol has nothing
+  tying a thread to a client or pid, but Codex's default terminal title is `<thread name> | <project>`, and herdr
+  keeps each pane's `terminal_title` in `herdr pane list`. rostr names the thread, so a hook the daemon ran finds the
+  one Codex pane whose title shows the name and labels it with `--agent codex`. A hook the TUI ran
+  (`--no-daemon`, where threads can't be named) trusts `HERDR_PANE_ID`; it's told apart by the nearest `codex`
+  ancestor not being an `app-server`. A daemon that a TUI auto-starts stays that TUI's child, so "the pane's shell
+  is an ancestor" alone would label the first pane with every other pane's names.)
 
 ## tmux
 

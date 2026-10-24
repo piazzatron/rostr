@@ -142,7 +142,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 		// enough to lose its name gets a new one), and the task goes to the server in the background ("--" so a prompt
 		// starting with "-" isn't read as flags)
 		d = *known
-		renamed, _, err := wakeAfterRest(ctx, pane.Claude, input.SessionID, hookDir(input.Cwd), true)
+		renamed, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 		if err != nil {
 			return err
 		}
@@ -196,10 +196,11 @@ func laterPrompt(ctx context.Context, input claudecode.HookInput, stdout io.Writ
 // wakeSession is wakeAfterRest for Claude Code: note tells the agent its new name, if it has one, and in Remote
 // Control and cloud sessions, whose apps don't show a hook's title, asks it to retitle the session.
 func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, err error) {
-	d, from, err := wakeAfterRest(ctx, pane.Claude, input.SessionID, hookDir(input.Cwd), true)
+	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil || d == nil {
 		return "", err
 	}
+	pane.Label(ctx, pane.Claude, d.Display())
 	note = claudecode.RenamedAfterRest(d.Display(), from)
 	if where := titleWhere(input.SessionID); where.TitlesFirst() {
 		note += "\n" + claudecode.TitleInstruction(d.Display(), input.SessionID, where)
@@ -220,7 +221,7 @@ func hookWorking(ctx context.Context, input claudecode.HookInput, stdout, stderr
 			return nil
 		}
 	}
-	_, _, err := wakeAfterRest(ctx, pane.Claude, input.SessionID, hookDir(input.Cwd), false)
+	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }
 
@@ -236,7 +237,7 @@ const wakeCheckAfter = store.RestAfter - 5*time.Minute
 // reported before going on: if the name was taken, the session gets its old one back if that's free, or a new one,
 // which wakeAfterRest returns with the name it had (from). Otherwise, and for a turn that ended recently, the start is
 // reported in the background.
-func wakeAfterRest(ctx context.Context, agent pane.Agent, sessionID, dir string, check bool) (renamed *store.Draft, from string, err error) {
+func wakeAfterRest(ctx context.Context, sessionID, dir string, check bool) (renamed *store.Draft, from string, err error) {
 	end, ok := keepalive.LoadTurnEnd(paths.TurnDir(), sessionID)
 	if !ok {
 		return nil, "", nil
@@ -276,7 +277,6 @@ func wakeAfterRest(ctx context.Context, agent pane.Agent, sessionID, dir string,
 	if d.Display() == end.Display {
 		return nil, "", nil
 	}
-	pane.Label(ctx, agent, d.Display())
 	return d, end.Display, nil
 }
 
@@ -381,7 +381,7 @@ func recordTurnEnd(ctx context.Context, sessionID string) error {
 func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
 	keepalive.Forget(paths.TurnDir(), input.SessionID)
-	pane.Clear(ctx, pane.Claude)
+	pane.Clear(ctx, pane.Claude, "")
 	st, err := openStore()
 	if err != nil {
 		return err

@@ -25,30 +25,95 @@ const (
 	Codex  Agent = "codex"
 )
 
-// Label shows display on the session's pane: through herdr inside herdr, otherwise through tmux inside tmux.
+// titleWait is how long a Codex hook outside the TUI looks for its pane, while Codex puts the thread's new name in the
+// terminal title.
+const titleWait = time.Second
+
+// Label shows display on the session's pane: through herdr inside herdr, otherwise through tmux inside tmux. A Codex
+// hook that its shared daemon ran can't tell its pane from its environment, so it labels the one Codex pane whose
+// terminal title shows display, which is there because rostr names the Codex thread after the session.
 func Label(ctx context.Context, agent Agent, display string) {
-	if !paneEnvTrusted(agent) {
+	if paneEnvTrusted(agent) {
+		switch multiplexer() {
+		case herdr:
+			herdrLabel(ctx, os.Getenv("HERDR_PANE_ID"), agent, display)
+		case tmux:
+			tmuxLabel(ctx, os.Getenv("TMUX_PANE"), display)
+		}
 		return
 	}
-	switch multiplexer() {
+	titled := func(title, _ string) bool { return showsName(title, display) }
+	switch where, id := findPane(ctx, agent, titled, titleWait); where {
 	case herdr:
-		herdrLabel(ctx, agent, display)
+		herdrLabel(ctx, id, agent, display)
 	case tmux:
-		tmuxLabel(ctx, display)
+		tmuxLabel(ctx, id, display)
 	}
 }
 
-// Clear removes the label Label added, when the session ends.
-func Clear(ctx context.Context, agent Agent) {
-	if !paneEnvTrusted(agent) {
+// Clear removes the label Label added, when the session ends. A Codex hook that its shared daemon ran looks for the
+// pane labeled display instead.
+func Clear(ctx context.Context, agent Agent, display string) {
+	if paneEnvTrusted(agent) {
+		switch multiplexer() {
+		case herdr:
+			herdrClear(ctx, os.Getenv("HERDR_PANE_ID"), agent)
+		case tmux:
+			tmuxClear(ctx, os.Getenv("TMUX_PANE"))
+		}
 		return
 	}
-	switch multiplexer() {
-	case herdr:
-		herdrClear(ctx, agent)
-	case tmux:
-		tmuxClear(ctx)
+	if display == "" {
+		return
 	}
+	labeled := func(_, label string) bool { return label == display }
+	switch where, id := findPane(ctx, agent, labeled, 0); where {
+	case herdr:
+		herdrClear(ctx, id, agent)
+	case tmux:
+		tmuxClear(ctx, id)
+	}
+}
+
+// findPane looks for the one pane that match picks by its terminal title and rostr label: in herdr's panes running
+// agent, else in tmux's. While herdr or tmux answers without a match, it tries again for up to wait.
+func findPane(ctx context.Context, agent Agent, match func(title, label string) bool, wait time.Duration) (kind, string) {
+	deadline := time.Now().Add(wait)
+	for {
+		id, herdrOK := herdrFindPane(ctx, agent, match)
+		if id != "" {
+			return herdr, id
+		}
+		id, tmuxOK := tmuxFindPane(ctx, match)
+		if id != "" {
+			return tmux, id
+		}
+		if !herdrOK && !tmuxOK || time.Now().After(deadline) {
+			return none, ""
+		}
+		select {
+		case <-ctx.Done():
+			return none, ""
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+// showsName reports whether a terminal title shows display as a whole name: "🧙 Gandalf" in
+// "🧙 Gandalf · Fix it | proj", but "🌱 Sam" not in "🌱 Samwise · Fix it".
+func showsName(title, display string) bool {
+	for i := 0; display != ""; {
+		j := strings.Index(title[i:], display)
+		if j < 0 {
+			return false
+		}
+		end := i + j + len(display)
+		if end == len(title) || title[end] == ' ' {
+			return true
+		}
+		i += j + 1
+	}
+	return false
 }
 
 // paneEnvTrusted reports whether this hook's environment names the session's own pane. Claude Code runs hooks as its

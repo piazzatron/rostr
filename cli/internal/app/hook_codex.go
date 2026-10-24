@@ -79,13 +79,15 @@ func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, std
 
 	keepalive.Forget(paths.KeepAliveDir(), input.SessionID)
 	keepalive.Forget(paths.TurnDir(), input.SessionID)
-	pane.Clear(ctx, pane.Codex)
 	st, err := openStore()
 	if err != nil {
 		return err
 	}
 	defer st.Close()
-	_, err = st.Bench(ctx, input.SessionID)
+	d, err := st.Bench(ctx, input.SessionID)
+	if d != nil {
+		pane.Clear(ctx, pane.Codex, d.Display())
+	}
 	return err
 }
 
@@ -136,12 +138,13 @@ func codexThreadName(d store.Draft) string {
 // codexLaterPrompt records that the thread's turn started and keeps its draft alive. When the thread lost its name
 // while resting, it renames the thread and tells the agent.
 func codexLaterPrompt(ctx context.Context, input codex.HookInput, stdout io.Writer) error {
-	d, from, err := wakeAfterRest(ctx, pane.Codex, input.SessionID, hookDir(input.Cwd), true)
+	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil {
 		return err
 	}
 	if d != nil {
 		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
+		pane.Label(ctx, pane.Codex, d.Display())
 		fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.RenamedAfterRest(d.Display(), from)))
 	}
 	return keepDraftAlive(ctx, input.SessionID)
@@ -155,6 +158,6 @@ func hookCodexTurnEnd(ctx context.Context, input codex.HookInput, stdout, stderr
 // hookCodexWorking is Codex's PostToolUse hook: a tool call reports the turn's start in the background, if nothing
 // has since the last turn ended (see hookWorking).
 func hookCodexWorking(ctx context.Context, input codex.HookInput, stdout, stderr io.Writer) error {
-	_, _, err := wakeAfterRest(ctx, pane.Codex, input.SessionID, hookDir(input.Cwd), false)
+	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }

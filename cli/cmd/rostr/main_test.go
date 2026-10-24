@@ -1131,17 +1131,18 @@ func TestHooksLabelTheHerdrPane(t *testing.T) {
 		t.Fatalf("herdr calls:\n%s", calls)
 	}
 
-	// A Codex hook that the Codex TUI didn't run (here, the test did) leaves panes alone: its environment may be the
-	// shared daemon's, which names another pane
+	// A Codex hook that the Codex TUI didn't run (here, the test did) may have the shared daemon's environment, which
+	// names another pane, so it doesn't label w1:p3: it looks for the pane by its title, and herdr has none here
 	os.Remove(herdrCalls)
 	r = s.run(s.home, `{"session_id":"t1","transcript_path":null,"prompt":"Fix it"}`, env, "hook", "codex", "prompt")
 	if r.code != 0 || !strings.Contains(r.stdout, "You're 💍 Frodo") {
 		t.Fatalf("codex prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	s.run(s.home, `{"session_id":"t1"}`, env, "hook", "codex", "session-end")
-	if _, err := os.Stat(herdrCalls); err == nil {
-		t.Fatal("a Codex hook outside Codex called herdr")
+	if calls, _ := os.ReadFile(herdrCalls); strings.Contains(string(calls), "report-metadata") {
+		t.Fatalf("a Codex hook outside Codex labeled the environment's pane:\n%s", calls)
 	}
+	os.Remove(herdrCalls)
 
 	// Run by the Codex TUI itself (`codex --no-daemon`), it labels the pane as Codex's. A copy of sh named codex stands
 	// in for the TUI, and the trailing ":" keeps sh from exec'ing rostr in its place.

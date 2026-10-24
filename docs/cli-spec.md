@@ -411,8 +411,9 @@ Findings behind this are in [integrations-research.md](integrations-research.md#
   `initialize`, `initialized`, then `thread/name/set`. It gives up after 2 seconds and ignores failures; without a
   daemon (`codex --no-daemon`) threads stay unnamed. The agent's later `rostr task` updates the task, not the
   thread name.
-- **Terminal title.** For tmux and herdr to show the name, set
-  `tui.terminal_title = ["spinner", "thread-name", "project"]` in `~/.codex/config.toml`.
+- **Terminal title.** Codex's default terminal title shows the thread name (`🧙 Gandalf · <task> | <project>`), and
+  it changes as soon as rostr names the thread. That's how a hook run by the daemon finds its pane (below). A custom
+  `tui.terminal_title` in `~/.codex/config.toml` needs `thread-name` in it.
 - **`SessionEnd`** is installed with `timeout: 3` (Codex's most), and the release gives up after 2 seconds.
 - **Installed** to `$CODEX_HOME/hooks.json` (`~/.codex/hooks.json`), as `if command -v rostr >/dev/null; then rostr
   hook codex <event>; fi`, plus the `rostr` and `rostr-draft` skills in `~/.agents/skills` (Codex removed custom
@@ -420,20 +421,21 @@ Findings behind this are in [integrations-research.md](integrations-research.md#
   skills only if unmodified.
 - **Approval.** Codex runs a non-managed hook only once the user trusts it in `/hooks`. The one-line commands never
   change, so one approval survives rostr upgrades.
-- **tmux and herdr only without the daemon.** By default Codex runs hooks in a shared app-server daemon whose
-  environment belongs to whichever terminal started it, so `TMUX_PANE` and `HERDR_PANE_ID` can name another pane
-  ([openai/codex#48500](https://github.com/openai/codex/issues/48500)). So a Codex hook labels its pane (see
-  [tmux and herdr](#tmux-and-herdr)) only when the Codex process that ran it is the TUI rather than an app-server:
-  rostr walks up its parent processes (with `ps`) to the nearest `codex` and skips the label if its arguments include
-  `app-server`. That means `codex --no-daemon`, or `daemon_auto_start = false` under `[features]`. With the daemon,
-  Codex sessions rely on the terminal title instead.
+- **Finding the pane.** By default Codex runs hooks in a shared app-server daemon whose environment belongs to
+  whichever terminal started it, so `TMUX_PANE` and `HERDR_PANE_ID` can name another pane
+  ([openai/codex#48500](https://github.com/openai/codex/issues/48500)), and Codex tells a hook nothing about which
+  terminal its session is in. So a Codex hook trusts its environment only when the Codex process that ran it is the
+  TUI rather than an app-server: rostr walks up its parent processes (with `ps`) to the nearest `codex` and checks
+  its arguments for `app-server`. That's `codex --no-daemon`, or `daemon_auto_start = false` under `[features]`.
+  Otherwise it labels the pane whose terminal title shows the name, which rostr has just put in the thread name (see
+  [tmux and herdr](#tmux-and-herdr)).
 - Failures never block a session: every `rostr hook codex` exits 0.
 
 ### tmux and herdr
 
-Claude Code hooks, and Codex hooks run without the daemon (see above). Best-effort: each command has a 1-second
-timeout, and failures are ignored. The pane is labeled whenever the agent is drafted or re-told (the draft step,
-resume, compaction, `/draft` or `$rostr-draft`) and cleared at `SessionEnd`.
+Claude Code and Codex hooks. Best-effort: each command has a 1-second timeout, and failures are ignored. The pane is
+labeled whenever the agent is drafted or re-told (the draft step, resume, compaction, `/draft` or `$rostr-draft`) and
+cleared at `SessionEnd`.
 
 - **herdr** (`HERDR_ENV=1`): `herdr pane report-metadata "$HERDR_PANE_ID" --source rostr --agent <claude|codex>
   --display-agent "<display>"` replaces "claude" or "codex" in herdr's sidebar; session end sends
@@ -445,6 +447,14 @@ resume, compaction, `/draft` or `$rostr-draft`) and cleared at `SessionEnd`.
   - Renames the window to the display only if it has one pane and `automatic-rename` is on (or rostr renamed it),
     and marks it `@rostr_renamed`.
   - Session end unsets `@rostr` and, if rostr renamed the window, turns `automatic-rename` back on.
+- **Codex hooks run by the daemon** don't know their pane (see [Codex](#codex)), so they find it:
+  - **Label:** `herdr pane list`, for the one pane whose `agent` is `codex` and whose `terminal_title` shows the
+    display as a whole name (`🌱 Sam` doesn't match `🌱 Samwise`); else `tmux list-panes -a` (the server `TMUX`
+    names, or the default one), for the one pane whose `pane_title` does. It retries for up to a second while herdr
+    or tmux answers without a match, since the title changes when the TUI hears the new thread name. No pane, or
+    more than one, and it labels nothing.
+  - **Clear:** the pane whose herdr `display_agent`, or tmux `@rostr`, is the released member's display, since the
+    title may be gone by then. Names are unique among a user's drafts, so the display picks one pane.
 
 ### The draft step
 
