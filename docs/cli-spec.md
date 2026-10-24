@@ -522,8 +522,9 @@ who it is with the same text as the hooks, and sets the title. In Codex it's the
 The same steps run locally and on the server (storage specifics in the storage docs):
 
 1. **Expire stale drafts:** release any draft not seen within the expiry (`rostr config expiry`, 7 days by default).
-   This is the backstop for sessions that die without the release hook, and it runs lazily here, so there's no
-   cleanup job. A dead session holding a name you want can be freed sooner with `rostr bench <name>`.
+   This is the backstop for sessions that die without the release hook. Locally it runs lazily here; the server
+   runs it in a background sweep every 15 minutes instead (see [keepalive.md](keepalive.md#expiry)). A dead session
+   holding a name you want can be freed sooner with `rostr bench <name>`.
    Released drafts are kept for 7 days, so a resumed session can ask for its old name back, then deleted.
 2. **Same session, same name:** if the session already has an active draft, in any roster, bump its last-seen time
    and return it.
@@ -586,6 +587,8 @@ archived cloud session, a terminal left open) rest instead of holding a name unt
   drafts as usual, asking for its old name back.
 
 ### Keep-alive
+
+How this and resting map to the code, and how to test them: [keepalive.md](keepalive.md).
 
 A draft's last-seen time is bumped by drafting the same session again (resume, compaction, `/draft`), by
 `rostr task`, and by the prompt hook, so a session you're using never expires.
