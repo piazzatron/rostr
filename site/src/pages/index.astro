@@ -226,7 +226,7 @@ const SHOW_LIVE_BAR = false;
           <p>Run <code>rostr assemble</code>, or ask your agent to do it for you.</p>
         </li>
         <li>
-          <h3>Sessions draft agents</h3>
+          <h3>New sessions automatically draft agents</h3>
           <p>
             When a session starts, a hook drafts the next available name and gives the agent its identity.
           </p>
@@ -239,18 +239,6 @@ const SHOW_LIVE_BAR = false;
         </li>
       </ol>
       <p class="docs-link"><a href="/how-it-works">Learn how <Rostr /> works under the hood →</a></p>
-
-      <p class="subhead-command"><span aria-hidden="true">$</span>rostr --help</p>
-      <div class="group-cards">
-        {COMMAND_GROUP_CARDS.map((card) => (
-          <a class="card group-card" href={card.href}>
-            <h3>{card.title}</h3>
-            <p>{card.description}</p>
-            <span class="group-card-commands">{card.commands.map((command) => <code>{command}</code>)}</span>
-          </a>
-        ))}
-      </div>
-      <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
     </section>
 
     <!-- Rosters -->
@@ -336,6 +324,24 @@ const SHOW_LIVE_BAR = false;
         </li>
       </ol>
       <p class="value-closer">Also, it's really funny.</p>
+    </section>
+
+    <!-- CLI -->
+    <section class="section" id="cli">
+      <h2><Rostr /> CLI</h2>
+      <p class="section-lede">
+        <Rostr /> comes equipped with a thoughtfully designed CLI (that you'll never need to touch).
+      </p>
+      <div class="group-cards">
+        {COMMAND_GROUP_CARDS.map((card) => (
+          <a class="card group-card" href={card.href}>
+            <h3>{card.title}</h3>
+            <p>{card.description}</p>
+            <span class="group-card-commands">{card.commands.map((command) => <code>{command}</code>)}</span>
+          </a>
+        ))}
+      </div>
+      <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
     </section>
 
     <!-- Local and cloud -->
