@@ -167,7 +167,7 @@ const LIST_JSON_EXAMPLE = `{
 }`;
 
 // The herdr sidebar in the tools section, one agent per pane
-const HERDR_AGENTS = ["🏀 Cuban", "🍔 Buffett", "🥚 Andreessen"];
+const HERDR_AGENTS = ["📚 Hermione", "🌙 Luna", "🌿 Neville"];
 
 // A cloud, the mark the Claude app puts on its cloud sessions
 const CLOUD_ICON =
@@ -266,13 +266,13 @@ const SHOW_LIVE_BAR = false;
             <div class="tool-chrome"><span></span><span></span><span></span></div>
             <p class="tool-claude-day">Today</p>
             <ul>
-              <li>🤖 Altman · Release the CLI<i class="tool-claude-dot"></i></li>
-              <li class="is-active">🥽 Zuck · Fix uninstall binary removal<i class="tool-claude-dot"></i></li>
+              <li>🧙 Gandalf · Release the CLI<i class="tool-claude-dot"></i></li>
+              <li class="is-active">💍 Frodo · Fix uninstall binary removal<i class="tool-claude-dot"></i></li>
             </ul>
             <p class="tool-claude-day">Yesterday</p>
             <ul>
-              <li>📦 Bezos · Fix website vertical spacing<svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
-              <li>⛵ Ellison · Add analytics to site<svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
+              <li>👑 Aragorn · Fix website vertical spacing<svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
+              <li>🏹 Legolas · Add analytics to site<svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
             </ul>
           </div>
           <figcaption><strong>Claude Code</strong> desktop, terminal, and cloud</figcaption>
@@ -287,10 +287,10 @@ const SHOW_LIVE_BAR = false;
               app<i></i>
             </p>
             <ul>
-              <li>🍔 Buffett · Fix flaky checkout test</li>
-              <li>🧠 Amodei · Draft the release notes</li>
-              <li>🎁 Oprah · Triage Sentry errors</li>
-              <li>🧥 Huang · Speed up the test suite</li>
+              <li>🌱 Samwise · Fix flaky checkout test</li>
+              <li>🪓 Gimli · Draft the release notes</li>
+              <li>✨ Galadriel · Triage Sentry errors</li>
+              <li>🍺 Merry · Speed up the test suite</li>
             </ul>
           </div>
           <figcaption><strong>Codex</strong> app, terminal, and cloud</figcaption>
@@ -298,14 +298,14 @@ const SHOW_LIVE_BAR = false;
 
         <figure class="tool tool-tmux">
           <div class="tool-window tool-term" aria-hidden="true">
-            <p class="tool-tmux-border"><span>🏀 Cuban · Upgrade the Postgres driver | app</span></p>
+            <p class="tool-tmux-border"><span>📚 Hermione · Upgrade the Postgres driver | api</span></p>
             <div class="tool-tmux-body">
               <p class="tool-tmux-prompt">› Upgrade the Postgres driver</p>
               <p>• Bumped pgx to v5 and fixed the two call sites.</p>
               <p class="tool-term-dim">Worked for 41s</p>
             </div>
-            <p class="tool-tmux-status">~/dev/app · <b>🏀 Cuban · Upgrade the Postgres driver</b></p>
-            <p class="tool-tmux-bar"><span>0:zsh</span><span>1:🍔 Buffett</span><span class="is-active">2:🏀 Cuban*</span></p>
+            <p class="tool-tmux-status">~/dev/api · <b>📚 Hermione · Upgrade the Postgres driver</b></p>
+            <p class="tool-tmux-bar"><span>0:zsh</span><span>1:🌙 Luna</span><span class="is-active">2:📚 Hermione*</span></p>
           </div>
           <figcaption><strong>tmux</strong> panes and windows</figcaption>
         </figure>
@@ -316,7 +316,7 @@ const SHOW_LIVE_BAR = false;
             <ul>
               {HERDR_AGENTS.map((agent, i) => (
                 <li class:list={{ "is-active": i === 0 }}>
-                  <span class="tool-herdr-pane">○ <b>app</b> · {i + 1}</span>
+                  <span class="tool-herdr-pane">○ <b>api</b> · {i + 1}</span>
                   <span class="tool-herdr-name">{agent}</span>
                 </li>
               ))}
