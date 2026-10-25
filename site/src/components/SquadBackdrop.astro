@@ -23,7 +23,6 @@ const { rosters, tasks } = Astro.props;
     right: calc(50% - 50vw);
     overflow: hidden;
     pointer-events: none;
-    opacity: 0.45;
     mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
   }
 
@@ -36,50 +35,63 @@ const { rosters, tasks } = Astro.props;
     left: 0;
   }
 
-  .squad-backdrop :global(.squad-chip) {
-    padding: 2px 9px;
-    border: 1.5px solid var(--squad-color);
-    border-radius: 999px;
-    background: var(--surface);
-    font-size: 12.5px;
+  /* A drafted member's name, and later its cursor's label: both sit just below and right of the point, so the chip
+     turns into the label in place */
+  .squad-backdrop :global(.squad-chip),
+  .squad-backdrop :global(.squad-label) {
+    margin: 15px 0 0 11px;
+    padding: 3px 9px 3px 8px;
+    border-radius: 4px 10px 10px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
     white-space: nowrap;
-    transform: translate(-50%, -50%); /* centered on its point; the script sets translate */
+    transform-origin: top left;
   }
 
-  .squad-backdrop :global(.squad-cursor) {
-    display: flex;
-    align-items: flex-start;
+  .squad-backdrop :global(.squad-chip) {
+    border: 1px solid color-mix(in srgb, var(--squad-color) 45%, var(--border));
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.25);
+  }
+
+  .squad-backdrop :global(.squad-label) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    border: 1px solid transparent;
+    background: var(--squad-color);
+    color: white;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.12),
+      0 6px 14px -6px color-mix(in srgb, var(--squad-color) 70%, transparent);
   }
 
   .squad-backdrop :global(.squad-cursor svg) {
     display: block;
-    width: 16px;
-    height: 18px;
-    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.2));
+    width: 15px;
+    height: 17px;
+    margin: -1px 0 0 -1px; /* puts the arrow's tip on the point */
+    transform-origin: top left;
+    filter: drop-shadow(0 1.5px 2px rgb(0 0 0 / 0.22));
   }
 
-  .squad-backdrop :global(.squad-label) {
-    margin: 13px 0 0 -3px;
-    padding: 2px 8px;
-    border-radius: 6px 999px 999px 999px;
-    background: var(--squad-color);
-    color: white;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
+  /* The task follows the name after a thin divider, like a session title */
   .squad-backdrop :global(.squad-task) {
+    margin-left: 6px;
+    padding-left: 6px;
+    border-left: 1px solid rgb(255 255 255 / 0.35);
     font-weight: 500;
-    opacity: 0.85;
   }
 
   .squad-backdrop :global(.squad-ripple) {
-    width: 22px;
-    height: 22px;
-    margin: -11px 0 0 -11px;
-    border: 1.5px solid var(--squad-color);
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
     border-radius: 50%;
+    background: color-mix(in srgb, var(--squad-color) 22%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -92,11 +104,11 @@ const { rosters, tasks } = Astro.props;
 <script>
   const MAX_SQUADS = 2; // on screen at once
   const SQUAD_GAP_MS = [4000, 7000]; // between one squad being drafted and the next
-  const LABEL_BOX = { width: 210, height: 40 }; // room a cursor needs below and right of its tip, for its label
+  const LABEL_BOX = { width: 240, height: 44 }; // room a cursor needs below and right of its tip, for its label
   // Squad colors, one per squad; the first is the site's accent
-  const COLORS = ["var(--accent)", "#5b34e6", "#0f9d74", "#2f6fdb", "#d6336c"];
+  const COLORS = ["var(--accent)", "#7c5cff", "#12a37f", "#3b82f6", "#e5508a"];
   const CURSOR_SVG =
-    '<svg viewBox="0 0 16 18"><path d="M1 1 L1 15.5 L5 11.8 L7.8 17 L10.2 15.8 L7.6 10.8 L13 10.6 Z" fill="var(--squad-color)" stroke="white" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+    '<svg viewBox="0 0 15 17"><path d="M1.5 1.5v12.2c0 .5.6.8 1 .4l2.9-2.9 2.1 4.4c.2.4.6.5 1 .3l1.3-.6c.4-.2.5-.6.3-1L8 10.1h4.1c.5 0 .8-.6.4-1L2.5 1.1c-.4-.3-1-.1-1 .4z" fill="var(--squad-color)" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>';
 
   type Point = { x: number; y: number };
   type Rect = { left: number; top: number; right: number; bottom: number };
@@ -152,7 +164,7 @@ const { rosters, tasks } = Astro.props;
 
     // A free point within the given distance of a center, or anywhere when there's no center, whose label won't cover
     // a teammate's
-    function freePoint(content: Rect[], center?: Point, near = [0, 0], teammates: Point[] = []): Point | undefined {
+    function freePoint(content: Rect[], center?: Point, near = [0, 0], teammates: Point[] = [], gap = 36): Point | undefined {
       const { width, height } = backdrop!.getBoundingClientRect();
       for (let attempt = 0; attempt < 60; attempt++) {
         const angle = random(0, Math.PI * 2);
@@ -161,7 +173,7 @@ const { rosters, tasks } = Astro.props;
           ? { x: center.x + Math.cos(angle) * distance, y: center.y + Math.sin(angle) * distance }
           : { x: random(0, width), y: random(0, height) };
         if (!isFree(point, content)) continue;
-        if (teammates.some((other) => Math.abs(other.x - point.x) < 170 && Math.abs(other.y - point.y) < 36)) continue;
+        if (teammates.some((other) => Math.abs(other.x - point.x) < LABEL_BOX.width && Math.abs(other.y - point.y) < gap)) continue;
         if (!center && [...meetingPoints].some((other) => Math.hypot(other.x - point.x, other.y - point.y) < 300)) continue;
         return point;
       }
@@ -180,12 +192,12 @@ const { rosters, tasks } = Astro.props;
     async function click(cursor: HTMLElement, point: Point, color: string) {
       const ripple = make("squad-ripple", color);
       ripple.style.translate = at(point);
-      cursor.firstElementChild!.animate([{ scale: 1 }, { scale: 0.8 }, { scale: 1 }], {
-        duration: 220,
+      cursor.firstElementChild!.animate([{ scale: 1 }, { scale: 0.85 }, { scale: 1 }], {
+        duration: 260,
         easing: "ease-out",
       });
-      await ripple.animate([{ scale: 0.3, opacity: 0.6 }, { scale: 1.4, opacity: 0 }], {
-        duration: 600,
+      await ripple.animate([{ scale: 0.2, opacity: 1 }, { scale: 1.6, opacity: 0 }], {
+        duration: 700,
         easing: "ease-out",
       }).finished;
       ripple.remove();
@@ -195,36 +207,39 @@ const { rosters, tasks } = Astro.props;
     async function member(name: string, color: string, meeting: Point, content: Rect[], spots: Map<string, Point>, delay: number) {
       await sleep(delay);
       const teammates = () => [...spots].filter(([other]) => other !== name).map(([, spot]) => spot);
-      const start = freePoint(content, meeting, [60, 170], teammates());
+      // Far enough from teammates that moving around its spot never takes its label across theirs
+      const start = freePoint(content, meeting, [50, 170], teammates(), 80);
       if (!start) return;
       spots.set(name, start);
 
       const chip = make("squad-chip", color);
       chip.textContent = name;
       chip.style.translate = at(start);
-      await chip.animate([{ scale: 0.85, opacity: 0 }, { scale: 1, opacity: 1 }], {
-        duration: 600,
-        easing: "ease-out",
+      // It rises into place as it's drafted
+      await chip.animate([{ opacity: 0, translate: at({ x: start.x, y: start.y + 6 }) }, { opacity: 1, translate: at(start) }], {
+        duration: 500,
+        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
       }).finished;
-      await sleep(700);
+      await sleep(900);
 
-      // The chip shrinks into the cursor's tip as the cursor appears
+      // Put to work: the chip takes on the squad's color as its label, and the cursor's arrow appears at its corner
       const cursor = make("squad-cursor", color, CURSOR_SVG);
       const label = document.createElement("span");
       label.className = "squad-label";
       label.textContent = name;
       cursor.append(label);
       cursor.style.translate = at(start);
-      chip.animate([{ scale: 1, opacity: 1 }, { scale: 0.3, opacity: 0 }], { duration: 400, fill: "forwards" }).finished.then(
-        () => chip.remove(),
-      );
-      await cursor.animate([{ scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1 }], { duration: 400, easing: "ease-out" })
-        .finished;
+      const appear = { duration: 350, easing: "ease-out" };
+      label.animate([{ opacity: 0 }, { opacity: 1 }], appear);
+      cursor.firstElementChild!.animate([{ scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1 }], appear);
+      await chip.animate([{ opacity: 1 }, { opacity: 0 }], { ...appear, fill: "forwards" }).finished;
+      chip.remove();
 
       let position = start;
       const stops = Math.round(random(2, 4));
       for (let stop = 0; stop < stops; stop++) {
-        const next = freePoint(content, meeting, [10, 60], teammates()) ?? position;
+        // Each member works around its own spot near the squad's, so teammates' labels don't cross
+        const next = freePoint(content, start, [10, 45], teammates()) ?? position;
         spots.set(name, next);
         const duration = random(1400, 2200);
         // A slight arc, as a hand would move
@@ -241,15 +256,15 @@ const { rosters, tasks } = Astro.props;
         if (stop === 0) {
           const task = document.createElement("span");
           task.className = "squad-task";
-          task.textContent = ` · ${pick(tasks)}`;
+          task.textContent = pick(tasks);
           label.append(task);
-          task.animate([{ opacity: 0 }, { opacity: 0.85 }], { duration: 300 });
+          task.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
         }
         await sleep(random(900, 1800));
       }
 
       // Back to the bench
-      await cursor.animate([{ scale: 1, opacity: 1 }, { scale: 0.8, opacity: 0 }], { duration: 700, fill: "forwards" })
+      await cursor.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 600, easing: "ease-in", fill: "forwards" })
         .finished;
       cursor.remove();
       spots.delete(name);
