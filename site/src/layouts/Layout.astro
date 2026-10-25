@@ -1435,8 +1435,8 @@ const previewImageUrl = new URL("/og.png", Astro.site);
      keep each app's own colors in both themes */
   .tools {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
   }
 
   .tool {
@@ -1450,8 +1450,8 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     flex: 1;
     overflow: hidden;
     border: 1px solid var(--border);
-    border-radius: 14px;
-    font-size: 14px;
+    border-radius: 12px;
+    font-size: 13px;
     line-height: 1.4;
   }
 
@@ -1470,25 +1470,21 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   }
 
   .tool figcaption {
-    margin-top: 10px;
-    color: var(--muted);
+    margin-top: 8px;
     font-size: 15px;
-  }
-
-  .tool figcaption strong {
-    margin-right: 6px;
-    color: var(--text);
+    font-weight: 600;
+    text-align: center;
   }
 
   .tool-chrome {
     display: flex;
-    gap: 7px;
-    padding: 14px 16px 6px;
+    gap: 6px;
+    padding: 12px 12px 6px;
   }
 
   .tool-chrome span {
-    width: 11px;
-    height: 11px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: #ff5f57;
   }
@@ -1503,34 +1499,33 @@ const previewImageUrl = new URL("/og.png", Astro.site);
 
   /* Claude app */
   .tool-claude .tool-window {
-    padding-bottom: 10px;
+    padding-bottom: 6px;
     background: #faf9f5;
     color: #29261b;
-  }
-
-  .tool-claude-day {
-    padding: 12px 20px 4px;
-    color: #8a877d;
-    font-size: 13px;
   }
 
   .tool-claude li {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin: 0 8px;
-    padding: 7px 12px;
-    border-radius: 8px;
+    gap: 8px;
+    margin: 0 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
   }
 
   .tool-claude li.is-active {
     background: #f0eee6;
   }
 
+  .tool-claude li span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .tool-claude-dot {
     flex: none;
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     margin-left: auto;
     border-radius: 50%;
     background: #c9c6bc;
@@ -1538,8 +1533,8 @@ const previewImageUrl = new URL("/og.png", Astro.site);
 
   .tool-claude li svg {
     flex: none;
-    width: 17px;
-    height: 17px;
+    width: 15px;
+    height: 15px;
     margin-left: auto;
     fill: none;
     stroke: #8a877d;
@@ -1548,49 +1543,38 @@ const previewImageUrl = new URL("/og.png", Astro.site);
 
   /* Codex app */
   .tool-codex-app .tool-window {
-    padding-bottom: 10px;
+    padding-bottom: 6px;
     background: #ffffff;
     color: #1f1f1f;
-  }
-
-  .tool-codex-app-title {
-    padding: 8px 20px 10px;
-    font-size: 19px;
-    font-weight: 600;
-  }
-
-  .tool-codex-app-title span {
-    color: #8f8f8f;
-    font-size: 14px;
   }
 
   .tool-codex-app-project {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 0 8px;
-    padding: 8px 12px;
-    border-top: 1px solid #ececec;
+    gap: 7px;
+    padding: 5px 14px;
   }
 
   .tool-codex-app-project svg {
-    width: 17px;
-    height: 17px;
+    flex: none;
+    width: 15px;
+    height: 15px;
     fill: none;
     stroke: #1f1f1f;
     stroke-width: 1.6;
   }
 
   .tool-codex-app-project i {
-    width: 8px;
-    height: 8px;
+    flex: none;
+    width: 7px;
+    height: 7px;
     margin-left: auto;
     border-radius: 50%;
     background: #e5352b;
   }
 
   .tool-codex-app li {
-    padding: 6px 20px 6px 45px;
+    padding: 5px 14px 5px 36px;
     color: #6f6f6f;
   }
 
@@ -1600,11 +1584,7 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     background: #282c34;
     color: #d7dae0;
     font-family: var(--mono);
-    font-size: 13px;
-  }
-
-  .tool-term-dim {
-    color: #7f848e;
+    font-size: 12px;
   }
 
   .tool-tmux .tool-window {
@@ -1615,8 +1595,8 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   .tool-tmux-border {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 14px 4px;
+    gap: 6px;
+    padding: 12px 10px 4px;
     color: #c5c86a;
   }
 
@@ -1628,11 +1608,11 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   }
 
   .tool-tmux-border::before {
-    flex: 0 0 12px;
+    flex: 0 0 8px;
   }
 
   .tool-tmux-border::after {
-    flex: 1;
+    flex: 1 0 8px;
   }
 
   .tool-tmux-border span {
@@ -1642,32 +1622,18 @@ const previewImageUrl = new URL("/og.png", Astro.site);
 
   .tool-tmux-body {
     flex: 1;
-    display: grid;
-    align-content: start;
-    gap: 8px;
-    padding: 10px 14px 14px;
+    padding: 8px 0;
   }
 
   .tool-tmux-prompt {
-    margin: 0 -14px;
-    padding: 6px 14px;
+    padding: 5px 10px;
     background: #3a3f4b;
-  }
-
-  .tool-tmux-status {
-    padding: 0 14px 10px;
-    color: #a9c28a;
-  }
-
-  .tool-tmux-status b {
-    color: #7fb0f0;
-    font-weight: 400;
   }
 
   .tool-tmux-bar {
     display: flex;
-    gap: 12px;
-    padding: 3px 14px;
+    gap: 10px;
+    padding: 2px 10px;
     background: #2e8b57;
     color: #10251a;
   }
@@ -1678,20 +1644,13 @@ const previewImageUrl = new URL("/og.png", Astro.site);
   }
 
   .tool-herdr .tool-window {
-    padding: 14px 8px;
-  }
-
-  .tool-herdr-head {
-    display: flex;
-    justify-content: space-between;
-    padding: 0 10px 10px;
-    color: #8b919c;
+    padding: 8px 6px;
   }
 
   .tool-herdr li {
     display: grid;
-    gap: 2px;
-    padding: 6px 10px;
+    gap: 1px;
+    padding: 4px 8px;
     border-radius: 4px;
   }
 
@@ -1712,9 +1671,9 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     color: #b5bac4;
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 860px) {
     .tools {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 

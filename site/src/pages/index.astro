@@ -7,6 +7,7 @@ import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
 import ClaudeIcon from "../assets/claude.svg";
 import { PRESET_ROSTERS } from "../data/rosters";
+import { TOOL_REQUEST_URL } from "../consts";
 
 // The home page grid shows 10 regular presets, the featured mix, and a "Your own" tile; /rosters shows them all
 const HOME_GRID_ROSTERS = [
@@ -167,11 +168,15 @@ const LIST_JSON_EXAMPLE = `{
 }`;
 
 // The herdr sidebar in the tools section, one agent per pane
-const HERDR_AGENTS = ["📚 Hermione", "🌙 Luna", "🌿 Neville"];
+const HERDR_AGENTS = ["🌅 Luke", "🍩 Leia"];
 
 // A cloud, the mark the Claude app puts on its cloud sessions
 const CLOUD_ICON =
   "M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.2 4.65 4.65 0 0 0 7 18.5z";
+
+// A folder, the mark the Codex app puts on each project
+const FOLDER_ICON =
+  "M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z";
 
 // The live bar along the bottom of the page is off for now; the hanging live board replaces it
 const SHOW_LIVE_BAR = false;
@@ -255,76 +260,62 @@ const SHOW_LIVE_BAR = false;
 
     <!-- Tools -->
     <section class="section" id="tools">
-      <h2>Works with the tools you already use</h2>
-      <p class="section-lede">
-        <Rostr /> names sessions in Claude Code and Codex, whether they run in the desktop app, the terminal, or the
-        cloud. In herdr and tmux, the name follows the agent to its pane.
-      </p>
+      <h2>Plays well with your tools</h2>
+      <p class="section-lede">Claude Code and Codex, on desktop, in the terminal, or in the cloud.</p>
       <div class="tools">
         <figure class="tool tool-claude">
           <div class="tool-window" aria-hidden="true">
             <div class="tool-chrome"><span></span><span></span><span></span></div>
-            <p class="tool-claude-day">Today</p>
             <ul>
-              <li>🧙 Gandalf · Release the CLI<i class="tool-claude-dot"></i></li>
-              <li class="is-active">💍 Frodo · Fix uninstall binary removal<i class="tool-claude-dot"></i></li>
-            </ul>
-            <p class="tool-claude-day">Yesterday</p>
-            <ul>
-              <li>👑 Aragorn · Fix website vertical spacing<svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
-              <li>🏹 Legolas · Add analytics to site<svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
+              <li><span>🧙 Gandalf · Ship v2</span><i class="tool-claude-dot"></i></li>
+              <li class="is-active"><span>💍 Frodo · Fix login</span><i class="tool-claude-dot"></i></li>
+              <li><span>👑 Aragorn · Add docs</span><svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
             </ul>
           </div>
-          <figcaption><strong>Claude Code</strong> desktop, terminal, and cloud</figcaption>
+          <figcaption>Claude Code</figcaption>
         </figure>
 
         <figure class="tool tool-codex-app">
           <div class="tool-window" aria-hidden="true">
             <div class="tool-chrome"><span></span><span></span><span></span></div>
-            <p class="tool-codex-app-title">Codex <span>⌄</span></p>
             <p class="tool-codex-app-project">
-              <svg viewBox="0 0 24 24"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" /></svg>
+              <svg viewBox="0 0 24 24"><path d={FOLDER_ICON} /></svg>
               app<i></i>
             </p>
             <ul>
-              <li>🌱 Samwise · Fix flaky checkout test</li>
-              <li>🪓 Gimli · Draft the release notes</li>
-              <li>✨ Galadriel · Triage Sentry errors</li>
-              <li>🍺 Merry · Speed up the test suite</li>
+              <li>🍄 Mario · Fix tests</li>
+              <li>🗡️ Link · Add search</li>
             </ul>
           </div>
-          <figcaption><strong>Codex</strong> app, terminal, and cloud</figcaption>
+          <figcaption>Codex</figcaption>
         </figure>
 
         <figure class="tool tool-tmux">
           <div class="tool-window tool-term" aria-hidden="true">
-            <p class="tool-tmux-border"><span>📚 Hermione · Upgrade the Postgres driver | api</span></p>
+            <p class="tool-tmux-border"><span>📚 Hermione · Bump pgx</span></p>
             <div class="tool-tmux-body">
-              <p class="tool-tmux-prompt">› Upgrade the Postgres driver</p>
-              <p>• Bumped pgx to v5 and fixed the two call sites.</p>
-              <p class="tool-term-dim">Worked for 41s</p>
+              <p class="tool-tmux-prompt">› Bump pgx to v5</p>
             </div>
-            <p class="tool-tmux-status">~/dev/api · <b>📚 Hermione · Upgrade the Postgres driver</b></p>
-            <p class="tool-tmux-bar"><span>0:zsh</span><span>1:🌙 Luna</span><span class="is-active">2:📚 Hermione*</span></p>
+            <p class="tool-tmux-bar"><span>1:🌙 Luna</span><span class="is-active">2:📚 Hermione*</span></p>
           </div>
-          <figcaption><strong>tmux</strong> panes and windows</figcaption>
+          <figcaption>tmux</figcaption>
         </figure>
 
         <figure class="tool tool-herdr">
           <div class="tool-window tool-term" aria-hidden="true">
-            <p class="tool-herdr-head"><span>agents</span><span>grouped</span></p>
             <ul>
               {HERDR_AGENTS.map((agent, i) => (
                 <li class:list={{ "is-active": i === 0 }}>
-                  <span class="tool-herdr-pane">○ <b>api</b> · {i + 1}</span>
+                  <span class="tool-herdr-pane">○ <b>web</b> · {i + 1}</span>
                   <span class="tool-herdr-name">{agent}</span>
                 </li>
               ))}
             </ul>
           </div>
-          <figcaption><strong>herdr</strong> agent sidebar</figcaption>
+          <figcaption>herdr</figcaption>
         </figure>
       </div>
+      <p class="docs-link"><a href={TOOL_REQUEST_URL}>Using something else? Request it →</a></p>
     </section>
 
     <!-- Rosters -->
