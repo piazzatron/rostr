@@ -1,6 +1,7 @@
 ---
 import { Code } from "astro-expressive-code/components";
 import HeroGrid from "../components/HeroGrid.astro";
+import SquadBackdrop from "../components/SquadBackdrop.astro";
 import Rostr from "../components/Rostr.astro";
 import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
@@ -14,7 +15,7 @@ const HOME_GRID_ROSTERS = [
 ];
 
 // On phones the grid is trimmed to these presets plus the "Your own" tile
-const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires"];
+const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires", "matrix"];
 
 // The preset roster members easy to place on their own, for the hero's flipping name. Names that read as a common
 // first name, a surname, or a plain word ("Jim", "Brown", "Data") are left out
@@ -41,6 +42,12 @@ const HERO_FLIPPER_NAMES = [
 // What the hero's flipping agent is on: "🧙 Gandalf is on CI."
 // Kept short so the status fits on the same line as "Remember who's doing what." on desktop
 const HERO_STATUS_TASKS = ["CI", "billing", "auth", "the docs", "the API", "dark mode", "tests", "search", "perf", "deploys", "logging", "caching"];
+
+// What the squads in Squad up's background pick up, shown in their cursors' labels like session titles
+const SQUAD_TASKS = [
+  ...["Fix flaky CI", "Dark mode", "Auth redirect", "Speed up search", "Billing migration"],
+  ...["Write the docs", "Rate limiting", "Bump Node", "CSV export", "Onboarding"],
+];
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
@@ -226,10 +233,8 @@ const SHOW_LIVE_BAR = false;
           <p>Run <code>rostr assemble</code>, or ask your agent to do it for you.</p>
         </li>
         <li>
-          <h3>New sessions automatically draft agents</h3>
-          <p>
-            When a session starts, a hook drafts the next available name and gives the agent its identity.
-          </p>
+          <h3>New sessions draft your team</h3>
+          <p>Each session's title shows its agent's name, and the agent knows who it is.</p>
         </li>
         <li>
           <h3>Done? Back to the bench</h3>
@@ -242,7 +247,8 @@ const SHOW_LIVE_BAR = false;
     </section>
 
     <!-- Rosters -->
-    <section class="section">
+    <section class="section squad-section">
+      <SquadBackdrop rosters={HOME_GRID_ROSTERS.map((roster) => roster.members)} tasks={SQUAD_TASKS} />
       <h2>Squad up</h2>
       <p class="section-lede">
         Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
@@ -287,7 +293,7 @@ const SHOW_LIVE_BAR = false;
         </li>
       </ul>
       <p class="docs-link">
-        <a href="/rosters">See all rosters / submit your own →</a>
+        <a href="/rosters">See all {PRESET_ROSTERS.length} rosters / submit your own →</a>
       </p>
 
       <div class="tip">

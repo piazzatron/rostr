@@ -63,10 +63,11 @@ main() {
 	mv -f "${dir}/.rostr.new" "${dir}/rostr"
 	echo "Installed $("${dir}/rostr" version) to ${dir}/rostr"
 
-	# Claude Code cloud sessions start from a fresh container each time, so install the hooks there too
 	# Bring hooks installed by an older rostr up to date
 	"${dir}/rostr" hook sync >/dev/null 2>&1 || true
-	if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+	# Cloud environments (Claude Code on the web, Codex cloud) start from a fresh container each time, so install the
+	# hooks there too. They set ROSTR_KEY, and there's no common variable that says which cloud this is
+	if [ -n "${ROSTR_KEY:-}" ]; then
 		"${dir}/rostr" cloud install
 	fi
 
