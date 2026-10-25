@@ -587,6 +587,22 @@ const SHOW_LIVE_BAR = false;
       });
     });
 
+    // The tools rise in one after another the first time the row scrolls into view. They start hidden only once this
+    // runs, so without JavaScript they simply show
+    const tools = document.querySelector<HTMLElement>(".tools");
+    if (tools && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      tools.classList.add("is-waiting");
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry.isIntersecting) return;
+          tools.classList.replace("is-waiting", "is-in");
+          observer.disconnect();
+        },
+        { threshold: 0.3 },
+      );
+      observer.observe(tools);
+    }
+
     // Every 1.3s the hero's status line ("🧙 Gandalf is on CI.") deals a new agent and task, starting once the hero has
     // finished fading in. The name springs in from below while the old one slides out; the task just flicks over. With
     // reduced motion both simply swap.
