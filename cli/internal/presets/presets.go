@@ -1,4 +1,5 @@
-// Package presets holds the pre-built rosters that ship with the CLI, generated from site/src/data/rosters.ts.
+// Package presets holds the pre-built rosters: the ones the site publishes, else the ones built into the CLI, generated
+// from site/src/data/rosters.ts.
 package presets
 
 import (
@@ -35,7 +36,7 @@ const FreeAgentsID = "free-agents"
 func FreeAgents() Preset {
 	p, _ := ByID(FreeAgentsID)
 	var pool []roster.Member
-	for _, other := range all {
+	for _, other := range current {
 		if other.ID != FreeAgentsID {
 			pool = append(pool, other.Members...)
 		}
@@ -60,14 +61,14 @@ func FreeAgents() Preset {
 	return p
 }
 
-// All returns every preset, in the site's order.
+// All returns every preset, in the site's order: the list Refresh last fetched, or else the built-in one.
 func All() []Preset {
-	return all
+	return current
 }
 
 // ByID finds a preset by its id.
 func ByID(id string) (Preset, bool) {
-	for _, p := range all {
+	for _, p := range current {
 		if p.ID == id {
 			return p, true
 		}

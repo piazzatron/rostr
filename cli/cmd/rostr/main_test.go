@@ -101,9 +101,9 @@ func (s *sandbox) baseEnv() []string {
 		}
 		env = append(env, kv)
 	}
-	// Cloud mode calls a closed local port unless a test says otherwise, so nothing here reaches the real API
+	// Cloud mode and the presets refresh call a closed local port unless a test says otherwise, so nothing here goes online
 	return append(env, "HOME="+s.home, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
-		"ROSTR_API_URL=http://127.0.0.1:1", "ROSTR_CLAUDE_BIN=/usr/bin/false")
+		"ROSTR_API_URL=http://127.0.0.1:1", "ROSTR_PRESETS_URL=http://127.0.0.1:1", "ROSTR_CLAUDE_BIN=/usr/bin/false")
 }
 
 // gitRepo makes a repo in a temp dir, with an origin unless origin is "".

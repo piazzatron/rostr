@@ -11,6 +11,7 @@ import (
 
 	"github.com/piazzatron/rostr/cli/internal/crypto"
 	"github.com/piazzatron/rostr/cli/internal/paths"
+	"github.com/piazzatron/rostr/cli/internal/presets"
 	"github.com/piazzatron/rostr/cli/internal/project"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
@@ -160,6 +161,16 @@ func loadCloudKey() (crypto.Key, error) {
 		return key, fmt.Errorf("%s: %w", paths.Credentials(), err)
 	}
 	return key, nil
+}
+
+// refreshPresets brings the pre-built rosters up to date from the site, at most once a day. ROSTR_PRESETS_URL overrides
+// where from (tests point it at a local server).
+func refreshPresets(ctx context.Context) {
+	url := os.Getenv("ROSTR_PRESETS_URL")
+	if url == "" {
+		url = presets.URL
+	}
+	presets.Refresh(ctx, url, paths.PresetsCache())
 }
 
 func apiURL() string {

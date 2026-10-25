@@ -47,6 +47,11 @@ func CloudCacheDir() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "cloud")
 }
 
+// PresetsCache is the last list of pre-built rosters fetched from the site.
+func PresetsCache() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "presets.json")
+}
+
 // BackgroundLog collects what rostr's background work (drafts ahead of a first prompt, prompt summaries) writes to stderr.
 func BackgroundLog() string {
 	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "background.log")
