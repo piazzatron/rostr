@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -108,16 +110,33 @@ func newUninstallCommand() *cobra.Command {
 				fmt.Fprintf(out, "Removed %s (Codex)\n", piece)
 			}
 			if !deadKey && len(rosters) == 0 && len(removed) == 0 && len(removedCodex) == 0 {
-				fmt.Fprintln(out, "Nothing to remove: rostr isn't set up here.")
-				return nil
-			}
-			if cloud && !deadKey && os.Getenv("ROSTR_KEY") != "" {
+				fmt.Fprintln(out, "Nothing to remove from Claude Code or Codex: rostr isn't set up here.")
+			} else if cloud && !deadKey && os.Getenv("ROSTR_KEY") != "" {
 				fmt.Fprintln(out, "Your cloud setup is deleted. Unset ROSTR_KEY too: the key no longer works.")
 			}
-			fmt.Fprintln(out, "rostr is uninstalled. Run `rostr assemble` to start again.")
+			fmt.Fprintln(out, "That leaves the rostr program itself. To remove it, run:")
+			for _, command := range removeProgramCommands() {
+				fmt.Fprintf(out, "  %s\n", command)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "don't ask first")
 	return cmd
+}
+
+// removeProgramCommands says how to remove the rostr program itself, which uninstall leaves to whatever installed it.
+func removeProgramCommands() []string {
+	exe, err := os.Executable()
+	if err != nil {
+		return []string{"rm \"$(command -v rostr)\""}
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	// Homebrew keeps the real binary under its Cellar and links it onto the PATH
+	if strings.Contains(exe, "/Cellar/rostr/") {
+		return []string{"brew uninstall piazzatron/tap/rostr", "brew untap piazzatron/tap"}
+	}
+	return []string{"rm " + codex.ShellQuote(exe)}
 }

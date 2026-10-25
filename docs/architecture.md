@@ -41,7 +41,8 @@ A whole setup is one or the other, never mixed.
 - **Cloud:** everything lives on the API, so sessions on any machine or in cloud environments (Claude Code on the
   web, Codex cloud) draft from the same rosters. A machine is in cloud mode whenever it has a rostr key, from
   `~/.config/rostr/credentials` or `ROSTR_KEY`. `rostr cloud on` uploads a local setup in one request and deletes the
-  local database only once that succeeds. There's no way back.
+  local database only once that succeeds. There's no way back. Joining a setup with a key installs the hooks, as
+  `rostr assemble` does on a first machine.
 
 Both backends implement `store.Store`, so commands and hooks don't know which one they're on, and follow the same
 drafting rules (see [drafting.md](drafting.md)).
@@ -49,7 +50,9 @@ drafting rules (see [drafting.md](drafting.md)).
 ## Sessions
 
 Every draft belongs to a session ID from the agent. Hooks pass it with `--session`; commands the agent runs find it in
-`ROSTR_SESSION` (written by the Claude Code start hook to `CLAUDE_ENV_FILE`) or `CODEX_THREAD_ID` (set by Codex).
+`ROSTR_SESSION` (written by the Claude Code start hook to `CLAUDE_ENV_FILE`), `CODEX_THREAD_ID` (set by Codex), or
+`CLAUDE_CODE_SESSION_ID` (set by Claude Code, so the session that sets rostr up, which started before the hooks were
+installed, can draft itself).
 Drafting only happens inside a session.
 
 Everything for a session finds its draft by session ID, so an agent that `cd`s into another project keeps its name.

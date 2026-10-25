@@ -217,12 +217,18 @@ func joinCloudWithKey(ctx context.Context, out io.Writer, key crypto.Key) error 
 	if err := removeLocalDatabase(); err != nil {
 		return err
 	}
+	// A machine joining a setup has no hooks yet: assemble is what installs them, and it isn't run here
+	installed, installedCodex, err := installAgentHooks()
+	if err != nil {
+		return fmt.Errorf("this machine is in cloud mode now, but %w", err)
+	}
 	if settings.DefaultRoster == "" {
 		fmt.Fprintln(out, "This machine is in cloud mode now. Run `rostr assemble` to make your first roster.")
 	} else {
 		fmt.Fprintf(out, "This machine is in cloud mode now, with your default roster %s.\n", settings.DefaultRoster)
 	}
 	printKeySaved(out)
+	printInstalledHooks(out, installed, installedCodex)
 	return nil
 }
 
