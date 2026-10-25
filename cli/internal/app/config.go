@@ -73,9 +73,9 @@ func newConfigCommand() *cobra.Command {
 				{"Auto-draft", onOff(config.AutoDraft)},
 				{"Expiry", config.Expiry},
 				{"Emoji", orDash(strings.Join(emoji, ", "))},
-			}, styleMuted)
+			}, plainStyles().muted)
 			for _, line := range strings.Split(configHelp(storage == "cloud"), "\n") {
-				fmt.Fprintln(cmd.OutOrStdout(), styleMuted.Render(line))
+				fmt.Fprintln(cmd.OutOrStdout(), plainStyles().muted.Render(line))
 			}
 			return nil
 		},

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"image/color"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -9,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 
 	"github.com/piazzatron/rostr/cli/internal/presets"
 	"github.com/piazzatron/rostr/cli/internal/roster"
@@ -151,7 +153,7 @@ func TestTeamSize(t *testing.T) {
 func TestCastEditor(t *testing.T) {
 	c := cast{}
 	e := newCastEditor()
-	e.WithTheme(promptTheme())
+	e.WithTheme(huh.ThemeFunc(promptTheme))
 	e.Focus()
 	e.reset(&c)
 	if e.mode != castAdding {
@@ -159,7 +161,7 @@ func TestCastEditor(t *testing.T) {
 	}
 	typeIn := func(text string) {
 		for _, r := range text {
-			e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			e.Update(typed(string(r)))
 		}
 		e.Update(key(tea.KeyEnter))
 	}
@@ -180,7 +182,7 @@ func TestCastEditor(t *testing.T) {
 
 	// r renames, space takes someone off the team and puts them back, in their place
 	e.cursor = 0
-	e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	e.Update(typed("r"))
 	e.input.SetValue("🐚 Grace Hopper")
 	e.Update(key(tea.KeyEnter))
 	if c.members[0] != (roster.Member{Name: "Grace Hopper", Emoji: "🐚"}) {
@@ -207,7 +209,7 @@ func TestCastEditorPicksFromThePreset(t *testing.T) {
 	c := presetTeam(fellowship, 4)
 	c.from = slices.Clone(c.from)
 	e := newCastEditor()
-	e.WithTheme(promptTheme())
+	e.WithTheme(huh.ThemeFunc(promptTheme))
 	e.Focus()
 	e.reset(&c)
 
@@ -223,9 +225,9 @@ func TestCastEditorPicksFromThePreset(t *testing.T) {
 	}
 
 	// Typing a name from the roster picks them, with their emoji; a new name joins the end of the list
-	e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	e.Update(typed("a"))
 	for _, r := range "eowyn, 🧮 Ada" {
-		e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		e.Update(typed(string(r)))
 	}
 	e.Update(key(tea.KeyEnter))
 	if names := memberNames(c.members); !slices.Equal(names, []string{"Gandalf", "Samwise", "Aragorn", "Galadriel", "Éowyn", "Ada"}) {
@@ -254,7 +256,7 @@ func TestAssembleWizardOwnNames(t *testing.T) {
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, key(tea.KeyDown), key(tea.KeyDown))
 	drive(s, nil, key(tea.KeyEnter))
-	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("🧮 Ada, Grace")})
+	drive(s, nil, typed("🧮 Ada, Grace"))
 	drive(s, nil, key(tea.KeyEnter))
 	drive(s, nil, key(tea.KeyEsc))
 	expectView(t, s, "Ada", "Grace")
@@ -302,12 +304,30 @@ func TestAssembleWizardLeavesAnEmptyCast(t *testing.T) {
 	expectStep(t, s, 2, 3)
 
 	// Shift+tab goes back with no one added, and esc quits
-	drive(s, nil, key(tea.KeyShiftTab))
+	drive(s, nil, shiftTab)
 	expectStep(t, s, 1, 3)
 	drive(s, nil, key(tea.KeyEnter))
 	drive(s, nil, key(tea.KeyEsc))
 	if !s.cancelled {
 		t.Fatal("esc didn't quit an empty cast")
+	}
+}
+
+func TestAssembleWizardFollowsALightBackground(t *testing.T) {
+	f, err := newAssembleFlow(assembleSetup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, steps := f.screen(context.Background(), nil)
+	s.buildForm(steps)
+	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 34}, tea.BackgroundColorMsg{Color: color.White},
+		key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter))
+	expectStep(t, s, 2, 3)
+
+	// The cast page is drawn before the form gives it a theme, so it can get stuck in the dark shades
+	light, dark := "38;2;217;72;15", "38;2;255;122;61" // the accent, #D9480F and #FF7A3D
+	if view := s.View().Content; !strings.Contains(view, light) || strings.Contains(view, dark) {
+		t.Fatalf("the cast page isn't in the light shades:\n%q", view)
 	}
 }
 
@@ -326,15 +346,15 @@ func TestAssembleWizardNewRosterDoesntTakeAnEditedEmojiMode(t *testing.T) {
 	s, steps := f.screen(context.Background(), st)
 	s.buildForm(steps)
 	drive(s, s.Init(), tea.WindowSizeMsg{Width: 100, Height: 40})
-	for _, k := range []tea.KeyType{tea.KeyDown, tea.KeyDown, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
-		drive(s, nil, key(k))
+	for _, k := range []tea.KeyPressMsg{key(tea.KeyDown), key(tea.KeyDown), key(tea.KeyEnter), key(tea.KeyEnter), key(tea.KeyEnter)} {
+		drive(s, nil, k)
 	}
 	expectStep(t, s, 4, 4)
 	if f.emoji != roster.EmojiOff {
 		t.Fatalf("editing starts from %s", f.emoji)
 	}
-	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyShiftTab, tea.KeyUp, tea.KeyUp, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter, tea.KeyEnter} {
-		drive(s, nil, key(k))
+	for _, k := range []tea.KeyPressMsg{shiftTab, shiftTab, shiftTab, key(tea.KeyUp), key(tea.KeyUp), key(tea.KeyEnter), key(tea.KeyEnter), key(tea.KeyEnter), key(tea.KeyEnter), key(tea.KeyEnter)} {
+		drive(s, nil, k)
 	}
 	expectStep(t, s, 6, 6)
 	if f.emoji != roster.EmojiOn {
@@ -436,11 +456,11 @@ func TestAssembleWizardScreen(t *testing.T) {
 	drive(s, nil, key(tea.KeyEnter))
 	expectStep(t, s, 2, 5)
 	expectView(t, s, "Gandalf", "Wormtongue")
-	drive(s, nil, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hogwarts")})
+	drive(s, nil, typed("hogwarts"))
 	expectView(t, s, "Hermione", "Dumbledore")
 
 	// Shift+tab goes back; coming forward again searches again
-	drive(s, nil, key(tea.KeyShiftTab))
+	drive(s, nil, shiftTab)
 	expectStep(t, s, 1, 5)
 	drive(s, nil, key(tea.KeyEnter))
 	expectStep(t, s, 2, 5)
@@ -451,7 +471,7 @@ func TestAssembleWizardScreen(t *testing.T) {
 	expectStep(t, s, 3, 5)
 	expectView(t, s, "Draco")
 	drive(s, nil, key(tea.KeyUp), key(tea.KeyUp))
-	if strings.Contains(s.View(), "Snape") {
+	if strings.Contains(s.View().Content, "Snape") {
 		t.Fatal("the preview of a team of four shows Snape")
 	}
 
@@ -515,12 +535,12 @@ func TestAssembleWizardFreeAgents(t *testing.T) {
 	if !slices.Equal(f.chosenCast().members, drawn.members) {
 		t.Fatal("the cast changed on the last page")
 	}
-	drive(s, nil, key(tea.KeyShiftTab), key(tea.KeyShiftTab))
+	drive(s, nil, shiftTab, shiftTab)
 	if f.draws != 1 || !slices.Equal(f.chosenCast().members, drawn.members) {
 		t.Fatal("going back to the size drew a new cast")
 	}
-	for _, k := range []tea.KeyType{tea.KeyShiftTab, tea.KeyEnter} {
-		drive(s, nil, key(k))
+	for _, k := range []tea.KeyPressMsg{shiftTab, key(tea.KeyEnter)} {
+		drive(s, nil, k)
 	}
 	if f.draws != 2 {
 		t.Fatalf("%d draws", f.draws)
@@ -540,20 +560,25 @@ func TestScreenCancels(t *testing.T) {
 	}
 }
 
-func key(k tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: k} }
+func key(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
+
+// typed is text typed at the keyboard.
+func typed(text string) tea.KeyPressMsg { return tea.KeyPressMsg{Code: []rune(text)[0], Text: text} }
+
+var shiftTab = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 
 // expectStep checks which page of the flow is showing, by its position rather than its wording.
 func expectStep(t *testing.T, s *screen, current, total int) {
 	t.Helper()
 	if c, n := s.progress(); c != current || n != total {
-		t.Fatalf("on step %d of %d, want %d of %d:\n%s", c, n, current, total, s.View())
+		t.Fatalf("on step %d of %d, want %d of %d:\n%s", c, n, current, total, s.View().Content)
 	}
 }
 
 // expectView checks the screen shows some data, like member and roster names. Don't check its wording.
 func expectView(t *testing.T, s *screen, want ...string) {
 	t.Helper()
-	view := s.View()
+	view := s.View().Content
 	for _, w := range want {
 		if !strings.Contains(view, w) {
 			t.Fatalf("view doesn't show %q:\n%s", w, view)

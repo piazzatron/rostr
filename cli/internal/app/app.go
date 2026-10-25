@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/crypto"
@@ -26,21 +27,27 @@ const defaultAPIURL = "https://api.getrostr.sh"
 
 // Execute runs rostr and returns its exit code.
 func Execute() int {
+	// Styled text is written as full color, and these writers bring it down to what each stream supports: plain text
+	// when it isn't a terminal or NO_COLOR is set
+	stdout, stderr := colorprofile.NewWriter(os.Stdout, os.Environ()), colorprofile.NewWriter(os.Stderr, os.Environ())
 	root := newRootCommand()
+	root.SetOut(stdout)
+	root.SetErr(stderr)
 	cmd, err := root.ExecuteC()
 
+	errorPrefix := plainStyles().errorPrefix.Render("rostr:")
 	var missing errMissingInput
 	switch {
 	case err == nil:
 		return 0
 	case errors.As(err, &missing):
-		fmt.Fprintf(os.Stderr, "%s %s\n\n%s", styleErrorPrefix.Render("rostr:"), err, cmd.UsageString())
+		fmt.Fprintf(stderr, "%s %s\n\n%s", errorPrefix, err, cmd.UsageString())
 		return 1
 	case errors.Is(err, store.ErrUnauthorized):
-		fmt.Fprintf(os.Stderr, "%s %s. %s\n", styleErrorPrefix.Render("rostr:"), err, deadKeyHelp())
+		fmt.Fprintf(stderr, "%s %s. %s\n", errorPrefix, err, deadKeyHelp())
 		return 1
 	default:
-		fmt.Fprintln(os.Stderr, styleErrorPrefix.Render("rostr:")+" "+err.Error())
+		fmt.Fprintln(stderr, errorPrefix+" "+err.Error())
 		return 1
 	}
 }

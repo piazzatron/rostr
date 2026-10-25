@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
@@ -629,32 +629,32 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 	s.panels = []*sidePanel{{
 		field:     preset,
 		formWidth: widest + 5,
-		render: func(width int) string {
+		render: func(st styles, width int) string {
 			id, ok := preset.Hovered()
 			if !ok {
 				return ""
 			}
 			p, _ := presets.ByID(id)
-			return presetPreview(p, width)
+			return presetPreview(st, p, width)
 		},
 	}, {
 		field:     size,
 		formWidth: 44,
-		render: func(width int) string {
+		render: func(st styles, width int) string {
 			n, ok := size.Hovered()
 			if !ok {
 				return ""
 			}
-			return teamPreview(presetTeam(f.pickedPreset(), n), width)
+			return teamPreview(st, presetTeam(f.pickedPreset(), n), width)
 		},
 	}, {
 		field:     castPage,
 		formWidth: 46,
-		render: func(width int) string {
+		render: func(st styles, width int) string {
 			if castPage.cast == nil {
 				return ""
 			}
-			return teamPreview(*castPage.cast, width)
+			return teamPreview(st, *castPage.cast, width)
 		},
 	}}
 
@@ -675,7 +675,7 @@ func (f *assembleFlow) screen(ctx context.Context, st store.Store) (*screen, []s
 		case field == preset:
 			// Coming back to the picker searches again
 			if !preset.GetFiltering() {
-				return func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}} }
+				return func() tea.Msg { return tea.KeyPressMsg{Code: '/', Text: "/"} }
 			}
 		case field == size:
 			f.prepareSize(size)
@@ -729,7 +729,7 @@ func (f *assembleFlow) prepareSize(size *huh.Select[int]) {
 		if f.size == want {
 			break
 		}
-		size.Update(tea.KeyMsg{Type: tea.KeyDown})
+		size.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 }
 
@@ -886,29 +886,29 @@ func noteText(s string) string {
 }
 
 // presetPreview shows a preset's name and source, and everyone on it.
-func presetPreview(p presets.Preset, width int) string {
+func presetPreview(st styles, p presets.Preset, width int) string {
 	wrap := lipgloss.NewStyle().Width(width)
 	return lipgloss.JoinVertical(lipgloss.Left,
-		wrap.Inherit(styleHeading).Render(p.Emoji+" "+p.Name),
-		wrap.Inherit(styleMuted).Render(p.Source),
+		wrap.Inherit(st.heading).Render(p.Emoji+" "+p.Name),
+		wrap.Inherit(st.muted).Render(p.Source),
 		"",
-		styleMuted.Render(fmt.Sprintf("%d members", len(p.Members))),
+		st.muted.Render(fmt.Sprintf("%d members", len(p.Members))),
 		wrap.Render(displayMembers(p.Members, roster.EmojiOn)),
 	)
 }
 
 // teamPreview shows who's on a team, one per line.
-func teamPreview(c cast, width int) string {
+func teamPreview(st styles, c cast, width int) string {
 	wrap := lipgloss.NewStyle().Width(width)
 	members := make([]string, len(c.members))
 	for i, m := range c.members {
 		members[i] = roster.Display(m.Emoji, m.Name, 1, roster.EmojiOn)
 	}
 	if len(members) == 0 {
-		members = []string{styleFaint.Render("no one yet")}
+		members = []string{st.faint.Render("no one yet")}
 	}
 	return lipgloss.JoinVertical(lipgloss.Left,
-		styleMuted.Render(fmt.Sprintf("Your team · %d", len(c.members))), wrap.Render(strings.Join(members, "\n")))
+		st.muted.Render(fmt.Sprintf("Your team · %d", len(c.members))), wrap.Render(strings.Join(members, "\n")))
 }
 
 // changedHooks reports whether an install's list of what it wrote includes hooks.

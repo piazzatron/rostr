@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
@@ -103,7 +103,7 @@ func newConfigKeyCommand() *cobra.Command {
 }
 
 // runCloudOn moves this machine's setup to the cloud under a new key, or joins an existing cloud setup with a key
-// pasted at a hidden prompt. Without a terminal there's no prompt, so it can only move a local setup that has rosters.
+// pasted at a prompt. Without a terminal there's no prompt, so it can only move a local setup that has rosters.
 // A saved key the API no longer recognizes gets replaced.
 func runCloudOn(ctx context.Context, out io.Writer) error {
 	if hasCloudKey() && (os.Getenv("ROSTR_KEY") != "" || !savedKeyIsDead(ctx)) {
@@ -132,7 +132,7 @@ func runCloudOn(ctx context.Context, out io.Writer) error {
 			huh.NewOption("I have a key (from another machine)", true),
 		).Value(&join)},
 		{
-			field: huh.NewInput().Title("Paste your rostr key (it won't be shown)").EchoMode(huh.EchoModeNone).
+			field: huh.NewInput().Title("Paste your rostr key").
 				Validate(s.forwardOnly(func(value string) error {
 					var err error
 					key, err = crypto.ParseKey(value)
