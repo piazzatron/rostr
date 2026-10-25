@@ -12,16 +12,17 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/claudecode"
+	"github.com/piazzatron/rostr/cli/internal/codex"
 	"github.com/piazzatron/rostr/cli/internal/crypto"
 	"github.com/piazzatron/rostr/cli/internal/paths"
 	"github.com/piazzatron/rostr/cli/internal/store"
 )
 
-// newCloudCommand is `rostr cloud`: moving the setup to the rostr API, and setting up Claude Code cloud sessions.
+// newCloudCommand is `rostr cloud`: moving the setup to the rostr API, and setting up cloud environments.
 func newCloudCommand() *cobra.Command {
 	cloud := &cobra.Command{
 		Use:   "cloud",
-		Short: "Move your setup to the rostr API, and set up Claude Code cloud sessions",
+		Short: "Move your setup to the rostr API, and set up cloud environments",
 	}
 	cloud.AddCommand(&cobra.Command{
 		Use:   "on",
@@ -34,28 +35,34 @@ func newCloudCommand() *cobra.Command {
 	return cloud
 }
 
-// newCloudInstallCommand is `rostr cloud install`, which installs the Claude Code hooks in a cloud session's
-// container. Each cloud session starts from a fresh container, so the install script runs it there.
+// newCloudInstallCommand is `rostr cloud install`, which installs the Claude Code and Codex hooks in a cloud
+// environment's container. Each cloud session starts from a fresh container, so the install script runs it there.
 func newCloudInstallCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "install",
-		Short: "Install the Claude Code hooks in a cloud session's container (the install script runs this)",
-		Long: "Install the Claude Code hooks in a cloud session's container. Each cloud session starts from a fresh " +
-			"container, so the install script runs this there; ROSTR_KEY connects it to your setup. On your own " +
-			"machine, `rostr assemble` installs the hooks.",
+		Short: "Install the Claude Code and Codex hooks in a cloud environment (the install script runs this)",
+		Long: "Install the Claude Code and Codex hooks in a cloud environment's container, like Claude Code on the web " +
+			"or Codex cloud. Each cloud session starts from a fresh container, so the install script runs this there " +
+			"when ROSTR_KEY is set; ROSTR_KEY connects it to your setup. On your own machine, `rostr assemble` " +
+			"installs the hooks.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Elsewhere it would install hooks for a setup that doesn't exist yet
-			if os.Getenv("CLAUDE_CODE_REMOTE") != "true" {
-				return errors.New("rostr cloud install only runs in a Claude Code cloud session. On this machine, " +
-					"`rostr assemble` sets rostr up and installs the hooks")
+			// Without a key it would install hooks for a setup that doesn't exist
+			if os.Getenv("ROSTR_KEY") == "" {
+				return errors.New("rostr cloud install only runs in a cloud environment with ROSTR_KEY set. On this " +
+					"machine, `rostr assemble` sets rostr up and installs the hooks")
 			}
 			installed, err := claudecode.Install(paths.ClaudeDir())
 			if err != nil {
 				return err
 			}
-			if len(installed) > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "Hooks installed for Claude Code.")
+			// Codex too, even with no ~/.codex yet: a cloud container may not have run Codex before its setup script
+			installedCodex, err := codex.Install(paths.CodexDir(), paths.AgentsSkillsDir())
+			if err != nil {
+				return err
+			}
+			if len(installed) > 0 || len(installedCodex) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "Hooks installed for Claude Code and Codex.")
 			}
 			return nil
 		},
