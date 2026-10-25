@@ -24,6 +24,7 @@ CI fails if the two are out of sync. Once the site deploys, every CLI picks up t
 | `cli/` | The `rostr` CLI and its agent hooks (Go). See [`cli/README.md`](cli/README.md) |
 | `server/` | The API at api.getrostr.sh (Go, Postgres). See [`server/README.md`](server/README.md) |
 | `site/` | getrostr.sh (Astro) |
+| `live/` | The Cloudflare Worker behind the home page's live counts. See [`live/README.md`](live/README.md) |
 | `tests/` | End-to-end tests: the real CLI against a real server |
 | `docs/` | High-level docs on how each system works. Start at [`docs/README.md`](docs/README.md) |
 
