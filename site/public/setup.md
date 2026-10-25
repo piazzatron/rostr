@@ -38,45 +38,69 @@ If the script says the directory it installed to isn't on the PATH, ask the user
 line it printed to their shell profile (rostr's hooks only work when `rostr` is on the PATH), and run that line in
 your own shell too.
 
-Then run `rostr --version` again to confirm it worked. If it already was installed, run `rostr list`: if the user
+Then run `rostr --version` again to confirm it worked. If it already was installed, run `rostr stats`: if the user
 already has rosters, ask whether they want another one before going on.
 
-## 3. Ask the user these questions
+## 3. Ask whether they already use rostr
 
-`rostr assemble` is an interactive wizard you can't drive, so ask the user its questions yourself, then pass the
-answers as flags. Ask all of them, in one go if you can, using your question tool if you have one. Offer the defaults.
+Ask the user whether they already use rostr in the cloud on another machine.
 
-1. **Which roster?** Run `rostr presets` and offer a handful, for example The Fellowship, Hogwarts, Smash Bros, NBA
-   Legends, The Office, or Free Agents (a random mix). Or they can use their own list of names, each optionally with
-   an emoji (`🧮 Ada, Grace, Linus`), drafted in the order they list them.
-2. **How big a team?** Only for a pre-built roster: 4, 8, 16 (the default), or everyone on it. Their team is that many
-   from the top of the roster's list (see https://getrostr.sh/rosters), and they can change members later with
-   `rostr edit`.
-3. **What should the roster be called?** Default: `work`. People often keep one roster for work and another for side
-   projects.
-4. **Emoji?** `on` (🧙 Gandalf, the default), `off` (Gandalf), or `only` (🧙).
-5. **Where should rostr live?** On this machine (the default; nothing leaves it), or in the cloud, so agents in cloud
-   environments (Claude Code on the web, Codex cloud) share the same roster. Task and repo names are end-to-end
-   encrypted in the cloud.
-6. **Name every new session automatically?** Yes (the default), or only when they type `/draft`.
-
-## 4. Assemble the roster
-
-Run `rostr assemble` with their answers:
+If they do, this machine joins their setup with their rostr key, and the key must never pass through you. Ask them to
+run this themselves in a terminal, pick "I have a key", and paste their key (`rostr config key` on their other machine
+prints it):
 
 ```sh
-rostr assemble <name> --preset <id> --size <4|8|16|all> --emoji <on|off|only>
+rostr cloud on
 ```
 
-- Use `--names "<comma-separated names>"` instead of `--preset` and `--size` for their own names.
-- Add `--cloud` if they chose the cloud.
+That also installs rostr's hooks here. Once they say it's done, run `rostr stats` to check their rosters are there,
+then skip to [step 7](#7-draft-yourself).
+
+## 4. Ask the user which roster, and whether the defaults are fine
+
+`rostr assemble` is an interactive wizard you can't drive, so ask the user its questions yourself, then pass the
+answers as flags. Ask both questions in one go, using your question tool if you have one.
+
+First, show them every roster. Run `rostr presets --json` and list them all in your reply, one line each with its
+emoji, name, and what it's from, and link https://getrostr.sh/rosters to see everyone on each one.
+
+1. **Which roster?** Offer three or four of the rosters as options, plus Free Agents (a random mix from every
+   roster). If your question tool can show a preview for each option, show the roster's first 16 members (the team
+   they'd get). Say they can also name any other roster from the list, or use their own names, each optionally with
+   an emoji (`🧮 Ada, Grace, Linus`), drafted in the order they list them.
+2. **Use the defaults?** Yes, or change some. The defaults are:
+   - **The cloud**, so every machine and cloud environment (Claude Code on the web, Codex cloud) shares the same
+     roster. Task and repo names are end-to-end encrypted. The other choice is this machine only, where nothing leaves
+     it.
+   - **Emoji on** (🧙 Gandalf). The others are `off` (Gandalf) and `only` (🧙).
+   - **Every new session named automatically.** The other choice is only when they type `/draft`.
+   - **A team of 16**, the top of the roster's list. The others are 4, 8, or everyone on it. They can change members
+     later with `rostr edit`.
+
+Only if they want to change some, ask about the ones they want to change.
+
+Don't ask for a roster name: rostr names a pre-built roster after its id (like `fellowship`). For their own names,
+suggest a short name (like `work`) and let them change it.
+
+## 5. Assemble the roster
+
+Run `rostr assemble` with their answers. With the defaults:
+
+```sh
+rostr assemble --preset <id> --cloud
+```
+
+- Add `--size <4|8|all>` for a team size other than 16.
+- Use `rostr assemble <name> --names "<comma-separated names>"` instead of `--preset` for their own names.
+- Leave out `--cloud` if they want rostr on this machine only.
+- Add `--emoji <off|only>` if they don't want emoji on.
 - Add `--no-auto-draft` if they don't want every session named automatically.
 
 This also installs rostr's hooks, skill, and `/draft` command for Claude Code (and, if Codex is installed, its hooks
 plus the `rostr` and `$rostr-draft` skills for Codex).
 Don't edit `~/.claude/settings.json` or other agent config by hand.
 
-## 5. Check it worked
+## 6. Check it worked
 
 ```sh
 rostr stats
@@ -84,18 +108,31 @@ rostr stats
 
 It should show the new roster with everyone on the bench.
 
-## 6. Tell the user what's next
+## 7. Draft yourself
 
-- Names start with their **next new session**: hooks load when a session starts, so this one stays unnamed.
+This session started before rostr's hooks were installed, so draft your own name now. In Claude Code, run:
+
+```sh
+rostr hook claude-code draft
+```
+
+In Codex, run `rostr hook codex draft` instead. Follow what it prints (it tells you your name, and may ask you to
+title the session), then tell the user who you are in one short line. If it says it doesn't know the session's ID,
+ask the user to type `/draft` (or `$rostr-draft` in Codex) instead.
+
+## 8. Tell the user what's next
+
+- Every **new session** gets a name on its own from now on.
 - **If they use Codex:** Codex only runs hooks the user has approved, so they need to open `/hooks` in Codex and
   trust rostr's. In Codex, `$rostr-draft` takes the place of `/draft`. rostr shows the name in tmux and herdr by finding the pane whose
   terminal title shows the Codex thread's name, so a custom `tui.terminal_title` in `~/.codex/config.toml` should keep
   `thread-name` in it.
 - To give a project its own roster, they can run `rostr assemble` again for a second roster, then `rostr link` in
   that project.
-- **If they chose the cloud:** to use rostr in cloud environments, they should run `rostr config key` themselves in
-  a terminal and add the key as `ROSTR_KEY` in each cloud environment's variables. Never run `rostr config key`
-  yourself, and never read `~/.config/rostr/credentials` or `ROSTR_KEY`: the key would end up in your transcript.
+- **If they chose the cloud:** to use rostr on another machine, they run `rostr cloud on` there and paste their key.
+  To use it in cloud environments, they add the key as `ROSTR_KEY` in each environment's variables. Either way, they
+  get the key by running `rostr config key` themselves in a terminal. Never run `rostr config key` yourself, and
+  never read `~/.config/rostr/credentials` or `ROSTR_KEY`: the key would end up in your transcript.
 
 If any command fails, show the user the error rather than working around it.
 

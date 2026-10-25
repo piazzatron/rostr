@@ -83,6 +83,10 @@ func TestTwoMachinesShareOneKey(t *testing.T) {
 	if info, err := os.Stat(b.credentialsPath()); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("credentials: %v, %v", info, err)
 	}
+	// Joining installs the hooks, as assemble would have
+	if settings, _ := os.ReadFile(filepath.Join(b.home, ".claude", "settings.json")); !strings.Contains(string(settings), "rostr hook") {
+		t.Fatalf("joining didn't install the Claude Code hooks: %s", settings)
+	}
 
 	// Both machines draft from the same roster, at once, without colliding
 	results := make([]draftOutput, 6)

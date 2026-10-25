@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -53,7 +54,7 @@ func newAssembleCommand(use string, hidden bool) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.preset, "preset", "", "use a pre-built roster (see `rostr presets`)")
 	cmd.Flags().StringVar(&opts.names, "names", "", `comma-separated names, each optionally with an emoji ("🧮 Ada, Grace")`)
-	cmd.Flags().StringVar(&opts.size, "size", "", "how many of the preset's members to take, or all (default 6)")
+	cmd.Flags().StringVar(&opts.size, "size", "", fmt.Sprintf("how many of the preset's members to take, or all (default %d)", presets.DefaultTeamSize))
 	cmd.Flags().StringVar(&opts.emoji, "emoji", "", "the roster's emoji mode: on, off, or only (default on)")
 	cmd.Flags().BoolVar(&opts.cloud, "cloud", false, "put the setup in the cloud (first roster only)")
 	cmd.Flags().BoolVar(&opts.noAutoDraft, "no-auto-draft", false, "only draft sessions with /draft")
@@ -179,17 +180,9 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 		}
 	}
 
-	installed, err := claudecode.Install(paths.ClaudeDir())
+	installed, installedCodex, err := installAgentHooks()
 	if err != nil {
-		return fmt.Errorf("the %s roster is saved, but installing the Claude Code hooks failed: %w", created.Name, err)
-	}
-
-	// Codex only where it looks installed, so assemble doesn't create a ~/.codex for people who don't use it
-	var installedCodex []string
-	if codex.Detected(paths.CodexDir()) {
-		if installedCodex, err = codex.Install(paths.CodexDir(), paths.AgentsSkillsDir()); err != nil {
-			return fmt.Errorf("the %s roster is saved, but installing the Codex hooks failed: %w", created.Name, err)
-		}
+		return fmt.Errorf("the %s roster is saved, but %w", created.Name, err)
 	}
 
 	// Summary
@@ -208,7 +201,26 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	} else {
 		fmt.Fprintf(out, "Use it for a project with `rostr link %s`.\n", created.Name)
 	}
-	// Only new hooks are worth a line; refreshed skill text isn't
+	printInstalledHooks(out, installed, installedCodex)
+	return nil
+}
+
+// installAgentHooks installs rostr's hooks, skills, and commands into Claude Code, and into Codex where it looks
+// installed, so nothing creates a ~/.codex for people who don't use it.
+func installAgentHooks() (installed, installedCodex []string, err error) {
+	if installed, err = claudecode.Install(paths.ClaudeDir()); err != nil {
+		return nil, nil, fmt.Errorf("installing the Claude Code hooks failed: %w", err)
+	}
+	if codex.Detected(paths.CodexDir()) {
+		if installedCodex, err = codex.Install(paths.CodexDir(), paths.AgentsSkillsDir()); err != nil {
+			return nil, nil, fmt.Errorf("installing the Codex hooks failed: %w", err)
+		}
+	}
+	return installed, installedCodex, nil
+}
+
+// printInstalledHooks says which agents got new hooks. Only new hooks are worth a line; refreshed skill text isn't.
+func printInstalledHooks(out io.Writer, installed, installedCodex []string) {
 	var tools []string
 	if changedHooks(installed) {
 		tools = append(tools, "Claude Code")
@@ -222,7 +234,6 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	if changedHooks(installedCodex) {
 		fmt.Fprintln(out, "Codex only runs hooks you've approved: open /hooks in Codex and trust rostr's.")
 	}
-	return nil
 }
 
 // chooseCast takes the cast from --preset and --size, or --names.

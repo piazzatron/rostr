@@ -115,8 +115,9 @@ Saved the work roster.`,
       },
       {
         id: "presets",
-        usage: "rostr presets",
+        usage: "rostr presets [--json]",
         summary: "See all the pre-built rosters you can pass to --preset. They're also on the rosters page, with all their members.",
+        options: [{ flag: "--json", description: "Print every preset as JSON, with all its members in draft order." }],
         example:
           "$ rostr presets\n" +
           PRESET_ROSTERS.map((roster) => `${roster.id.padEnd(16)} ${roster.emoji} ${roster.name} (${roster.source})`).join("\n"),
@@ -147,7 +148,7 @@ Disbanded work. side is now your default roster`,
           "Draft the next free agent when a session starts, and send it back to the bench when the session ends. The same session always gets the same name back.",
         options: [
           { flag: "--task <description>", description: "What the agent is working on. Shown in rostr stats." },
-          { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION." },
+          { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION, then the agent's own session ID." },
           { flag: "--json", description: "Print the drafted agent as JSON." },
         ],
         example: `$ rostr draft --task "Fix auth redirect loop"
@@ -165,7 +166,7 @@ Benched 🧙 Gandalf from the work roster.`,
         usage: "rostr task [<name>] <description>",
         summary: "Set or change what an agent is working on. Your hooks set the first task from your first prompt.",
         options: [
-          { flag: "--session <id>", description: "Set the task for whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION." },
+          { flag: "--session <id>", description: "Set the task for whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION, then the agent's own session ID." },
         ],
         example: `$ rostr task "Migrate billing to Stripe v3"
 🌱 Samwise is now on: Migrate billing to Stripe v3
@@ -206,7 +207,7 @@ $ rostr config emoji only
         usage: "rostr cloud on\nrostr cloud install",
         summary: "Keep your setup on the rostr API, so agents on every machine and in cloud sessions share one roster.",
         options: [
-          { flag: "on", description: "Move your whole setup to the cloud, or join one with your key. Turn it on once, when you start using cloud agents. There's no going back to local." },
+          { flag: "on", description: "Move your whole setup to the cloud, or join one with your key (which installs rostr's hooks on this machine too). Turn it on once, when you start using cloud agents. There's no going back to local." },
           { flag: "install", description: "Install rostr's hooks for Claude Code and Codex in a cloud environment. The install script runs this for you when ROSTR_KEY is set in your cloud environment." },
         ],
         example: `$ rostr cloud on

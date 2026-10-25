@@ -784,6 +784,28 @@ func TestUninstallRemovesEverything(t *testing.T) {
 	}
 }
 
+func TestSetupSessionDraftsItself(t *testing.T) {
+	s := newSandbox(t)
+	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
+
+	// The session that set rostr up started before the hooks did, so it has no ROSTR_SESSION; Claude Code's own
+	// session ID stands in for it
+	s.ok(s.home, []string{"CLAUDE_CODE_SESSION_ID=setup"}, "hook", "claude-code", "draft")
+	if drafted := s.list().Rosters[0].Drafted; len(drafted) != 1 || drafted[0].Session != "setup" {
+		t.Fatalf("drafted: %+v", drafted)
+	}
+
+	// ROSTR_SESSION still wins where the hooks set it
+	s.ok(s.home, []string{"CLAUDE_CODE_SESSION_ID=setup", "ROSTR_SESSION=other"}, "draft")
+	sessions := map[string]bool{}
+	for _, d := range s.list().Rosters[0].Drafted {
+		sessions[d.Session] = true
+	}
+	if len(sessions) != 2 || !sessions["other"] {
+		t.Fatalf("ROSTR_SESSION should win over CLAUDE_CODE_SESSION_ID: %v", sessions)
+	}
+}
+
 func TestMissingArgumentsPrintUsage(t *testing.T) {
 	s := newSandbox(t)
 	s.ok(s.home, nil, "assemble", "work", "--preset", "fellowship")
@@ -884,6 +906,19 @@ func TestCloudModeWithoutTheAPI(t *testing.T) {
 
 	if out := s.ok(s.home, nil, "presets"); !strings.HasPrefix(out, "fellowship") || !strings.Contains(out, "free-agents") {
 		t.Fatalf("presets: %s", out)
+	}
+	var listing struct {
+		Presets []struct {
+			ID      string
+			Members []struct{ Name, Emoji string }
+		}
+	}
+	if err := json.Unmarshal([]byte(s.ok(s.home, nil, "presets", "--json")), &listing); err != nil {
+		t.Fatal(err)
+	}
+	if len(listing.Presets) == 0 || listing.Presets[0].ID != "fellowship" || len(listing.Presets[0].Members) < 16 ||
+		listing.Presets[0].Members[0].Name != "Gandalf" {
+		t.Fatalf("presets --json: %+v", listing.Presets[:1])
 	}
 }
 
