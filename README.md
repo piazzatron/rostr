@@ -50,7 +50,7 @@ rostr assemble
 | **tmux** | Names the window and tags the pane (`#{@rostr}`) |
 | **herdr** | Shows the name in the sidebar |
 
-Using something else? [Request support](https://github.com/piazzatron/rostr/issues/new?title=Support+for%3A+).
+Using something else? [Request support](https://github.com/piazzatron/rostr/issues/new?template=tool-request.yml).
 
 ## Commands
 
