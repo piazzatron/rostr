@@ -37,7 +37,8 @@ Inside the CLI:
 
 A whole setup is one or the other, never mixed.
 
-- **Local** (the default): one SQLite database, compiled into the CLI. No network calls.
+- **Local** (the default): one SQLite database, compiled into the CLI. Its only network call fetches the pre-built
+  rosters (below).
 - **Cloud:** everything lives on the API, so sessions on any machine or in cloud environments (Claude Code on the
   web, Codex cloud) draft from the same rosters. A machine is in cloud mode whenever it has a rostr key, from
   `~/.config/rostr/credentials` or `ROSTR_KEY`. `rostr cloud on` uploads a local setup in one request and deletes the
@@ -69,3 +70,12 @@ no project. A draft uses the `--roster` flag, else the project's linked roster (
 Hooks never block a session: `rostr hook` always exits 0, network calls time out after 3 seconds, and anything slow
 or optional (summaries, turn reports, hook upgrades, drafting ahead) runs in a detached background process that logs
 to `~/.cache/rostr/background.log`. If rostr can't draft, the session just starts unnamed.
+
+## Pre-built rosters
+
+`site/src/data/rosters.ts` is the one list. The site publishes it at `getrostr.sh/rosters.json`
+(`site/src/pages/rosters.json.ts`), and `go generate` copies it into the CLI (`internal/presets`). `rostr presets` and
+`rostr assemble` fetch the published list when their cached copy (`~/.cache/rostr/presets.json`) is missing or a day
+old, with a 3-second timeout, and otherwise use the cache; with neither, the built-in list. So a new roster reaches
+every CLI within a day of the site deploying, without a release. Hooks never fetch it. A list with a `version` newer
+than the CLI knows is ignored, and so are presets in it that don't make a valid roster of at least 16.

@@ -22,14 +22,14 @@ func TestPresetsMatchSite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(parsed, presets.All()) {
+	if !reflect.DeepEqual(parsed, presets.Builtin()) {
 		t.Fatal("presets_gen.go is out of date with rosters.ts; run `go generate ./...` in cli/")
 	}
 }
 
 func TestPresetsAreValidRosters(t *testing.T) {
 	ids := map[string]bool{}
-	for _, p := range presets.All() {
+	for _, p := range presets.Builtin() {
 		if ids[p.ID] {
 			t.Errorf("duplicate preset id %s", p.ID)
 		}

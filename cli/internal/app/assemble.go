@@ -69,6 +69,9 @@ func runAssemble(cmd *cobra.Command, args []string, opts assembleOptions) error 
 	if opts.size != "" && opts.preset == "" {
 		return errors.New("--size picks how many of a preset's members to take, so it needs --preset")
 	}
+	if opts.names == "" {
+		refreshPresets(ctx)
+	}
 
 	st, err := openStore()
 	if err != nil {

@@ -25,6 +25,7 @@ func newPresetsCommand() *cobra.Command {
 		Short: "List the pre-built rosters",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			refreshPresets(cmd.Context())
 			if asJSON {
 				listing := []presetListing{}
 				for _, p := range presets.All() {

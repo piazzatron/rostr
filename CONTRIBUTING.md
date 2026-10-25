@@ -14,7 +14,8 @@ To add one yourself, edit [`site/src/data/rosters.ts`](site/src/data/rosters.ts)
 cd cli && go generate ./...
 ```
 
-CI fails if the two are out of sync.
+CI fails if the two are out of sync. Once the site deploys, every CLI picks up the new roster within a day, from
+`getrostr.sh/rosters.json`; the generated copy is what a CLI uses until then, or offline.
 
 ## Repo layout
 

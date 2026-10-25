@@ -16,6 +16,7 @@ the `schema` constant in `cli/internal/store/sqlite.go` (local) and the migratio
   turns/<session>                the last turn's end, with the session's name and task, until the next start is reported
   cloud/sessions/<session>.json  cloud mode: the session's own draft, so later prompts make no call
   hooks/<agent>                  the fingerprint of the last hook install (see hooks.md, Upgrading)
+  presets.json                   the pre-built rosters last fetched from getrostr.sh (see architecture.md)
   background.log                 errors from background hook processes
 ```
 

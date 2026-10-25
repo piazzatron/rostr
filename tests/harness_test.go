@@ -101,7 +101,7 @@ func newMachine(t *testing.T) *machine {
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
 		"XDG_CACHE_HOME="+filepath.Join(home, ".cache"),
 		"CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"),
-		"ROSTR_API_URL="+apiURL,
+		"ROSTR_API_URL="+apiURL, "ROSTR_PRESETS_URL=http://127.0.0.1:1",
 		"ROSTR_CLAUDE_BIN=/usr/bin/false", // no real claude -p summaries
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
