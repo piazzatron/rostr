@@ -1431,6 +1431,293 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     gap: 6px;
   }
 
+  /* Tools: small recreations of each app's sidebar or terminal, cropped to where the name shows. Like screenshots, they
+     keep each app's own colors in both themes */
+  .tools {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+
+  .tool {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .tool-window {
+    flex: 1;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  /* :where() keeps this reset below each part's own spacing */
+  :where(.tool-window) :where(p, ul) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tool-window li,
+  .tool-window p {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tool figcaption {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .tool figcaption strong {
+    margin-right: 6px;
+    color: var(--text);
+  }
+
+  .tool-chrome {
+    display: flex;
+    gap: 7px;
+    padding: 14px 16px 6px;
+  }
+
+  .tool-chrome span {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #ff5f57;
+  }
+
+  .tool-chrome span:nth-child(2) {
+    background: #febc2e;
+  }
+
+  .tool-chrome span:nth-child(3) {
+    background: #28c840;
+  }
+
+  /* Claude app */
+  .tool-claude .tool-window {
+    padding-bottom: 10px;
+    background: #faf9f5;
+    color: #29261b;
+  }
+
+  .tool-claude-day {
+    padding: 12px 20px 4px;
+    color: #8a877d;
+    font-size: 13px;
+  }
+
+  .tool-claude li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 8px;
+    padding: 7px 12px;
+    border-radius: 8px;
+  }
+
+  .tool-claude li.is-active {
+    background: #f0eee6;
+  }
+
+  .tool-claude-dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: #c9c6bc;
+  }
+
+  .tool-claude li svg {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    margin-left: auto;
+    fill: none;
+    stroke: #8a877d;
+    stroke-width: 1.6;
+  }
+
+  /* Codex app */
+  .tool-codex-app .tool-window {
+    padding-bottom: 10px;
+    background: #ffffff;
+    color: #1f1f1f;
+  }
+
+  .tool-codex-app-title {
+    padding: 8px 20px 10px;
+    font-size: 19px;
+    font-weight: 600;
+  }
+
+  .tool-codex-app-title span {
+    color: #8f8f8f;
+    font-size: 14px;
+  }
+
+  .tool-codex-app-project {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 8px;
+    padding: 8px 12px;
+    border-top: 1px solid #ececec;
+  }
+
+  .tool-codex-app-project svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: #1f1f1f;
+    stroke-width: 1.6;
+  }
+
+  .tool-codex-app-project i {
+    width: 8px;
+    height: 8px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: #e5352b;
+  }
+
+  .tool-codex-app li {
+    padding: 6px 20px 6px 45px;
+    color: #6f6f6f;
+  }
+
+  /* Terminals: tmux and herdr, in a One Dark palette */
+  .tool-term {
+    border-color: #1d2026;
+    background: #282c34;
+    color: #d7dae0;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  .tool-term-dim {
+    color: #7f848e;
+  }
+
+  .tool-tmux .tool-window {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tool-tmux-border {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px 4px;
+    color: #c5c86a;
+  }
+
+  .tool-tmux-border::before,
+  .tool-tmux-border::after {
+    content: "";
+    height: 1px;
+    background: #8a8c4a;
+  }
+
+  .tool-tmux-border::before {
+    flex: 0 0 12px;
+  }
+
+  .tool-tmux-border::after {
+    flex: 1;
+  }
+
+  .tool-tmux-border span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tool-tmux-body {
+    flex: 1;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 10px 14px 14px;
+  }
+
+  .tool-tmux-prompt {
+    margin: 0 -14px;
+    padding: 6px 14px;
+    background: #3a3f4b;
+  }
+
+  .tool-tmux-status {
+    padding: 0 14px 10px;
+    color: #a9c28a;
+  }
+
+  .tool-tmux-status b {
+    color: #7fb0f0;
+    font-weight: 400;
+  }
+
+  .tool-tmux-bar {
+    display: flex;
+    gap: 12px;
+    padding: 3px 14px;
+    background: #2e8b57;
+    color: #10251a;
+  }
+
+  .tool-tmux-bar .is-active {
+    padding: 0 4px;
+    background: #d4f28a;
+  }
+
+  .tool-herdr .tool-window {
+    padding: 14px 8px;
+  }
+
+  .tool-herdr-head {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px 10px;
+    color: #8b919c;
+  }
+
+  .tool-herdr li {
+    display: grid;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: 4px;
+  }
+
+  .tool-herdr li.is-active {
+    background: #1e1f2b;
+  }
+
+  .tool-herdr-pane {
+    color: #8b919c;
+  }
+
+  .tool-herdr-pane b {
+    color: #e6e8ec;
+  }
+
+  .tool-herdr-name {
+    padding-left: 2.15em;
+    color: #b5bac4;
+  }
+
+  @media (max-width: 640px) {
+    .tools {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   /* Local and cloud: two short labeled lines instead of cards, so the section scans quickly */
   .modes {
     display: grid;
