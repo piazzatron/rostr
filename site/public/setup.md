@@ -7,6 +7,8 @@ rostr gives every coding-agent session a name from a roster the user picks (like
 they can tell their agents apart. It's a CLI plus hooks, a skill, and a `/draft` slash command. Full docs:
 https://getrostr.sh/cli
 
+If the user asked you to remove rostr instead, skip to [Uninstall rostr](#uninstall-rostr).
+
 ## 1. Check the platform
 
 rostr runs on macOS and Linux. On anything else (including Windows outside WSL), stop and tell the user rostr doesn't
@@ -96,3 +98,17 @@ It should show the new roster with everyone on the bench.
   yourself, and never read `~/.config/rostr/credentials` or `ROSTR_KEY`: the key would end up in your transcript.
 
 If any command fails, show the user the error rather than working around it.
+
+## Uninstall rostr
+
+Only when the user asked you to remove rostr. It deletes all their rosters, and in the cloud it deletes their whole
+cloud setup, which can't be undone, so confirm with them first. Then run:
+
+```sh
+rostr uninstall --yes
+```
+
+That takes rostr out of Claude Code and Codex and deletes its data, but leaves the rostr program installed. Its output
+ends with the commands that remove the program (for a Homebrew install, `brew uninstall` and `brew untap`): run those
+too, then check that `rostr --version` no longer finds it. If the user had set `ROSTR_KEY` in their shell profile or a
+cloud environment's variables, tell them to remove it.
