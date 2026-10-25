@@ -23,7 +23,7 @@ const { rosters, tasks } = Astro.props;
     right: calc(50% - 50vw);
     overflow: hidden;
     pointer-events: none;
-    opacity: 0.8;
+    opacity: 0.45;
     mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
   }
 
@@ -41,7 +41,6 @@ const { rosters, tasks } = Astro.props;
     border: 1.5px solid var(--squad-color);
     border-radius: 999px;
     background: var(--surface);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--squad-color) 14%, transparent);
     font-size: 12.5px;
     white-space: nowrap;
     transform: translate(-50%, -50%); /* centered on its point; the script sets translate */
@@ -79,7 +78,7 @@ const { rosters, tasks } = Astro.props;
     width: 22px;
     height: 22px;
     margin: -11px 0 0 -11px;
-    border: 2px solid var(--squad-color);
+    border: 1.5px solid var(--squad-color);
     border-radius: 50%;
   }
 
@@ -91,8 +90,8 @@ const { rosters, tasks } = Astro.props;
 </style>
 
 <script>
-  const MAX_SQUADS = 3; // on screen at once
-  const SQUAD_GAP_MS = [2200, 3800]; // between one squad being drafted and the next
+  const MAX_SQUADS = 2; // on screen at once
+  const SQUAD_GAP_MS = [4000, 7000]; // between one squad being drafted and the next
   const LABEL_BOX = { width: 210, height: 40 }; // room a cursor needs below and right of its tip, for its label
   // Squad colors, one per squad; the first is the site's accent
   const COLORS = ["var(--accent)", "#5b34e6", "#0f9d74", "#2f6fdb", "#d6336c"];
@@ -185,7 +184,7 @@ const { rosters, tasks } = Astro.props;
         duration: 220,
         easing: "ease-out",
       });
-      await ripple.animate([{ scale: 0.3, opacity: 0.9 }, { scale: 1.6, opacity: 0 }], {
+      await ripple.animate([{ scale: 0.3, opacity: 0.6 }, { scale: 1.4, opacity: 0 }], {
         duration: 600,
         easing: "ease-out",
       }).finished;
@@ -203,8 +202,8 @@ const { rosters, tasks } = Astro.props;
       const chip = make("squad-chip", color);
       chip.textContent = name;
       chip.style.translate = at(start);
-      await chip.animate([{ scale: 0.5, opacity: 0 }, { scale: 1.08, opacity: 1, offset: 0.7 }, { scale: 1, opacity: 1 }], {
-        duration: 420,
+      await chip.animate([{ scale: 0.85, opacity: 0 }, { scale: 1, opacity: 1 }], {
+        duration: 600,
         easing: "ease-out",
       }).finished;
       await sleep(700);
@@ -216,20 +215,20 @@ const { rosters, tasks } = Astro.props;
       label.textContent = name;
       cursor.append(label);
       cursor.style.translate = at(start);
-      chip.animate([{ scale: 1, opacity: 1 }, { scale: 0.3, opacity: 0 }], { duration: 260, fill: "forwards" }).finished.then(
+      chip.animate([{ scale: 1, opacity: 1 }, { scale: 0.3, opacity: 0 }], { duration: 400, fill: "forwards" }).finished.then(
         () => chip.remove(),
       );
-      await cursor.animate([{ scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1 }], { duration: 260, easing: "ease-out" })
+      await cursor.animate([{ scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1 }], { duration: 400, easing: "ease-out" })
         .finished;
 
       let position = start;
       const stops = Math.round(random(2, 4));
       for (let stop = 0; stop < stops; stop++) {
-        const next = freePoint(content, meeting, [10, 80], teammates()) ?? position;
+        const next = freePoint(content, meeting, [10, 60], teammates()) ?? position;
         spots.set(name, next);
-        const duration = random(800, 1300);
+        const duration = random(1400, 2200);
         // A slight arc, as a hand would move
-        const bend = { x: (position.x + next.x) / 2 + random(-30, 30), y: (position.y + next.y) / 2 + random(-30, 30) };
+        const bend = { x: (position.x + next.x) / 2 + random(-20, 20), y: (position.y + next.y) / 2 + random(-20, 20) };
         await cursor.animate([{ translate: at(position) }, { translate: at(bend), offset: 0.5 }, { translate: at(next) }], {
           duration,
           easing: "cubic-bezier(0.45, 0, 0.25, 1)",
@@ -237,7 +236,7 @@ const { rosters, tasks } = Astro.props;
         }).finished;
         position = next;
         cursor.style.translate = at(position);
-        if (Math.random() < 0.7) await click(cursor, position, color);
+        if (Math.random() < 0.35) await click(cursor, position, color);
         // At the first stop the member picks up its task, which shows in its label like a session title
         if (stop === 0) {
           const task = document.createElement("span");
@@ -246,11 +245,11 @@ const { rosters, tasks } = Astro.props;
           label.append(task);
           task.animate([{ opacity: 0 }, { opacity: 0.85 }], { duration: 300 });
         }
-        await sleep(random(500, 1100));
+        await sleep(random(900, 1800));
       }
 
       // Back to the bench
-      await cursor.animate([{ scale: 1, opacity: 1 }, { scale: 0.6, opacity: 0 }], { duration: 400, fill: "forwards" })
+      await cursor.animate([{ scale: 1, opacity: 1 }, { scale: 0.8, opacity: 0 }], { duration: 700, fill: "forwards" })
         .finished;
       cursor.remove();
       spots.delete(name);

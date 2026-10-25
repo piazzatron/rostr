@@ -15,7 +15,7 @@ const HOME_GRID_ROSTERS = [
 ];
 
 // On phones the grid is trimmed to these presets plus the "Your own" tile
-const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires"];
+const MOBILE_GRID_ROSTER_IDS = ["fellowship", "hogwarts", "dunder-mifflin", "billionaires", "matrix"];
 
 // The preset roster members easy to place on their own, for the hero's flipping name. Names that read as a common
 // first name, a surname, or a plain word ("Jim", "Brown", "Data") are left out
@@ -295,7 +295,7 @@ const SHOW_LIVE_BAR = false;
         </li>
       </ul>
       <p class="docs-link">
-        <a href="/rosters">See all rosters / submit your own →</a>
+        <a href="/rosters">See all {PRESET_ROSTERS.length} rosters / submit your own →</a>
       </p>
 
       <div class="tip">
