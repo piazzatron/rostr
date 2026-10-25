@@ -886,6 +886,13 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     margin: 0 0 16px;
   }
 
+  /* Small enough on phones that every heading fits one line, even 375px wide */
+  @media (max-width: 640px) {
+    .section h2 {
+      font-size: 27px;
+    }
+  }
+
   .narrow p {
     max-width: 38em;
   }
