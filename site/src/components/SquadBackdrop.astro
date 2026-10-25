@@ -1,0 +1,286 @@
+---
+// Squad up's background: little squads get drafted in the empty space around the rosters. Each member pops in as a
+// name chip, turns into a multiplayer cursor with its name on it, and the squad's cursors gather to work together,
+// clicking around and picking up tasks, before heading back to the bench.
+interface Props {
+  rosters: string[][]; // each roster's members, like "🧙 Gandalf"
+  tasks: string[];
+}
+const { rosters, tasks } = Astro.props;
+---
+
+<div class="squad-backdrop" aria-hidden="true" data-rosters={JSON.stringify(rosters)} data-tasks={JSON.stringify(tasks)}>
+</div>
+
+<style>
+  /* Full-bleed behind the section, fading out at the sides */
+  .squad-backdrop {
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    left: calc(50% - 50vw);
+    right: calc(50% - 50vw);
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0.8;
+    mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  }
+
+  /* Everything moves by translate from the top left, so the script only animates translate */
+  .squad-backdrop :global(.squad-chip),
+  .squad-backdrop :global(.squad-cursor),
+  .squad-backdrop :global(.squad-ripple) {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .squad-backdrop :global(.squad-chip) {
+    padding: 2px 9px;
+    border: 1.5px solid var(--squad-color);
+    border-radius: 999px;
+    background: var(--surface);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--squad-color) 14%, transparent);
+    font-size: 12.5px;
+    white-space: nowrap;
+    transform: translate(-50%, -50%); /* centered on its point; the script sets translate */
+  }
+
+  .squad-backdrop :global(.squad-cursor) {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .squad-backdrop :global(.squad-cursor svg) {
+    display: block;
+    width: 16px;
+    height: 18px;
+    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.2));
+  }
+
+  .squad-backdrop :global(.squad-label) {
+    margin: 13px 0 0 -3px;
+    padding: 2px 8px;
+    border-radius: 6px 999px 999px 999px;
+    background: var(--squad-color);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .squad-backdrop :global(.squad-task) {
+    font-weight: 500;
+    opacity: 0.85;
+  }
+
+  .squad-backdrop :global(.squad-ripple) {
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border: 2px solid var(--squad-color);
+    border-radius: 50%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .squad-backdrop {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  const MAX_SQUADS = 3; // on screen at once
+  const SQUAD_GAP_MS = [2200, 3800]; // between one squad being drafted and the next
+  const LABEL_BOX = { width: 210, height: 40 }; // room a cursor needs below and right of its tip, for its label
+  // Squad colors, one per squad; the first is the site's accent
+  const COLORS = ["var(--accent)", "#5b34e6", "#0f9d74", "#2f6fdb", "#d6336c"];
+  const CURSOR_SVG =
+    '<svg viewBox="0 0 16 18"><path d="M1 1 L1 15.5 L5 11.8 L7.8 17 L10.2 15.8 L7.6 10.8 L13 10.6 Z" fill="var(--squad-color)" stroke="white" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+
+  type Point = { x: number; y: number };
+  type Rect = { left: number; top: number; right: number; bottom: number };
+
+  const backdrop = document.querySelector<HTMLElement>(".squad-backdrop");
+  const section = backdrop?.parentElement;
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  if (backdrop && section && !reducedMotion.matches) {
+    const rosters: string[][] = JSON.parse(backdrop.dataset.rosters ?? "[]");
+    const tasks: string[] = JSON.parse(backdrop.dataset.tasks ?? "[]");
+    const meetingPoints = new Set<Point>(); // where the squads on screen are working, so new ones keep clear
+    let colorIndex = 0;
+    let visible = false;
+    let timer = 0;
+
+    const random = (min: number, max: number) => min + Math.random() * (max - min);
+    const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const at = ({ x, y }: Point) => `${x.toFixed(1)}px ${y.toFixed(1)}px`;
+
+    // The section's content, relative to the backdrop: each roster tile, and the text of each block rather than its
+    // full width, so the space beside a short heading or link counts as free
+    function contentRects(): Rect[] {
+      const origin = backdrop!.getBoundingClientRect();
+      const pad = 14;
+      const boxes: DOMRect[] = [];
+      for (const child of section!.children) {
+        if (child === backdrop) continue;
+        if (child.matches("ul")) boxes.push(...[...child.children].map((tile) => tile.getBoundingClientRect()));
+        else if (child.matches("h2, p")) {
+          const range = document.createRange();
+          range.selectNodeContents(child);
+          boxes.push(range.getBoundingClientRect());
+        } else boxes.push(child.getBoundingClientRect());
+      }
+      return boxes
+        .filter((box) => box.width > 0)
+        .map((box) => ({
+          left: box.left - origin.left - pad,
+          top: box.top - origin.top - pad,
+          right: box.right - origin.left + pad,
+          bottom: box.bottom - origin.top + pad,
+        }));
+    }
+
+    // Whether a cursor at this point, and its label, would be clear of the content and inside the backdrop
+    function isFree({ x, y }: Point, content: Rect[]) {
+      const box = { left: x - 12, top: y - 12, right: x + LABEL_BOX.width, bottom: y + LABEL_BOX.height };
+      const { width, height } = backdrop!.getBoundingClientRect();
+      if (box.left < width * 0.05 || box.right > width * 0.95 || box.top < 8 || box.bottom > height - 8) return false;
+      return !content.some((rect) => box.left < rect.right && rect.left < box.right && box.top < rect.bottom && rect.top < box.bottom);
+    }
+
+    // A free point within the given distance of a center, or anywhere when there's no center, whose label won't cover
+    // a teammate's
+    function freePoint(content: Rect[], center?: Point, near = [0, 0], teammates: Point[] = []): Point | undefined {
+      const { width, height } = backdrop!.getBoundingClientRect();
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const angle = random(0, Math.PI * 2);
+        const distance = random(near[0], near[1]);
+        const point = center
+          ? { x: center.x + Math.cos(angle) * distance, y: center.y + Math.sin(angle) * distance }
+          : { x: random(0, width), y: random(0, height) };
+        if (!isFree(point, content)) continue;
+        if (teammates.some((other) => Math.abs(other.x - point.x) < 170 && Math.abs(other.y - point.y) < 36)) continue;
+        if (!center && [...meetingPoints].some((other) => Math.hypot(other.x - point.x, other.y - point.y) < 300)) continue;
+        return point;
+      }
+    }
+
+    function make(className: string, color: string, html = "") {
+      const element = document.createElement("span");
+      element.className = className;
+      element.style.setProperty("--squad-color", color);
+      element.innerHTML = html;
+      backdrop!.append(element);
+      return element;
+    }
+
+    // A click: the cursor dips and a ring spreads from its tip
+    async function click(cursor: HTMLElement, point: Point, color: string) {
+      const ripple = make("squad-ripple", color);
+      ripple.style.translate = at(point);
+      cursor.firstElementChild!.animate([{ scale: 1 }, { scale: 0.8 }, { scale: 1 }], {
+        duration: 220,
+        easing: "ease-out",
+      });
+      await ripple.animate([{ scale: 0.3, opacity: 0.9 }, { scale: 1.6, opacity: 0 }], {
+        duration: 600,
+        easing: "ease-out",
+      }).finished;
+      ripple.remove();
+    }
+
+    // One member: drafted as a chip, then a cursor that works around the meeting point and picks up a task
+    async function member(name: string, color: string, meeting: Point, content: Rect[], spots: Map<string, Point>, delay: number) {
+      await sleep(delay);
+      const teammates = () => [...spots].filter(([other]) => other !== name).map(([, spot]) => spot);
+      const start = freePoint(content, meeting, [60, 170], teammates());
+      if (!start) return;
+      spots.set(name, start);
+
+      const chip = make("squad-chip", color);
+      chip.textContent = name;
+      chip.style.translate = at(start);
+      await chip.animate([{ scale: 0.5, opacity: 0 }, { scale: 1.08, opacity: 1, offset: 0.7 }, { scale: 1, opacity: 1 }], {
+        duration: 420,
+        easing: "ease-out",
+      }).finished;
+      await sleep(700);
+
+      // The chip shrinks into the cursor's tip as the cursor appears
+      const cursor = make("squad-cursor", color, CURSOR_SVG);
+      const label = document.createElement("span");
+      label.className = "squad-label";
+      label.textContent = name;
+      cursor.append(label);
+      cursor.style.translate = at(start);
+      chip.animate([{ scale: 1, opacity: 1 }, { scale: 0.3, opacity: 0 }], { duration: 260, fill: "forwards" }).finished.then(
+        () => chip.remove(),
+      );
+      await cursor.animate([{ scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1 }], { duration: 260, easing: "ease-out" })
+        .finished;
+
+      let position = start;
+      const stops = Math.round(random(2, 4));
+      for (let stop = 0; stop < stops; stop++) {
+        const next = freePoint(content, meeting, [10, 80], teammates()) ?? position;
+        spots.set(name, next);
+        const duration = random(800, 1300);
+        // A slight arc, as a hand would move
+        const bend = { x: (position.x + next.x) / 2 + random(-30, 30), y: (position.y + next.y) / 2 + random(-30, 30) };
+        await cursor.animate([{ translate: at(position) }, { translate: at(bend), offset: 0.5 }, { translate: at(next) }], {
+          duration,
+          easing: "cubic-bezier(0.45, 0, 0.25, 1)",
+          fill: "forwards",
+        }).finished;
+        position = next;
+        cursor.style.translate = at(position);
+        if (Math.random() < 0.7) await click(cursor, position, color);
+        // At the first stop the member picks up its task, which shows in its label like a session title
+        if (stop === 0) {
+          const task = document.createElement("span");
+          task.className = "squad-task";
+          task.textContent = ` · ${pick(tasks)}`;
+          label.append(task);
+          task.animate([{ opacity: 0 }, { opacity: 0.85 }], { duration: 300 });
+        }
+        await sleep(random(500, 1100));
+      }
+
+      // Back to the bench
+      await cursor.animate([{ scale: 1, opacity: 1 }, { scale: 0.6, opacity: 0 }], { duration: 400, fill: "forwards" })
+        .finished;
+      cursor.remove();
+      spots.delete(name);
+    }
+
+    // A squad: two or three members of one roster, drafted one after another, working around a shared spot
+    async function squad() {
+      const content = contentRects();
+      const meeting = freePoint(content);
+      if (!meeting) return;
+      meetingPoints.add(meeting);
+      const color = COLORS[colorIndex++ % COLORS.length];
+      const members = [...pick(rosters)].sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.5 ? 2 : 3);
+      const spots = new Map<string, Point>(); // where each member is, or is headed
+      await Promise.all(members.map((name, i) => member(name, color, meeting, content, spots, i * random(600, 1000))));
+      meetingPoints.delete(meeting);
+    }
+
+    // Drafts a squad every few seconds while the section is on screen
+    function schedule() {
+      clearTimeout(timer);
+      if (!visible) return;
+      if (meetingPoints.size < MAX_SQUADS) squad();
+      timer = window.setTimeout(schedule, random(SQUAD_GAP_MS[0], SQUAD_GAP_MS[1]));
+    }
+
+    new IntersectionObserver(([entry]) => {
+      const wasVisible = visible;
+      visible = entry.isIntersecting;
+      if (visible && !wasVisible) schedule();
+    }).observe(backdrop);
+  }
+</script>

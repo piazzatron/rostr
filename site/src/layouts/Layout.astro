@@ -1482,6 +1482,12 @@ const previewImageUrl = new URL("/og.png", Astro.site);
     text-decoration: none;
   }
 
+  /* Squad up holds its animated background, behind its content */
+  .squad-section {
+    position: relative;
+    isolation: isolate;
+  }
+
   .rosters {
     list-style: none;
     padding: 0;

@@ -1,6 +1,7 @@
 ---
 import { Code } from "astro-expressive-code/components";
 import HeroGrid from "../components/HeroGrid.astro";
+import SquadBackdrop from "../components/SquadBackdrop.astro";
 import Rostr from "../components/Rostr.astro";
 import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
@@ -41,6 +42,12 @@ const HERO_FLIPPER_NAMES = [
 // What the hero's flipping agent is on: "🧙 Gandalf is on CI."
 // Kept short so the status fits on the same line as "Remember who's doing what." on desktop
 const HERO_STATUS_TASKS = ["CI", "billing", "auth", "the docs", "the API", "dark mode", "tests", "search", "perf", "deploys", "logging", "caching"];
+
+// What the squads in Squad up's background pick up, shown in their cursors' labels like session titles
+const SQUAD_TASKS = [
+  ...["Fix flaky CI", "Dark mode", "Auth redirect", "Speed up search", "Billing migration"],
+  ...["Write the docs", "Rate limiting", "Bump Node", "CSV export", "Onboarding"],
+];
 
 const SETUP_PROMPT = "Set up rostr for me by following the instructions at https://getrostr.sh";
 
@@ -242,7 +249,8 @@ const SHOW_LIVE_BAR = false;
     </section>
 
     <!-- Rosters -->
-    <section class="section">
+    <section class="section squad-section">
+      <SquadBackdrop rosters={HOME_GRID_ROSTERS.map((roster) => roster.members)} tasks={SQUAD_TASKS} />
       <h2>Squad up</h2>
       <p class="section-lede">
         Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
