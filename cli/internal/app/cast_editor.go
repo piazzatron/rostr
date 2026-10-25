@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	bubblekey "github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	bubblekey "charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/piazzatron/rostr/cli/internal/roster"
 )
@@ -31,7 +31,8 @@ type castEditor struct {
 
 	focused       bool
 	width, height int
-	theme         *huh.Theme
+	theme         huh.Theme
+	dark          bool
 }
 
 type castEditorMode int
@@ -45,7 +46,7 @@ const (
 func newCastEditor() *castEditor {
 	input := textinput.New()
 	input.Prompt = "> "
-	return &castEditor{input: input}
+	return &castEditor{input: input, dark: true}
 }
 
 // reset points the editor at a cast, starting on the first in the list, or ready to add the first one to an empty list.
@@ -182,8 +183,20 @@ func (e *castEditor) rename(text string) error {
 
 func (e *castEditor) Init() tea.Cmd { return nil }
 
-func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
+func (e *castEditor) Update(msg tea.Msg) (huh.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		e.dark = msg.IsDark()
+		return e, nil
+	case tea.PasteMsg:
+		if !e.focused || e.mode == castBrowsing {
+			return e, nil
+		}
+		var cmd tea.Cmd
+		e.input, cmd = e.input.Update(msg)
+		return e, cmd
+	}
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok || !e.focused || e.cast == nil {
 		return e, nil
 	}
@@ -196,7 +209,7 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		e.cursor = max(0, e.cursor-1)
 	case "down", "j":
 		e.cursor = min(e.size()-1, e.cursor+1)
-	case " ", "x":
+	case "space", "x":
 		if e.size() > 0 {
 			e.toggle()
 		}
@@ -223,7 +236,7 @@ func (e *castEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return e, nil
 }
 
-func (e *castEditor) updateTyping(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (e *castEditor) updateTyping(msg tea.KeyPressMsg) (huh.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		if e.size() > 0 {
@@ -286,19 +299,21 @@ func (e *castEditor) footerKeys() [][2]string {
 }
 
 func (e *castEditor) View() string {
-	if e.theme == nil {
-		e.theme = promptTheme()
+	// huh draws a field to measure it before giving it the form's theme, so the fallback isn't kept
+	theme := huh.ThemeFunc(promptTheme).Theme(e.dark)
+	if e.theme != nil {
+		theme = e.theme.Theme(e.dark)
 	}
 	if e.cast == nil {
 		e.cast = &cast{}
 	}
-	styles := e.theme.Blurred
+	styles := theme.Blurred
 	if e.focused {
-		styles = e.theme.Focused
+		styles = theme.Focused
 	}
 	inner := e.width - styles.Base.GetHorizontalFrameSize()
 	wrap := lipgloss.NewStyle().Width(max(1, inner))
-	e.input.Width = max(20, inner-lipgloss.Width(e.input.Prompt)-1) // or the placeholder is cut to one character
+	e.input.SetWidth(max(20, inner-lipgloss.Width(e.input.Prompt)-1)) // or the placeholder is cut to one character
 
 	var lines []string
 	if e.title != "" {
@@ -331,9 +346,9 @@ func (e *castEditor) View() string {
 
 // rows are how many are picked, then everyone in the list, each marked picked or not, the one under the cursor marked.
 func (e *castEditor) rows(styles huh.FieldStyles) []string {
-	rows := []string{styleMuted.Render(fmt.Sprintf("%d of %d picked", len(e.cast.members), e.size()))}
+	rows := []string{styles.Description.Render(fmt.Sprintf("%d of %d picked", len(e.cast.members), e.size()))}
 	if e.size() == 0 {
-		rows = append(rows, "  "+styleFaint.Render("no one yet"))
+		rows = append(rows, "  "+styles.TextInput.Placeholder.Render("no one yet"))
 	}
 	picked := e.picked()
 	for i, m := range e.cast.from {
@@ -375,13 +390,12 @@ func (e *castEditor) RunAccessible(w io.Writer, r io.Reader) error {
 func (e *castEditor) Skip() bool                    { return false }
 func (e *castEditor) Zoom() bool                    { return false }
 func (e *castEditor) KeyBinds() []bubblekey.Binding { return nil }
-func (e *castEditor) WithTheme(theme *huh.Theme) huh.Field {
+func (e *castEditor) WithTheme(theme huh.Theme) huh.Field {
 	if e.theme == nil {
 		e.theme = theme
 	}
 	return e
 }
-func (e *castEditor) WithAccessible(bool) huh.Field            { return e }
 func (e *castEditor) WithKeyMap(*huh.KeyMap) huh.Field         { return e }
 func (e *castEditor) WithWidth(width int) huh.Field            { e.width = width; return e }
 func (e *castEditor) WithHeight(height int) huh.Field          { e.height = height; return e }

@@ -39,7 +39,8 @@ func newPresetsCommand() *cobra.Command {
 			for _, p := range presets.All() {
 				rows = append(rows, []string{p.ID, p.Emoji, p.Name, p.Source})
 			}
-			writeTable(cmd.OutOrStdout(), "", rows, styleAccent, stylePlain, styleBold, styleMuted)
+			st := plainStyles()
+			writeTable(cmd.OutOrStdout(), "", rows, st.accent, st.plain, st.bold, st.muted)
 			return nil
 		},
 	}

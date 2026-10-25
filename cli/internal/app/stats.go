@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 	"github.com/spf13/cobra"
@@ -142,13 +142,14 @@ func buildListing(rosters []store.Roster, drafts []store.Draft) listJSON {
 }
 
 func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.Time) {
+	st := plainStyles()
 	for i, r := range listing.Rosters {
 		if i > 0 {
 			fmt.Fprintln(w)
 		}
-		heading := styleHeading.Render(r.Name + " roster")
+		heading := st.heading.Render(r.Name + " roster")
 		if r.Name == defaultRoster {
-			heading += styleMuted.Render(" (default)")
+			heading += st.muted.Render(" (default)")
 		}
 		fmt.Fprintln(w, heading)
 
@@ -157,14 +158,14 @@ func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.
 		for j, d := range r.Drafted {
 			rows[j] = []string{d.Display, orDash(d.Task), orDash(d.Repo), since(now.Sub(d.DraftedAt))}
 		}
-		writeTable(w, "  ", rows, styleBold, stylePlain, styleMuted, styleFaint)
+		writeTable(w, "  ", rows, st.bold, st.plain, st.muted, st.faint)
 		if len(r.Resting) > 0 {
-			fmt.Fprintf(w, "  %s\n", styleMuted.Render("Resting:"))
+			fmt.Fprintf(w, "  %s\n", st.muted.Render("Resting:"))
 			rows = make([][]string, len(r.Resting))
 			for j, d := range r.Resting {
 				rows[j] = []string{d.Display, orDash(d.Task), orDash(d.Repo), since(now.Sub(d.RestingSince))}
 			}
-			writeTable(w, "  ", rows, stylePlain, styleMuted, styleFaint, styleFaint)
+			writeTable(w, "  ", rows, st.plain, st.muted, st.faint, st.faint)
 		}
 
 		bench := make([]string, len(r.Bench))
@@ -174,13 +175,13 @@ func printListing(w io.Writer, listing listJSON, defaultRoster string, now time.
 		if len(bench) == 0 {
 			bench = []string{"none"}
 		}
-		fmt.Fprintf(w, "  %s %s\n", styleMuted.Render("Bench:"), styleFaint.Render(strings.Join(bench, ", ")))
+		fmt.Fprintf(w, "  %s %s\n", st.muted.Render("Bench:"), st.faint.Render(strings.Join(bench, ", ")))
 	}
 }
 
 // writeTable prints rows with columns padded to line up, measuring cells with cellWidth. Column i is drawn with
-// styles[i], if given.
-func writeTable(w io.Writer, indent string, rows [][]string, styles ...lipgloss.Style) {
+// columns[i], if given.
+func writeTable(w io.Writer, indent string, rows [][]string, columns ...lipgloss.Style) {
 	var widths []int
 	for _, row := range rows {
 		for i, cell := range row {
@@ -194,8 +195,8 @@ func writeTable(w io.Writer, indent string, rows [][]string, styles ...lipgloss.
 		var line strings.Builder
 		line.WriteString(indent)
 		for i, cell := range row {
-			if i < len(styles) {
-				line.WriteString(styles[i].Render(cell))
+			if i < len(columns) {
+				line.WriteString(columns[i].Render(cell))
 			} else {
 				line.WriteString(cell)
 			}

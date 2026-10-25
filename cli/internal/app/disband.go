@@ -7,8 +7,8 @@ import (
 	"io/fs"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/piazzatron/rostr/cli/internal/paths"
