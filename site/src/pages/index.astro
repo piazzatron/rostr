@@ -73,19 +73,27 @@ const HERO_ROSTERS = [
   },
 ];
 
-// Short summaries of the CLI's command groups; each card links to that group in the CLI docs
-const COMMAND_GROUP_CARDS = [
+// The CLI section's `rostr --help`: the key commands in each group, each group and command linking to its place in the
+// CLI docs
+const CLI_HELP_GROUPS = [
   {
     href: "/cli#roster-commands",
     title: "🎯 Roster commands",
-    description: "Assemble and edit rosters, link them to your repos, see who's working on what.",
-    commands: ["assemble", "link", "stats", "edit", "presets", "disband"],
+    commands: [
+      { name: "assemble", summary: "Set up a roster" },
+      { name: "link", summary: "Pick a repo's roster" },
+      { name: "stats", summary: "See who's working on what" },
+    ],
   },
   {
     href: "/cli#agent-commands",
     title: "🤖 Agent commands",
-    description: "Your hooks run these for you. Draft by hand with /draft.",
-    commands: ["draft", "bench", "task"],
+    note: "your hooks run these",
+    commands: [
+      { name: "draft", summary: "Draft an agent, or /draft" },
+      // bench is documented with draft
+      { name: "bench", href: "/cli#draft", summary: "Send it back to the bench" },
+    ],
   },
 ];
 
@@ -412,14 +420,29 @@ const SHOW_LIVE_BAR = false;
       <p class="section-lede">
         <Rostr /> comes equipped with a thoughtfully designed CLI (that you'll never need to touch).
       </p>
-      <div class="group-cards">
-        {COMMAND_GROUP_CARDS.map((card) => (
-          <a class="card group-card" href={card.href}>
-            <h3>{card.title}</h3>
-            <p>{card.description}</p>
-            <span class="group-card-commands">{card.commands.map((command) => <code>{command}</code>)}</span>
-          </a>
-        ))}
+      <div class="cli-help">
+        <div class="cli-help-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="cli-help-body">
+          <p class="cli-help-prompt"><span aria-hidden="true">$ </span><b>rostr --help</b></p>
+          <div class="cli-help-groups">
+            {CLI_HELP_GROUPS.map((group) => (
+              <div>
+                <p class="cli-help-group">
+                  <a href={group.href}>{group.title}</a>
+                  {group.note && <span>({group.note})</span>}
+                </p>
+                <dl>
+                  {group.commands.map((command) => (
+                    <div>
+                      <dt><a href={command.href ?? `/cli#${command.name}`}>{command.name}</a></dt>
+                      <dd>{command.summary}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
       <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
     </section>
