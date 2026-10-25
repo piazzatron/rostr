@@ -680,28 +680,46 @@ func TestAssembleInstallsClaudeCodeOnceAndKeepsExistingSettings(t *testing.T) {
 	}
 }
 
-func TestCloudInstallAddsClaudeCodeHooksOnlyInCloudSessions(t *testing.T) {
+func TestCloudInstallAddsHooksOnlyWithAKey(t *testing.T) {
 	s := newSandbox(t)
 	settingsPath := filepath.Join(s.home, ".claude", "settings.json")
+	codexHooksPath := filepath.Join(s.home, ".codex", "hooks.json")
 	os.MkdirAll(filepath.Dir(settingsPath), 0o755)
 	os.WriteFile(settingsPath, []byte(`{"theme":"dark"}`), 0o644)
 
-	// On a person's own machine it points to assemble and changes nothing
+	// Without ROSTR_KEY, on a person's own machine or in a cloud session, it points to assemble and changes nothing
 	s.fails(s.home, nil, "cloud", "install")
+	s.fails(s.home, []string{"CLAUDE_CODE_REMOTE=true"}, "cloud", "install")
 	if settings, _ := os.ReadFile(settingsPath); strings.Contains(string(settings), "rostr hook") {
-		t.Fatalf("installed outside a cloud session: %s", settings)
+		t.Fatalf("installed without a key: %s", settings)
+	}
+	if _, err := os.Stat(codexHooksPath); err == nil {
+		t.Fatal("installed the Codex hooks without a key")
 	}
 
-	cloud := []string{"CLAUDE_CODE_REMOTE=true"}
+	// With one it installs both, whichever cloud this is: Codex cloud doesn't set CLAUDE_CODE_REMOTE
+	cloud := []string{"ROSTR_KEY=" + unregisteredKey}
 	s.ok(s.home, cloud, "cloud", "install")
 	settings, _ := os.ReadFile(settingsPath)
 	var kept struct{ Theme string }
 	if json.Unmarshal(settings, &kept) != nil || kept.Theme != "dark" || !strings.Contains(string(settings), "rostr hook claude-code") {
 		t.Fatalf("settings: %s", settings)
 	}
+	codexHooks, _ := os.ReadFile(codexHooksPath)
+	if !strings.Contains(string(codexHooks), "rostr hook codex") {
+		t.Fatalf("hooks.json: %s", codexHooks)
+	}
+	for _, skill := range []string{"rostr", "rostr-draft"} {
+		if _, err := os.Stat(filepath.Join(s.home, ".agents", "skills", skill, "SKILL.md")); err != nil {
+			t.Error(err)
+		}
+	}
 	s.ok(s.home, cloud, "cloud", "install")
 	if again, _ := os.ReadFile(settingsPath); !bytes.Equal(settings, again) {
 		t.Fatalf("second install changed settings.json: %s", again)
+	}
+	if again, _ := os.ReadFile(codexHooksPath); !bytes.Equal(codexHooks, again) {
+		t.Fatalf("second install changed hooks.json: %s", again)
 	}
 	s.fails(s.home, nil, "stats")
 }

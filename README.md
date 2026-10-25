@@ -87,7 +87,7 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 | `rostr config expiry <duration>` | How long a draft can go unseen before it's released (`48h`, `7d`, `2w`) |
 | `rostr config key` | Print your rostr key |
 | `rostr cloud on` | Move your whole setup to the rostr API, or join one with your key |
-| `rostr cloud install` | Install the Claude Code hooks in a cloud session's container |
+| `rostr cloud install` | Install the Claude Code and Codex hooks in a cloud environment's container |
 | `rostr uninstall` | Remove rostr from Claude Code and Codex and delete all your rosters |
 | `rostr version` | Print rostr's version |
 
