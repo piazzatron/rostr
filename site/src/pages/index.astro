@@ -73,7 +73,8 @@ const HERO_ROSTERS = [
   },
 ];
 
-// The CLI section's `rostr --help`: the command groups, each group and command linking to its place in the CLI docs
+// The CLI section's `rostr --help`: the key commands in each group, each group and command linking to its place in the
+// CLI docs
 const CLI_HELP_GROUPS = [
   {
     href: "/cli#roster-commands",
@@ -82,9 +83,6 @@ const CLI_HELP_GROUPS = [
       { name: "assemble", summary: "Set up a roster" },
       { name: "link", summary: "Pick a repo's roster" },
       { name: "stats", summary: "See who's working on what" },
-      { name: "edit", summary: "Edit a roster's members" },
-      { name: "presets", summary: "List pre-built rosters" },
-      { name: "disband", summary: "Delete a roster" },
     ],
   },
   {
@@ -95,7 +93,6 @@ const CLI_HELP_GROUPS = [
       { name: "draft", summary: "Draft an agent, or /draft" },
       // bench is documented with draft
       { name: "bench", href: "/cli#draft", summary: "Send it back to the bench" },
-      { name: "task", summary: "Set what it's working on" },
     ],
   },
 ];
