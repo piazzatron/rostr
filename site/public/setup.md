@@ -113,7 +113,7 @@ It should show the new roster with everyone on the bench.
 This session started before rostr's hooks were installed, so draft your own name now. In Claude Code, run:
 
 ```sh
-rostr hook claude-code draft
+rostr hook claude-code draft --session "$CLAUDE_CODE_SESSION_ID"
 ```
 
 In Codex, run `rostr hook codex draft` instead. Follow what it prints (it tells you your name, and may ask you to
