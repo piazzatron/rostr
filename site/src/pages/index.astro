@@ -7,6 +7,7 @@ import Layout from "../layouts/Layout.astro";
 import { ANSI_DIM, ANSI_RESET, toTerminalText } from "../terminal";
 import ClaudeIcon from "../assets/claude.svg";
 import { PRESET_ROSTERS } from "../data/rosters";
+import { TOOL_REQUEST_URL } from "../consts";
 
 // The home page grid shows 10 regular presets, the featured mix, and a "Your own" tile; /rosters shows them all
 const HOME_GRID_ROSTERS = [
@@ -166,6 +167,17 @@ const LIST_JSON_EXAMPLE = `{
   ]
 }`;
 
+// The herdr sidebar in the tools section, one agent per pane
+const HERDR_AGENTS = ["🌅 Luke", "🍩 Leia"];
+
+// A cloud, the mark the Claude app puts on its cloud sessions
+const CLOUD_ICON =
+  "M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.2 4.65 4.65 0 0 0 7 18.5z";
+
+// A folder, the mark the Codex app puts on each project
+const FOLDER_ICON =
+  "M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z";
+
 // The live bar along the bottom of the page is off for now; the hanging live board replaces it
 const SHOW_LIVE_BAR = false;
 ---
@@ -244,6 +256,68 @@ const SHOW_LIVE_BAR = false;
         </li>
       </ol>
       <p class="docs-link"><a href="/how-it-works">Learn how <Rostr /> works under the hood →</a></p>
+    </section>
+
+    <!-- Tools -->
+    <section class="section" id="tools">
+      <h2>Plays well with your tools</h2>
+      <p class="section-lede">
+        <Rostr /> integrates with Claude Code and Codex TUI and desktop apps, as well as herdr and tmux.
+      </p>
+      <div class="tools">
+        <figure class="tool tool-claude">
+          <div class="tool-window" aria-hidden="true">
+            <div class="tool-chrome"><span></span><span></span><span></span></div>
+            <ul>
+              <li><span>🧙 Gandalf · Ship v2</span><i class="tool-claude-dot"></i></li>
+              <li class="is-active"><span>💍 Frodo · Fix login</span><i class="tool-claude-dot"></i></li>
+              <li><span>👑 Aragorn · Add docs</span><svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
+            </ul>
+          </div>
+          <figcaption>Claude Code</figcaption>
+        </figure>
+
+        <figure class="tool tool-codex-app">
+          <div class="tool-window" aria-hidden="true">
+            <div class="tool-chrome"><span></span><span></span><span></span></div>
+            <p class="tool-codex-app-project">
+              <svg viewBox="0 0 24 24"><path d={FOLDER_ICON} /></svg>
+              app<i></i>
+            </p>
+            <ul>
+              <li>🍄 Mario · Fix tests</li>
+              <li>🗡️ Link · Add search</li>
+            </ul>
+          </div>
+          <figcaption>Codex</figcaption>
+        </figure>
+
+        <figure class="tool tool-tmux">
+          <div class="tool-window tool-term" aria-hidden="true">
+            <p class="tool-tmux-border"><span>📚 Hermione · Bump pgx</span></p>
+            <div class="tool-tmux-body">
+              <p class="tool-tmux-prompt">› Bump pgx to v5</p>
+            </div>
+            <p class="tool-tmux-bar"><span>1:🌙 Luna</span><span class="is-active">2:📚 Hermione*</span></p>
+          </div>
+          <figcaption>tmux</figcaption>
+        </figure>
+
+        <figure class="tool tool-herdr">
+          <div class="tool-window tool-term" aria-hidden="true">
+            <ul>
+              {HERDR_AGENTS.map((agent, i) => (
+                <li class:list={{ "is-active": i === 0 }}>
+                  <span class="tool-herdr-pane">○ <b>web</b> · {i + 1}</span>
+                  <span class="tool-herdr-name">{agent}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <figcaption>herdr</figcaption>
+        </figure>
+      </div>
+      <p class="docs-link"><a href={TOOL_REQUEST_URL}>Using something else? Request it →</a></p>
     </section>
 
     <!-- Rosters -->
@@ -512,6 +586,22 @@ const SHOW_LIVE_BAR = false;
         setTimeout(() => (label.textContent = original), 1500);
       });
     });
+
+    // The tools rise in one after another the first time the row scrolls into view. They start hidden only once this
+    // runs, so without JavaScript they simply show
+    const tools = document.querySelector<HTMLElement>(".tools");
+    if (tools && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      tools.classList.add("is-waiting");
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry.isIntersecting) return;
+          tools.classList.replace("is-waiting", "is-in");
+          observer.disconnect();
+        },
+        { threshold: 0.3 },
+      );
+      observer.observe(tools);
+    }
 
     // Every 1.3s the hero's status line ("🧙 Gandalf is on CI.") deals a new agent and task, starting once the hero has
     // finished fading in. The name springs in from below while the old one slides out; the task just flicks over. With
