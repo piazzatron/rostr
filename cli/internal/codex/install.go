@@ -127,7 +127,7 @@ func Uninstall(codexDir, skillsDir string) ([]string, error) {
 // hooks with the app's own PATH, which leaves out where package managers put rostr (like /opt/homebrew/bin). It does
 // nothing when that rostr is gone, so hooks copied to a machine without rostr stay quiet.
 func HookCommand(subcommand string) string {
-	rostr := shellQuote(rostrPath())
+	rostr := ShellQuote(rostrPath())
 	return "if [ -x " + rostr + " ]; then " + rostr + hookMarker + subcommand + "; fi"
 }
 
@@ -150,8 +150,8 @@ func rostrPath() string {
 
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_./-]+$`)
 
-// shellQuote single-quotes s for sh unless it's plainly safe.
-func shellQuote(s string) string {
+// ShellQuote single-quotes s for sh unless it's plainly safe.
+func ShellQuote(s string) string {
 	if shellSafe.MatchString(s) {
 		return s
 	}

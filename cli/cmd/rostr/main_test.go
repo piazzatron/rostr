@@ -740,7 +740,14 @@ func TestUninstallRemovesEverything(t *testing.T) {
 		t.Fatalf("no usage: %s", r.stderr)
 	}
 
-	s.ok(s.home, nil, "uninstall", "--yes")
+	// It leaves the program itself, and says how to remove it
+	program, err := filepath.EvalSymlinks(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "rm "+program) {
+		t.Fatalf("no way to remove %s: %s", program, out)
+	}
 	if _, err := os.Stat(filepath.Join(s.home, ".claude", "commands", "draft.md")); err == nil {
 		t.Fatal("left the /draft command")
 	}
@@ -753,8 +760,10 @@ func TestUninstallRemovesEverything(t *testing.T) {
 	}
 	s.fails(s.home, nil, "stats")
 
-	// Running it again finds nothing left
-	s.ok(s.home, nil, "uninstall", "--yes")
+	// Running it again finds nothing left but the program
+	if out := s.ok(s.home, nil, "uninstall", "--yes"); !strings.Contains(out, "rm "+program) {
+		t.Fatalf("no way to remove %s: %s", program, out)
+	}
 }
 
 func TestMissingArgumentsPrintUsage(t *testing.T) {
