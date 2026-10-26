@@ -241,6 +241,28 @@ const SHOW_LIVE_BAR = false;
       </div>
     </section>
 
+    <!-- Why -->
+    <section class="section">
+      <h2>Why name your agents</h2>
+      <ol class="value-list">
+        <li>
+          <h3>Finding and remembering things gets <em>way</em> easier</h3>
+          <p>Your human brain is designed to remember names, not "abstract workstreams".</p>
+        </li>
+        <li>
+          <h3>Notifications and messages are traceable at a glance</h3>
+          <p>A message from 🌱 Samwise tells you exactly which session sent it.</p>
+        </li>
+        <li>
+          <h3>Agents can find each other</h3>
+          <p>"Check with Hermione before you merge."</p>
+        </li>
+        <li>
+          <h3>It's funny</h3>
+        </li>
+      </ol>
+    </section>
+
     <!-- How it works -->
     <section class="section" id="how-it-works">
       <h2>How it works</h2>
@@ -265,6 +287,65 @@ const SHOW_LIVE_BAR = false;
         </li>
       </ol>
       <p class="docs-link"><a href="/how-it-works">Learn how <Rostr /> works under the hood →</a></p>
+    </section>
+
+    <!-- Rosters -->
+    <section class="section squad-section">
+      <SquadBackdrop rosters={HOME_GRID_ROSTERS.map((roster) => roster.members)} tasks={SQUAD_TASKS} />
+      <h2>Squad up</h2>
+      <p class="section-lede">
+        Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
+        turn off).
+      </p>
+      <ul class="rosters">
+        {HOME_GRID_ROSTERS.map((roster) => (
+          <li
+            tabindex="0"
+            class:list={{
+              "roster-featured": "featuredTag" in roster,
+              "roster-desktop-only": !MOBILE_GRID_ROSTER_IDS.includes(roster.id),
+            }}
+          >
+            {"featuredTag" in roster && <span class="roster-tag">{roster.featuredTag}</span>}
+            <span class="roster-emoji">{roster.emoji}</span>
+            <span>
+              <strong>{roster.name}</strong>
+              <small>{roster.source}</small>
+            </span>
+            <div class="roster-members" role="tooltip">
+              <b>{roster.members.length} members</b>
+              <div class="chips">
+                {roster.members.map((member) => <span class="chip">{member}</span>)}
+              </div>
+            </div>
+          </li>
+        ))}
+        <li class="roster-custom" tabindex="0">
+          <span class="roster-emoji">✏️</span>
+          <span>
+            <strong>Your own</strong>
+            <small>Any list of names</small>
+          </span>
+          <div class="roster-members" role="tooltip">
+            <b>As many as you like</b>
+            <div class="chips">
+              <span class="chip">⭐ Your favorites</span>
+              <span class="chip">🪑 Everyone else</span>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <p class="docs-link">
+        <a href="/rosters">See all {PRESET_ROSTERS.length} rosters / submit your own →</a>
+      </p>
+
+      <div class="tip">
+        <span class="tip-icon" aria-hidden="true">📁</span>
+        <p>
+          <strong>Tip: different rosters for different projects.</strong> Run <code>rostr link</code> in a repo to give it
+          its own roster, so you can tell projects apart at a glance.
+        </p>
+      </div>
     </section>
 
     <!-- Tools -->
@@ -333,85 +414,61 @@ const SHOW_LIVE_BAR = false;
       </div>
     </section>
 
-    <!-- Rosters -->
-    <section class="section squad-section">
-      <SquadBackdrop rosters={HOME_GRID_ROSTERS.map((roster) => roster.members)} tasks={SQUAD_TASKS} />
-      <h2>Squad up</h2>
-      <p class="section-lede">
-        Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
-        turn off).
+    <!-- Local and cloud -->
+    <section class="section" id="local-and-cloud">
+      <h2>Local and Cloud Rosters</h2>
+      <dl class="modes">
+        <div>
+          <dt>💻 Local</dt>
+          <dd>The default, nothing leaves your machine.</dd>
+        </div>
+        <div>
+          <dt>☁️ Cloud</dt>
+          <dd>
+            For when you run agents in the cloud or across different machines. No account needed; agent task and repo
+            metadata are end-to-end encrypted. <a class="accent-link" href="/privacy"
+              >Learn more about privacy →</a
+            >
+          </dd>
+        </div>
+      </dl>
+      <p class="modes-note">
+        Set up during <code>rostr assemble</code>, or migrate to the cloud later with <code>rostr cloud on</code>.
       </p>
-      <ul class="rosters">
-        {HOME_GRID_ROSTERS.map((roster) => (
-          <li
-            tabindex="0"
-            class:list={{
-              "roster-featured": "featuredTag" in roster,
-              "roster-desktop-only": !MOBILE_GRID_ROSTER_IDS.includes(roster.id),
-            }}
-          >
-            {"featuredTag" in roster && <span class="roster-tag">{roster.featuredTag}</span>}
-            <span class="roster-emoji">{roster.emoji}</span>
-            <span>
-              <strong>{roster.name}</strong>
-              <small>{roster.source}</small>
-            </span>
-            <div class="roster-members" role="tooltip">
-              <b>{roster.members.length} members</b>
-              <div class="chips">
-                {roster.members.map((member) => <span class="chip">{member}</span>)}
-              </div>
-            </div>
-          </li>
-        ))}
-        <li class="roster-custom" tabindex="0">
-          <span class="roster-emoji">✏️</span>
-          <span>
-            <strong>Your own</strong>
-            <small>Any list of names</small>
-          </span>
-          <div class="roster-members" role="tooltip">
-            <b>As many as you like</b>
-            <div class="chips">
-              <span class="chip">⭐ Your favorites</span>
-              <span class="chip">🪑 Everyone else</span>
-            </div>
-          </div>
-        </li>
-      </ul>
-      <p class="docs-link">
-        <a href="/rosters">See all {PRESET_ROSTERS.length} rosters / submit your own →</a>
-      </p>
-
-      <div class="tip">
-        <span class="tip-icon" aria-hidden="true">📁</span>
-        <p>
-          <strong>Tip: different rosters for different projects.</strong> Run <code>rostr link</code> in a repo to give it
-          its own roster, so you can tell projects apart at a glance.
-        </p>
-      </div>
     </section>
 
-    <!-- Why -->
-    <section class="section">
-      <h2>Why name your agents</h2>
-      <ol class="value-list">
-        <li>
-          <h3>Finding and remembering things gets <em>way</em> easier</h3>
-          <p>Your human brain is designed to remember names, not "abstract workstreams".</p>
-        </li>
-        <li>
-          <h3>Notifications and messages are traceable at a glance</h3>
-          <p>A message from 🌱 Samwise tells you exactly which session sent it.</p>
-        </li>
-        <li>
-          <h3>Agents can find each other</h3>
-          <p>"Check with Hermione before you merge."</p>
-        </li>
-        <li>
-          <h3>It's funny</h3>
-        </li>
-      </ol>
+    <!-- Install -->
+    <section class="section" id="install">
+      <h2>Install</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>Ask your agent</h3>
+          <p>
+            Point Claude Code or Codex at this page and it will install <Rostr />, set up the hooks and skill, and help you
+            pick a roster. Agents: your setup steps are at <a href="/setup.md">getrostr.sh/setup.md</a>.
+          </p>
+          <button class="copy copy-block" data-copy={SETUP_PROMPT}>
+            <span class="copy-text">“{SETUP_PROMPT}”</span>
+            <span class="copy-label">Copy</span>
+          </button>
+        </div>
+        <div class="card">
+          <h3>Run the install script</h3>
+          <p>
+            Install <Rostr />, then assemble your roster. It walks you through the choices and sets up the
+            hooks. <a href={INSTALL_SCRIPT_SOURCE}>See the script</a>.
+          </p>
+          <Code code={INSTALL_EXAMPLE} lang="sh" />
+          <p class="build-note">
+            On a Mac with Homebrew, <code>brew install piazzatron/tap/rostr</code> works too.
+          </p>
+        </div>
+      </div>
+      <p class="install-cloud">
+        <strong>Cloud sessions</strong> (Claude Code on the web): add the install line to your environment's
+        setup script, set <code>ROSTR_KEY</code> to the key from <code>rostr config key</code>, and
+        allow <code>github.com</code> and <code>api.getrostr.sh</code> in its network settings.
+      </p>
     </section>
 
     <!-- CLI -->
@@ -445,29 +502,6 @@ const SHOW_LIVE_BAR = false;
         </div>
       </div>
       <p class="docs-link"><a href="/cli">Read the full CLI docs →</a></p>
-    </section>
-
-    <!-- Local and cloud -->
-    <section class="section" id="local-and-cloud">
-      <h2>Local and Cloud Rosters</h2>
-      <dl class="modes">
-        <div>
-          <dt>💻 Local</dt>
-          <dd>The default, nothing leaves your machine.</dd>
-        </div>
-        <div>
-          <dt>☁️ Cloud</dt>
-          <dd>
-            For when you run agents in the cloud or across different machines. No account needed; agent task and repo
-            metadata are end-to-end encrypted. <a class="accent-link" href="/privacy"
-              >Learn more about privacy →</a
-            >
-          </dd>
-        </div>
-      </dl>
-      <p class="modes-note">
-        Set up during <code>rostr assemble</code>, or migrate to the cloud later with <code>rostr cloud on</code>.
-      </p>
     </section>
 
     <!-- Build on it -->
@@ -538,40 +572,6 @@ const SHOW_LIVE_BAR = false;
         </div>
       </div>
 
-    </section>
-
-    <!-- Install -->
-    <section class="section" id="install">
-      <h2>Install</h2>
-      <div class="cards">
-        <div class="card">
-          <h3>Ask your agent</h3>
-          <p>
-            Point Claude Code or Codex at this page and it will install <Rostr />, set up the hooks and skill, and help you
-            pick a roster. Agents: your setup steps are at <a href="/setup.md">getrostr.sh/setup.md</a>.
-          </p>
-          <button class="copy copy-block" data-copy={SETUP_PROMPT}>
-            <span class="copy-text">“{SETUP_PROMPT}”</span>
-            <span class="copy-label">Copy</span>
-          </button>
-        </div>
-        <div class="card">
-          <h3>Run the install script</h3>
-          <p>
-            Install <Rostr />, then assemble your roster. It walks you through the choices and sets up the
-            hooks. <a href={INSTALL_SCRIPT_SOURCE}>See the script</a>.
-          </p>
-          <Code code={INSTALL_EXAMPLE} lang="sh" />
-          <p class="build-note">
-            On a Mac with Homebrew, <code>brew install piazzatron/tap/rostr</code> works too.
-          </p>
-        </div>
-      </div>
-      <p class="install-cloud">
-        <strong>Cloud sessions</strong> (Claude Code on the web, Codex cloud): add the install line to your environment's
-        setup script, set <code>ROSTR_KEY</code> to the key from <code>rostr config key</code>, and
-        allow <code>github.com</code> and <code>api.getrostr.sh</code> in its network settings.
-      </p>
     </section>
 
     <!-- Why I built this -->
