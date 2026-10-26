@@ -44,13 +44,37 @@ then skip to [step 4](#4-draft-yourself).
 ## 3. Ask which roster, then assemble it
 
 `rostr assemble` is an interactive wizard you can't drive, so ask the user its questions yourself, then pass the
-answers as flags. Run `rostr presets --json` to see the rosters, then ask both of these in one go, using your question
-tool if you have one:
+answers as flags. How you ask depends on where the user sees your questions, so first run
+`echo "$CLAUDE_CODE_ENTRYPOINT"`:
 
-1. **Which roster?** Offer three or four of the rosters as options, plus Free Agents (a random mix from every
-   roster). If your question tool can show a preview for each option, show the roster's first 16 members. Say they
-   can also name any roster from https://getrostr.sh/rosters, or use their own names, each optionally with an emoji
-   (`🧮 Ada, Grace, Linus`), drafted in the order they list them.
+- **It prints nothing (Codex, or another agent that isn't Claude Code):** ask in plain text, not with a question
+  tool, one question at a time. First, which roster: run `rostr presets` and write out every roster it prints as a
+  numbered list in your message, one line each (emoji, name, source), leaving none out: the user can't see command
+  output, so don't summarize it. End the list with one more line, "Your own names", saying they can type their own
+  names instead, each optionally with an emoji (`🧮 Ada, Grace, Linus`), drafted in the order they list them. Then
+  link https://getrostr.sh/rosters for each roster's members, and ask them to reply with a number, a roster's name,
+  or their own names. Once they've answered, ask whether to use the defaults below, showing the
+  table.
+- **It prints anything else (Claude Code):** ask both of the questions below in one go, with your question tool.
+
+1. **Which roster?** Keep the question itself short: "Which roster? See them all at https://getrostr.sh/rosters".
+   - **`cli` (Claude Code in a terminal):** offer exactly four options: The Fellowship, Hogwarts, Free Agents (a
+     random mix from every roster), and last, "Something else". Give each roster a preview of its first 16 members,
+     one per line, from this command (don't read `rostr presets --json` yourself: it's long):
+
+     ```sh
+     rostr presets --json | jq -r '.presets[] | select(.id == "fellowship" or .id == "hogwarts" or .id == "free-agents") | .id + ": " + ([.members[:16][] | .emoji + " " + .name] | join(", "))'
+     ```
+
+     The terminal has no free-text option alongside previews, so "Something else"'s preview starts with how to use
+     it: press `n` and type any roster below, or their own names, each optionally with an emoji
+     (`🧮 Ada, Grace, Linus`), drafted in the order they list them. Below that, list every roster `rostr presets`
+     prints, one line each (emoji and name), leaving none out. If they pick "Something else" without typing anything,
+     ask them in plain text what they want.
+   - **Anything else (the desktop app):** offer exactly three options, with no previews: The Fellowship,
+     Hogwarts, and Free Agents (a random mix from every roster). Your question tool adds its own free-text option
+     last. End Free Agents' description by saying they can type any roster from the rosters page there instead, or
+     their own names, each optionally with an emoji (`🧮 Ada, Grace, Linus`), drafted in the order they list them.
 2. **Use the defaults?** List the defaults below, with two options: use them, or change some.
 
 | Setting | Default | Other choices |
@@ -85,12 +109,16 @@ rostr hook claude-code draft --session "$CLAUDE_CODE_SESSION_ID"
 ```
 
 In Codex, run `rostr hook codex draft` instead. Follow what it prints (it tells you your name, and may ask you to
-title the session), then tell the user who you are in one short line. If it says it doesn't know the session's ID,
-ask the user to type `/draft` (or `$rostr-draft` in Codex) instead.
+title the session). Then run the `rostr task` command it gives you, with "set up rostr" as the task: in a terminal,
+that's what puts your name in the session's title, from the user's next message on. Then tell the user who you are in
+one short line. If it says it doesn't know the session's ID, ask the user to type `/draft` (or `$rostr-draft` in
+Codex) instead.
 
 ## 5. Tell the user what's next
 
-- Every new session gets a name on its own from now on. In Codex, `$rostr-draft` takes the place of `/draft`.
+- **Their lineup:** every member `rostr assemble` printed, with their emoji, introduced simply (like "Your Westeros
+  lineup:"). The user can't see command output, so list them all in your message rather than summarizing.
+- Every new session gets a name on its own from now on.
 - **If they chose the cloud:** to use rostr on another machine, they run `rostr cloud on` there and paste their key.
   For cloud environments, they add the key as `ROSTR_KEY` in each environment's variables. Either way, they get the
   key by running `rostr config key` themselves in a terminal. Never run `rostr config key` yourself, and never read
