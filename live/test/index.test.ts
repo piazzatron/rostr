@@ -1,4 +1,5 @@
-import { exports } from "cloudflare:workers";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 const BASE = "https://live.example";
@@ -10,9 +11,12 @@ const update = (body: unknown, secret = "test-secret") =>
     body: JSON.stringify(body),
   });
 
+const upgrade = (ip = "192.0.2.1") =>
+  exports.default.fetch(`${BASE}/ws`, { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } });
+
 // Opens a socket and returns it with a queue of the messages it receives
-async function connect() {
-  const response = await exports.default.fetch(`${BASE}/ws`, { headers: { Upgrade: "websocket" } });
+async function connect(ip?: string) {
+  const response = await upgrade(ip);
   expect(response.status).toBe(101);
   const socket = response.webSocket!;
   const messages: unknown[] = [];
@@ -84,6 +88,32 @@ describe("GET /ws", () => {
     await other.next();
     await update({ working: 1, benched: 2 });
     expect(await other.next()).toEqual({ working: 1, benched: 2 });
+  });
+
+  it("caps sockets per IP", async () => {
+    for (let i = 0; i < 10; i++) await connect("198.51.100.1");
+    expect((await upgrade("198.51.100.1")).status).toBe(429);
+    expect((await upgrade("198.51.100.2")).status).toBe(101);
+  });
+
+  it("closes sockets after an hour", async () => {
+    const old = await connect("198.51.100.3");
+    const fresh = await connect("198.51.100.4");
+    await old.next();
+    await fresh.next();
+    const closed = new Promise<CloseEvent>((resolve) => old.socket.addEventListener("close", resolve));
+
+    // Backdate one socket, then run the sweep alarm
+    const stub = env.COUNTS.get(env.COUNTS.idFromName("global"));
+    await runInDurableObject(stub, (_, state) => {
+      for (const socket of state.getWebSockets("198.51.100.3")) socket.serializeAttachment({ openedAt: 0 });
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect((await closed).code).toBe(1000);
+
+    // The fresh socket still gets updates
+    await update({ working: 3, benched: 4 });
+    expect(await fresh.next()).toEqual({ working: 3, benched: 4 });
   });
 
   it("needs an upgrade", async () => {

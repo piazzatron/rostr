@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -187,8 +188,20 @@ func (s *Server) handlePutLink(w http.ResponseWriter, r *http.Request, ownerID s
 	return nil
 }
 
+// upsertLink links a project, up to maxLinks per owner. Callers hold the owner's row lock, so the count can't race.
 func upsertLink(ctx context.Context, tx pgx.Tx, ownerID, repoHash string, repo []byte, rosterID string) error {
-	_, err := tx.Exec(ctx, `
+	var others int
+	err := tx.QueryRow(ctx, `select count(*) from project_links where owner_id = $1 and repo_hash <> $2`,
+		ownerID, repoHash).Scan(&others)
+	if err != nil {
+		return err
+	}
+	if others >= maxLinks {
+		return &apiError{http.StatusConflict, "too_many_links",
+			fmt.Sprintf("You can have at most %d linked projects. Unlink one first.", maxLinks), nil}
+	}
+
+	_, err = tx.Exec(ctx, `
 		insert into project_links (owner_id, repo_hash, repo, roster_id) values ($1, $2, $3, $4)
 		on conflict (owner_id, repo_hash) do update set repo = excluded.repo, roster_id = excluded.roster_id`,
 		ownerID, repoHash, repo, rosterID)

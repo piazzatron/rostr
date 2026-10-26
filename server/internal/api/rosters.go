@@ -62,7 +62,17 @@ func findRosterByName(ctx context.Context, q querier, ownerID, name string) (ros
 	return roster, err
 }
 
+// insertRoster adds a roster, up to maxRosters per owner. Callers hold the owner's row lock, so the count can't race.
 func insertRoster(ctx context.Context, tx pgx.Tx, ownerID, name string, c cast, createdAt *time.Time) (rosterRow, error) {
+	var count int
+	if err := tx.QueryRow(ctx, `select count(*) from rosters where owner_id = $1`, ownerID).Scan(&count); err != nil {
+		return rosterRow{}, err
+	}
+	if count >= maxRosters {
+		return rosterRow{}, &apiError{http.StatusConflict, "too_many_rosters",
+			fmt.Sprintf("You can have at most %d rosters. Disband one first.", maxRosters), nil}
+	}
+
 	roster, err := scanRoster(tx.QueryRow(ctx, `
 		insert into rosters as r (owner_id, name, name_key, emoji_mode, members, created_at)
 		values ($1, $2, $3, $4, $5, coalesce($6, clock_timestamp()))

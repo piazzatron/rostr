@@ -394,7 +394,7 @@ func TestConcurrentDraftsAcrossInstancesNeverDraftAMemberTwice(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
 	createRoster(c, "work", members("Gandalf", "Frodo", "Sam", "Boromir", "Merry"))
-	instances := []*client{c, {t: t, handler: NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000, Logger: testLogger}), token: c.token}}
+	instances := []*client{c, {t: t, handler: NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, IPRequestsPerMinute: 1_000_000, RequestsPerMinute: 1_000_000, Logger: testLogger}), token: c.token}}
 
 	const sessions = 20
 	results := make([]draftResponse, sessions)

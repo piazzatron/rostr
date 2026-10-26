@@ -8,8 +8,8 @@ Environment:
 
 - `DATABASE_URL` (required): Postgres connection string.
 - `PORT` (default `8080`).
-- `RATE_LIMIT_REGISTRATIONS_PER_HOUR` (default `20`, per IP) and `RATE_LIMIT_REQUESTS_PER_MINUTE` (default `300`,
-  per auth token).
+- `RATE_LIMIT_REGISTRATIONS_PER_HOUR` (default `20`, per IP), `RATE_LIMIT_IP_REQUESTS_PER_MINUTE` (default `1200`,
+  authenticated requests per IP), and `RATE_LIMIT_REQUESTS_PER_MINUTE` (default `300`, per auth token).
 - `LIVE_URL` and `LIVE_SECRET` (optional): the live Worker's URL and shared secret. With both set, the server pushes
   fresh home-page counts to it after writes; see [docs/live-counts.md](../docs/live-counts.md).
 - `LOG_LEVEL` (default `info`): `debug`, `info`, `warn`, or `error`.
@@ -28,7 +28,7 @@ never logged.
 From the repo root, with Docker:
 
 ```sh
-docker compose up --build          # Postgres and the server, on localhost:5432 and localhost:8080
+docker compose up --build          # Postgres and the server, on 127.0.0.1:5432 and 127.0.0.1:8080
 docker compose up -d --build --wait # the same, in the background, returning once both are healthy
 curl localhost:8080/health
 docker compose down                # stop (add -v to also delete the database volume)

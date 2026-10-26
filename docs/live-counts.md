@@ -57,6 +57,8 @@ A draft that passes its owner's expiry stops counting when the sweep benches it,
 - **Hibernated sockets.** The object accepts sockets with the WebSocket hibernation API, so between pushes it's
   evicted from memory while the sockets stay open. An idle tab costs nothing; the object only runs for a moment per
   push and per new connection.
+- **Bounded sockets.** Since every visitor shares the object, it refuses sockets past 10 per IP or 10,000 in all, and
+  an alarm every 10 minutes closes sockets open over an hour; the page reconnects 5 seconds later.
 - **Cost rounds to zero.** Pushes are at most two a second per API instance and usually far fewer, each one request
   and a few milliseconds of duration. One object handles thousands of connected sockets, far more than the home page
   has visitors at once.

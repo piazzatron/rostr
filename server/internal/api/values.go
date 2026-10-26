@@ -30,6 +30,8 @@ const (
 	maxNameRunes     = 64
 	maxEmojiBytes    = 64
 	maxMembers       = 200
+	maxRosters       = 100 // per owner
+	maxLinks         = 1000
 	maxSessionBytes  = 256
 	minCiphertextLen = 12 + 16 // nonce + GCM tag
 	maxCiphertextLen = 16 << 10
