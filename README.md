@@ -47,7 +47,7 @@ rostr assemble
 |---|---|
 | **Claude Code** | Terminal, App, Cloud |
 | **Codex** | Terminal, App |
-| **tmux** | Names the window and tags the pane (`#{@rostr}`) |
+| **tmux** | Names the window and tags the pane |
 | **herdr** | Shows the name in the sidebar |
 
 Using something else? [Request support](https://github.com/piazzatron/rostr/issues/new?template=tool-request.yml).
