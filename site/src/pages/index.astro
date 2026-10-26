@@ -263,6 +263,72 @@ const SHOW_LIVE_BAR = false;
       </ol>
     </section>
 
+    <!-- Tools -->
+    <section class="section" id="tools">
+      <h2>Plays well with your tools</h2>
+      <p class="section-lede">
+        <Rostr /> integrates with Claude Code and Codex TUI and desktop apps, as well as herdr and tmux.
+      </p>
+      <div class="tools">
+        <figure class="tool tool-claude">
+          <div class="tool-window" aria-hidden="true">
+            <div class="tool-chrome"><span></span><span></span><span></span></div>
+            <ul>
+              <li><span>🧙 Gandalf · Ship v2</span><i class="tool-claude-dot"></i></li>
+              <li class="is-active"><span>💍 Frodo · Fix login</span><i class="tool-claude-dot"></i></li>
+              <li><span>👑 Aragorn · Add docs</span><svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
+            </ul>
+          </div>
+          <figcaption>Claude Code</figcaption>
+        </figure>
+
+        <figure class="tool tool-codex-app">
+          <div class="tool-window" aria-hidden="true">
+            <div class="tool-chrome"><span></span><span></span><span></span></div>
+            <p class="tool-codex-app-project">
+              <svg viewBox="0 0 24 24"><path d={FOLDER_ICON} /></svg>
+              app<i></i>
+            </p>
+            <ul>
+              <li>🍄 Mario · Fix tests</li>
+              <li>🗡️ Link · Add search</li>
+            </ul>
+          </div>
+          <figcaption>Codex</figcaption>
+        </figure>
+
+        <figure class="tool tool-tmux">
+          <div class="tool-window tool-term" aria-hidden="true">
+            <p class="tool-tmux-border"><span>📚 Hermione · Bump pgx</span></p>
+            <div class="tool-tmux-body">
+              <p class="tool-tmux-prompt">› Bump pgx to v5</p>
+            </div>
+            <p class="tool-tmux-bar"><span>1:🌙 Luna</span><span class="is-active">2:📚 Hermione*</span></p>
+          </div>
+          <figcaption>tmux</figcaption>
+        </figure>
+
+        <figure class="tool tool-herdr">
+          <div class="tool-window tool-term" aria-hidden="true">
+            <ul>
+              {HERDR_AGENTS.map((agent, i) => (
+                <li class:list={{ "is-active": i === 0 }}>
+                  <span class="tool-herdr-pane">○ <b>web</b> · {i + 1}</span>
+                  <span class="tool-herdr-name">{agent}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <figcaption>herdr</figcaption>
+        </figure>
+      </div>
+      <p class="docs-link"><a href={TOOL_REQUEST_URL}>Using something else? Request it →</a></p>
+      <div class="tip">
+        <span class="tip-icon" aria-hidden="true">☁️</span>
+        <p><strong>Codex cloud support is on its way.</strong></p>
+      </div>
+    </section>
+
     <!-- How it works -->
     <section class="section" id="how-it-works">
       <h2>How it works</h2>
@@ -345,72 +411,6 @@ const SHOW_LIVE_BAR = false;
           <strong>Tip: different rosters for different projects.</strong> Run <code>rostr link</code> in a repo to give it
           its own roster, so you can tell projects apart at a glance.
         </p>
-      </div>
-    </section>
-
-    <!-- Tools -->
-    <section class="section" id="tools">
-      <h2>Plays well with your tools</h2>
-      <p class="section-lede">
-        <Rostr /> integrates with Claude Code and Codex TUI and desktop apps, as well as herdr and tmux.
-      </p>
-      <div class="tools">
-        <figure class="tool tool-claude">
-          <div class="tool-window" aria-hidden="true">
-            <div class="tool-chrome"><span></span><span></span><span></span></div>
-            <ul>
-              <li><span>🧙 Gandalf · Ship v2</span><i class="tool-claude-dot"></i></li>
-              <li class="is-active"><span>💍 Frodo · Fix login</span><i class="tool-claude-dot"></i></li>
-              <li><span>👑 Aragorn · Add docs</span><svg viewBox="0 0 24 24"><path d={CLOUD_ICON} /></svg></li>
-            </ul>
-          </div>
-          <figcaption>Claude Code</figcaption>
-        </figure>
-
-        <figure class="tool tool-codex-app">
-          <div class="tool-window" aria-hidden="true">
-            <div class="tool-chrome"><span></span><span></span><span></span></div>
-            <p class="tool-codex-app-project">
-              <svg viewBox="0 0 24 24"><path d={FOLDER_ICON} /></svg>
-              app<i></i>
-            </p>
-            <ul>
-              <li>🍄 Mario · Fix tests</li>
-              <li>🗡️ Link · Add search</li>
-            </ul>
-          </div>
-          <figcaption>Codex</figcaption>
-        </figure>
-
-        <figure class="tool tool-tmux">
-          <div class="tool-window tool-term" aria-hidden="true">
-            <p class="tool-tmux-border"><span>📚 Hermione · Bump pgx</span></p>
-            <div class="tool-tmux-body">
-              <p class="tool-tmux-prompt">› Bump pgx to v5</p>
-            </div>
-            <p class="tool-tmux-bar"><span>1:🌙 Luna</span><span class="is-active">2:📚 Hermione*</span></p>
-          </div>
-          <figcaption>tmux</figcaption>
-        </figure>
-
-        <figure class="tool tool-herdr">
-          <div class="tool-window tool-term" aria-hidden="true">
-            <ul>
-              {HERDR_AGENTS.map((agent, i) => (
-                <li class:list={{ "is-active": i === 0 }}>
-                  <span class="tool-herdr-pane">○ <b>web</b> · {i + 1}</span>
-                  <span class="tool-herdr-name">{agent}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <figcaption>herdr</figcaption>
-        </figure>
-      </div>
-      <p class="docs-link"><a href={TOOL_REQUEST_URL}>Using something else? Request it →</a></p>
-      <div class="tip">
-        <span class="tip-icon" aria-hidden="true">☁️</span>
-        <p><strong>Codex cloud support is on its way.</strong></p>
       </div>
     </section>
 
