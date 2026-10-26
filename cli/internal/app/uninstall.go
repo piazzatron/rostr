@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,21 +67,13 @@ func newUninstallCommand() *cobra.Command {
 				return err
 			}
 
-			// Then the files this machine keeps: the key or the local database, and the keep-alive marks. A key the API
-			// rejected is kept as credentials.old, in case it was rejected by the wrong server
+			// Then the folders this machine keeps: its config (the key or the local database, and settings) and its
+			// cache (keep-alive marks, cached drafts, the background log, ...)
 			cloud := hasCloudKey()
-			if deadKey {
-				if err := backUpCredentials(); err != nil {
-					return err
-				}
+			if err := os.RemoveAll(paths.ConfigDir()); err != nil {
+				return err
 			}
-			files := []string{paths.Credentials(), paths.Database(), paths.Database() + "-wal", paths.Database() + "-shm"}
-			for _, path := range files {
-				if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-					return err
-				}
-			}
-			if err := os.RemoveAll(paths.KeepAliveDir()); err != nil {
+			if err := os.RemoveAll(paths.CacheDir()); err != nil {
 				return err
 			}
 
@@ -100,8 +91,7 @@ func newUninstallCommand() *cobra.Command {
 				fmt.Fprintf(out, "Deleted %s.\n", plural(len(rosters), "roster", "rosters"))
 			}
 			if deadKey {
-				fmt.Fprintf(out, "The rostr API didn't recognize your key, so there was no cloud setup left to delete. "+
-					"Any saved key is kept in %s.old.\n", paths.Credentials())
+				fmt.Fprintln(out, "The rostr API didn't recognize your key, so there was no cloud setup left to delete.")
 			}
 			for _, piece := range removed {
 				fmt.Fprintf(out, "Removed %s\n", piece)
