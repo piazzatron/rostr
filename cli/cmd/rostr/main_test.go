@@ -773,8 +773,10 @@ func TestUninstallRemovesEverything(t *testing.T) {
 	if strings.Contains(string(settings), "rostr") {
 		t.Fatalf("rostr left in settings.json: %s", settings)
 	}
-	if _, err := os.Stat(filepath.Join(s.home, ".config", "rostr", "rostr.db")); !os.IsNotExist(err) {
-		t.Fatalf("database still there: %v", err)
+	for _, dir := range []string{".config", ".cache"} {
+		if _, err := os.Stat(filepath.Join(s.home, dir, "rostr")); !os.IsNotExist(err) {
+			t.Fatalf("~/%s/rostr still there: %v", dir, err)
+		}
 	}
 	s.fails(s.home, nil, "stats")
 
@@ -956,12 +958,8 @@ func TestCloudModeWithADeadKey(t *testing.T) {
 	if settings, _ := os.ReadFile(filepath.Join(s.home, ".claude", "settings.json")); strings.Contains(string(settings), "rostr") {
 		t.Fatalf("rostr left in settings.json: %s", settings)
 	}
-	if _, err := os.Stat(credentials); !os.IsNotExist(err) {
-		t.Fatalf("credentials still there: %v", err)
-	}
-	// The API may have rejected the key only because it was the wrong server, so the key is kept
-	if old, _ := os.ReadFile(credentials + ".old"); string(old) != unregisteredKey+"\n" {
-		t.Fatalf("credentials.old: %q", old)
+	if _, err := os.Stat(filepath.Dir(credentials)); !os.IsNotExist(err) {
+		t.Fatalf("config folder still there: %v", err)
 	}
 	s.fails(s.home, nil, "stats")
 }

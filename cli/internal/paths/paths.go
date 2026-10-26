@@ -12,6 +12,11 @@ func ConfigDir() string {
 	return filepath.Join(xdgDir("XDG_CONFIG_HOME", ".config"), "rostr")
 }
 
+// CacheDir is ~/.cache/rostr (or $XDG_CACHE_HOME/rostr).
+func CacheDir() string {
+	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr")
+}
+
 // Database is the local-mode SQLite database.
 func Database() string {
 	return filepath.Join(ConfigDir(), "rostr.db")
@@ -29,32 +34,32 @@ func Credentials() string {
 
 // KeepAliveDir holds one file per session, whose modification time is the session's last keep-alive bump.
 func KeepAliveDir() string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "keepalive")
+	return filepath.Join(CacheDir(), "keepalive")
 }
 
 // HooksStamp records the fingerprint of the hooks rostr last installed for an agent ("claude-code" or "codex").
 func HooksStamp(agent string) string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "hooks", agent)
+	return filepath.Join(CacheDir(), "hooks", agent)
 }
 
 // TurnDir holds one file per session whose last turn ended: when, and the name the session had then.
 func TurnDir() string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "turns")
+	return filepath.Join(CacheDir(), "turns")
 }
 
 // CloudCacheDir holds cloud mode's local cache of each session's own draft.
 func CloudCacheDir() string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "cloud")
+	return filepath.Join(CacheDir(), "cloud")
 }
 
 // PresetsCache is the last list of pre-built rosters fetched from the site.
 func PresetsCache() string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "presets.json")
+	return filepath.Join(CacheDir(), "presets.json")
 }
 
 // BackgroundLog collects what rostr's background work (drafts ahead of a first prompt, prompt summaries) writes to stderr.
 func BackgroundLog() string {
-	return filepath.Join(xdgDir("XDG_CACHE_HOME", ".cache"), "rostr", "background.log")
+	return filepath.Join(CacheDir(), "background.log")
 }
 
 // ClaudeDir is Claude Code's config directory: ~/.claude, or $CLAUDE_CONFIG_DIR.
