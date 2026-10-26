@@ -254,13 +254,14 @@ const SHOW_LIVE_BAR = false;
         </li>
         <li>
           <h3>New sessions draft your team</h3>
-          <p>Each session's title shows its agent's name, and the agent knows who it is.</p>
+          <p>
+            A hook runs <code>rostr draft</code>, so each session's title shows its agent's name and the agent knows who
+            it is.
+          </p>
         </li>
         <li>
           <h3>Done? Back to the bench</h3>
-          <p>
-            When a session ends, the agent's identity automatically returns to the bench.
-          </p>
+          <p>When a session ends, a hook runs <code>rostr bench</code> to free up the agent's name.</p>
         </li>
       </ol>
       <p class="docs-link"><a href="/how-it-works">Learn how <Rostr /> works under the hood →</a></p>
@@ -326,6 +327,10 @@ const SHOW_LIVE_BAR = false;
         </figure>
       </div>
       <p class="docs-link"><a href={TOOL_REQUEST_URL}>Using something else? Request it →</a></p>
+      <div class="tip">
+        <span class="tip-icon" aria-hidden="true">☁️</span>
+        <p><strong>Codex cloud support is on its way.</strong></p>
+      </div>
     </section>
 
     <!-- Rosters -->
@@ -389,29 +394,24 @@ const SHOW_LIVE_BAR = false;
 
     <!-- Why -->
     <section class="section">
-      <h2>Why anthropomorphize?</h2>
+      <h2>Why name your agents</h2>
       <ol class="value-list">
         <li>
-          <h3>It exploits your human psychology</h3>
-          <p>Your brain is built to remember people and what they're doing, not "25 independent work streams".</p>
+          <h3>Finding and remembering things gets <em>way</em> easier</h3>
+          <p>Your human brain is designed to remember names, not "abstract workstreams".</p>
         </li>
         <li>
-          <h3>Notifications become easy to triage</h3>
-          <p>When a notification says 🌱 Samwise, you know what it's about before you open it.</p>
-        </li>
-        <li>
-          <h3>Every message gets provenance</h3>
-          <p>
-            When an agent pings you on Slack, GitHub, or email, it signs its name, so you know exactly which session it came
-            from.
-          </p>
+          <h3>Notifications and messages are traceable at a glance</h3>
+          <p>A message from 🌱 Samwise tells you exactly which session sent it.</p>
         </li>
         <li>
           <h3>Agents can find each other</h3>
           <p>"Check with Hermione before you merge."</p>
         </li>
+        <li>
+          <h3>It's funny</h3>
+        </li>
       </ol>
-      <p class="value-closer">Also, it's really funny.</p>
     </section>
 
     <!-- CLI -->
