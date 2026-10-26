@@ -544,23 +544,23 @@ const SHOW_LIVE_BAR = false;
     <section class="section narrow" id="why-i-built-this">
       <h2>Why I built this</h2>
       <p>
-        First, a concrete reason: when you use a multi-agent workflow, you need a way for your agents to phone home when
-        they get stuck. Teaching your agents to reach out allows you to start tasks, switch gears, then come back later
-        and respond to a batch of queries. But it also creates a new problem: how do you know which session this message
-        came from? Auto-generated summaries don't cut it, especially if you're working on similar features. You can link
-        back to the session, but that's not visually scannable. You need names! Ideally, memorable ones. And emojis. Lots
-        of emojis.
+        Because humans name things. We name everything. Names make it easy to find things and remember what you're
+        working on. The more memorable the name, the better.
       </p>
       <p>
-        Then I thought about it more: we should have cross-platform, stable agent identities as a primitive. I was
-        inspired by the named agents in <a href="https://github.com/gastownhall/gastown">Gas Town</a>, but didn't want to
-        bring in that whole kitchen sink.
+        At first, <Rostr /> was born out of a simple concrete need: I had just wired up agents to reach out to me across
+        platforms if they got stuck, and I needed an easy way to trace the messages back to their originating session.
+        Sure I could include a session summary and deeplink back in, but that's not easily scannable. You want names. And
+        emojis. Lots of emojis.
       </p>
       <p>
-        <Rostr /> is also an experiment in exercising some restraint with using agents. What if we ran our agent teams
-        more like an EM would run a lean human team? It's tempting to spin up countless agents, fry your poor human
-        noggin, and wake up the next morning to a demoralizing tangle of sessions and notification soup. Or maybe it's
-        just me. Just drafted Dumbledore 3? Time to touch grass.
+        As I played around with it more, I was surprised at how much more pleasant this made interacting with multiple
+        agents. I started to think cross-platform agent identities might be a useful primitive.
+      </p>
+      <p>
+        <Rostr /> is also a bit of a playful experiment in exercising some restraint with agentic development. By the
+        time I've drafted Dumbledore 3, that's a helpful nudge I'm in too deep and this is not a mess I'm going to
+        appreciate untangling tomorrow morning.
       </p>
     </section>
 
