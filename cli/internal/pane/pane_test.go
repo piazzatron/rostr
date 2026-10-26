@@ -134,8 +134,14 @@ func TestCodexDaemonHooksFindTheTmuxPaneByItsTitle(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux isn't installed")
 	}
-	// The daemon wasn't started in tmux, so rostr looks in the default tmux server: here, one of the test's own
-	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	// The daemon wasn't started in tmux, so rostr looks in the default tmux server: here, one of the test's own. Its
+	// folder is under /tmp, since a socket under macOS's long temp folder is past the socket path limit
+	tmuxDir, err := os.MkdirTemp("/tmp", "rostr-tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(tmuxDir) })
+	t.Setenv("TMUX_TMPDIR", tmuxDir)
 	t.Setenv("TMUX", "")
 	t.Setenv("TMUX_PANE", "")
 	t.Setenv("HERDR_ENV", "")
