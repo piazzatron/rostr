@@ -45,8 +45,8 @@ rostr assemble
 
 | | Support |
 |---|---|
-| **Claude Code** | Terminal and cloud |
-| **Codex** | Terminal and cloud |
+| **Claude Code** | Terminal, App, Cloud |
+| **Codex** | Terminal, App |
 | **tmux** | Names the window and tags the pane (`#{@rostr}`) |
 | **herdr** | Shows the name in the sidebar |
 
