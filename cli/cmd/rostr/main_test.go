@@ -1205,13 +1205,11 @@ func TestHooksLabelTheHerdrPane(t *testing.T) {
 	}
 	os.Remove(herdrCalls)
 
-	// Run by the Codex TUI itself (`codex --no-daemon`), it labels the pane as Codex's. A copy of sh named codex stands
-	// in for the TUI, and the trailing ":" keeps sh from exec'ing rostr in its place.
-	fakeCodex := filepath.Join(t.TempDir(), "codex")
-	shell, _ := os.ReadFile("/bin/sh")
-	os.WriteFile(fakeCodex, shell, 0o755)
+	// Run by the Codex TUI itself (`codex --no-daemon`), it labels the pane as Codex's. sh run as "codex" stands in for
+	// the TUI (macOS kills a copy of sh), and the trailing ":" keeps sh from exec'ing rostr in its place.
 	byCodex := func(stdin, event string) {
-		cmd := exec.Command(fakeCodex, "-c", binary+" hook codex "+event+"; :")
+		cmd := exec.Command("/bin/sh", "-c", binary+" hook codex "+event+"; :")
+		cmd.Args[0] = "codex"
 		cmd.Dir, cmd.Env, cmd.Stdin = s.home, append(s.baseEnv(), env...), strings.NewReader(stdin)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("codex %s: %v\n%s", event, err, out)
