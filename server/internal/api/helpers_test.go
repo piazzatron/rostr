@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	testDB = db
-	testHandler = NewHandler(db, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000, Logger: testLogger})
+	testHandler = NewHandler(db, Config{RegistrationsPerHour: 1_000_000, IPRequestsPerMinute: 1_000_000, RequestsPerMinute: 1_000_000, Logger: testLogger})
 
 	code := m.Run()
 	db.Close()

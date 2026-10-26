@@ -54,6 +54,7 @@ func main() {
 		Addr: ":" + port,
 		Handler: api.NewHandler(db, api.Config{
 			RegistrationsPerHour: envInt("RATE_LIMIT_REGISTRATIONS_PER_HOUR", 20),
+			IPRequestsPerMinute:  envInt("RATE_LIMIT_IP_REQUESTS_PER_MINUTE", 1200),
 			RequestsPerMinute:    envInt("RATE_LIMIT_REQUESTS_PER_MINUTE", 300),
 			LiveURL:              os.Getenv("LIVE_URL"),
 			LiveSecret:           os.Getenv("LIVE_SECRET"),

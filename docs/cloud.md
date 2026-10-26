@@ -32,7 +32,8 @@ a lost setup. `rostr config key` prints the key (terminal only, so it doesn't la
 | `GET /v1/sessions/{session}` | A session's active draft, without bumping it |
 
 Every route except `/v1/stats` is internal: only the CLI calls it, and it changes with the CLI. Requests are
-rate-limited per auth token (300/minute by default), in memory per instance.
+rate-limited per client IP (1,200/minute by default), then per auth token (300/minute), in memory per instance. Each
+owner can have at most 100 rosters and 1,000 project links, imports included.
 
 `GET /v1/stats` returns the same shape as `rostr stats --json`, with each agent's `task` and `repo` as ciphertext.
 Integrations decrypt them with the key derivation above; the site gives the recipe.

@@ -403,7 +403,7 @@ func TestPublicListCORS(t *testing.T) {
 
 func TestRateLimits(t *testing.T) {
 	t.Parallel()
-	limited := NewHandler(testDB, Config{RegistrationsPerHour: 2, RequestsPerMinute: 3, Logger: testLogger})
+	limited := NewHandler(testDB, Config{RegistrationsPerHour: 2, IPRequestsPerMinute: 1_000_000, RequestsPerMinute: 3, Logger: testLogger})
 
 	register := func(ip string) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(map[string]any{"authToken": newToken()})
@@ -435,6 +435,13 @@ func TestRateLimits(t *testing.T) {
 	callError(a, "GET", "/v1/settings", nil, http.StatusTooManyRequests, "rate_limited")
 	b := &client{t: t, handler: limited, token: newToken()}
 	callError(b, "GET", "/v1/settings", nil, http.StatusUnauthorized, "unauthorized")
+
+	// Requests, per IP, whatever the token: a fresh token per request doesn't get around it
+	ipLimited := NewHandler(testDB, Config{RegistrationsPerHour: 1, IPRequestsPerMinute: 2, RequestsPerMinute: 1, Logger: testLogger})
+	for range 2 {
+		callError(&client{t: t, handler: ipLimited, token: newToken()}, "GET", "/v1/settings", nil, http.StatusUnauthorized, "unauthorized")
+	}
+	callError(&client{t: t, handler: ipLimited, token: newToken()}, "GET", "/v1/settings", nil, http.StatusTooManyRequests, "rate_limited")
 }
 
 func TestRateLimiterResetsEachWindow(t *testing.T) {
@@ -606,6 +613,40 @@ func TestLinksPickTheDraftRoster(t *testing.T) {
 	}
 	callError(c, "DELETE", "/v1/links/"+repoHash, nil, http.StatusNotFound, "link_not_found")
 	callError(c, "GET", "/v1/links/"+repoHash, nil, http.StatusNotFound, "link_not_found")
+}
+
+func TestOwnerQuotas(t *testing.T) {
+	t.Parallel()
+	c := newOwner(t)
+	owner := hashAuthToken(mustDecodeToken(t, c.token))
+	createRoster(c, "work", members("Gandalf"))
+
+	// Rosters: the 101st is refused
+	execSQL(t, `
+		insert into rosters (owner_id, name, name_key, members)
+		select $1, 'r' || i, 'r' || i, '[{"name": "Ada", "emoji": "⭐"}]' from generate_series(2, $2) i`, owner, maxRosters)
+	callError(c, "POST", "/v1/rosters", map[string]any{"name": "one-more", "members": members("Bo")}, http.StatusConflict, "too_many_rosters")
+
+	// Links: a new project is refused, but relinking one already linked still works
+	execSQL(t, `
+		insert into project_links (owner_id, repo_hash, repo, roster_id)
+		select $1, lpad(to_hex(i), 64, '0'), '\x00', (select id from rosters where owner_id = $1 and name = 'work')
+		from generate_series(1, $2) i`, owner, maxLinks)
+	repo := fakeCiphertext("piazzatron/rostr")
+	callError(c, "PUT", "/v1/links/"+fakeRepoHash("piazzatron/rostr"), map[string]any{"repo": repo, "roster": "work"},
+		http.StatusConflict, "too_many_links")
+	call[linkResponse](c, "PUT", "/v1/links/"+fmt.Sprintf("%064x", 1),
+		map[string]any{"repo": repo, "roster": "work"}, http.StatusOK)
+
+	// Imports count too, and a refused import leaves nothing behind
+	imp := &client{t: t, handler: testHandler, token: newToken()}
+	rosters := make([]map[string]any, maxRosters+1)
+	for i := range rosters {
+		rosters[i] = map[string]any{"name": fmt.Sprint("r", i), "members": members("Ada")}
+	}
+	callError(imp, "POST", "/v1/register", map[string]any{"authToken": imp.token, "import": map[string]any{"rosters": rosters}},
+		http.StatusConflict, "too_many_rosters")
+	callError(imp, "GET", "/v1/settings", nil, http.StatusUnauthorized, "unauthorized")
 }
 
 func TestSettings(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 // Config holds the server's rate limits and where it pushes live counts.
 type Config struct {
 	RegistrationsPerHour int    // per client IP
+	IPRequestsPerMinute  int    // per client IP, checked before the token
 	RequestsPerMinute    int    // per auth token
 	LiveURL              string // the live Worker's base URL; nothing is pushed unless both it and LiveSecret are set
 	LiveSecret           string
@@ -34,6 +35,7 @@ type Config struct {
 type Server struct {
 	db                  *pgxpool.Pool
 	registrationLimiter *rateLimiter
+	ipLimiter           *rateLimiter
 	requestLimiter      *rateLimiter
 	draftLocks          ownerLocks
 	live                *livePusher // nil when live counts are off
@@ -50,6 +52,7 @@ func NewHandler(db *pgxpool.Pool, cfg Config) http.Handler {
 		logger:              logger,
 		db:                  db,
 		registrationLimiter: newRateLimiter(cfg.RegistrationsPerHour, time.Hour),
+		ipLimiter:           newRateLimiter(cfg.IPRequestsPerMinute, time.Minute),
 		requestLimiter:      newRateLimiter(cfg.RequestsPerMinute, time.Minute),
 	}
 	if cfg.LiveURL != "" && cfg.LiveSecret != "" {
@@ -105,11 +108,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // ownerHandler handles a request from an authenticated owner. A returned error is written as the error response.
 type ownerHandler func(w http.ResponseWriter, r *http.Request, ownerID string) error
 
-// authed applies the per-token rate limit and runs h with the owner the bearer token names: an owner's ID is the hash
-// of their auth token, so there's nothing to look up. Handlers answer 401 when they find no such owner (see
-// ownerMissing), checking only when a query comes back empty, so a known owner's request costs nothing extra.
+// authed applies the per-IP and per-token rate limits and runs h with the owner the bearer token names: an owner's ID
+// is the hash of their auth token, so there's nothing to look up. Handlers answer 401 when they find no such owner (see
+// ownerMissing), checking only when a query comes back empty, so a known owner's request costs nothing extra. The
+// per-IP limit comes first because any well-formed token gets its own bucket, registered or not.
 func (s *Server) authed(h ownerHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if allowed, retryAfter := s.ipLimiter.allow(clientIP(r)); !allowed {
+			writeRateLimited(w, retryAfter)
+			return
+		}
+
 		token, ok := bearerToken(r)
 		if !ok {
 			writeError(w, errUnauthorized)

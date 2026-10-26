@@ -7,7 +7,8 @@ whole flow is in [docs/live-counts.md](../docs/live-counts.md).
 Routes:
 
 - `GET /ws`: a WebSocket. It sends the current counts on connect, then every update, as
-  `{"working": n, "benched": m}`. Anything the browser sends closes it.
+  `{"working": n, "benched": m}`. Anything the browser sends closes it, and it closes after an hour. `429` past 10
+  sockets per IP or 10,000 in all.
 - `POST /update`: `{"working": n, "benched": m}` with `Authorization: Bearer <LIVE_SECRET>`. Stores the counts and
   sends them to every socket. `400` for bad counts, `401` for a bad secret.
 

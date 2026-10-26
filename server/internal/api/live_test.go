@@ -37,7 +37,7 @@ func TestWritesPushLiveCounts(t *testing.T) {
 	t.Parallel()
 	pushes := fakeWorker(t)
 	c := &client{t: t, token: newToken(), handler: NewHandler(testDB, Config{
-		RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000, LiveURL: pushes.url, LiveSecret: "s3cret",
+		RegistrationsPerHour: 1_000_000, IPRequestsPerMinute: 1_000_000, RequestsPerMinute: 1_000_000, LiveURL: pushes.url, LiveSecret: "s3cret",
 		Logger: testLogger,
 	})}
 

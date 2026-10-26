@@ -13,7 +13,7 @@ import (
 // and never the auth token.
 func TestRequestLog(t *testing.T) {
 	var buf bytes.Buffer
-	handler := NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, RequestsPerMinute: 1_000_000,
+	handler := NewHandler(testDB, Config{RegistrationsPerHour: 1_000_000, IPRequestsPerMinute: 1_000_000, RequestsPerMinute: 1_000_000,
 		Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
 	c := &client{t: t, handler: handler, token: newToken()}
 	call[settingsResponse](c, "POST", "/v1/register", map[string]any{"authToken": c.token}, http.StatusCreated)
