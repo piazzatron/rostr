@@ -289,65 +289,6 @@ const SHOW_LIVE_BAR = false;
       <p class="docs-link"><a href="/how-it-works">Learn how <Rostr /> works under the hood →</a></p>
     </section>
 
-    <!-- Rosters -->
-    <section class="section squad-section">
-      <SquadBackdrop rosters={HOME_GRID_ROSTERS.map((roster) => roster.members)} tasks={SQUAD_TASKS} />
-      <h2>Squad up</h2>
-      <p class="section-lede">
-        Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
-        turn off).
-      </p>
-      <ul class="rosters">
-        {HOME_GRID_ROSTERS.map((roster) => (
-          <li
-            tabindex="0"
-            class:list={{
-              "roster-featured": "featuredTag" in roster,
-              "roster-desktop-only": !MOBILE_GRID_ROSTER_IDS.includes(roster.id),
-            }}
-          >
-            {"featuredTag" in roster && <span class="roster-tag">{roster.featuredTag}</span>}
-            <span class="roster-emoji">{roster.emoji}</span>
-            <span>
-              <strong>{roster.name}</strong>
-              <small>{roster.source}</small>
-            </span>
-            <div class="roster-members" role="tooltip">
-              <b>{roster.members.length} members</b>
-              <div class="chips">
-                {roster.members.map((member) => <span class="chip">{member}</span>)}
-              </div>
-            </div>
-          </li>
-        ))}
-        <li class="roster-custom" tabindex="0">
-          <span class="roster-emoji">✏️</span>
-          <span>
-            <strong>Your own</strong>
-            <small>Any list of names</small>
-          </span>
-          <div class="roster-members" role="tooltip">
-            <b>As many as you like</b>
-            <div class="chips">
-              <span class="chip">⭐ Your favorites</span>
-              <span class="chip">🪑 Everyone else</span>
-            </div>
-          </div>
-        </li>
-      </ul>
-      <p class="docs-link">
-        <a href="/rosters">See all {PRESET_ROSTERS.length} rosters / submit your own →</a>
-      </p>
-
-      <div class="tip">
-        <span class="tip-icon" aria-hidden="true">📁</span>
-        <p>
-          <strong>Tip: different rosters for different projects.</strong> Run <code>rostr link</code> in a repo to give it
-          its own roster, so you can tell projects apart at a glance.
-        </p>
-      </div>
-    </section>
-
     <!-- Tools -->
     <section class="section" id="tools">
       <h2>Plays well with your tools</h2>
@@ -411,6 +352,65 @@ const SHOW_LIVE_BAR = false;
       <div class="tip">
         <span class="tip-icon" aria-hidden="true">☁️</span>
         <p><strong>Codex cloud support is on its way.</strong></p>
+      </div>
+    </section>
+
+    <!-- Rosters -->
+    <section class="section squad-section">
+      <SquadBackdrop rosters={HOME_GRID_ROSTERS.map((roster) => roster.members)} tasks={SQUAD_TASKS} />
+      <h2>Squad up</h2>
+      <p class="section-lede">
+        Pick a pre-built roster or <code>rostr assemble</code> your own. Every agent gets its own emoji (which you can
+        turn off).
+      </p>
+      <ul class="rosters">
+        {HOME_GRID_ROSTERS.map((roster) => (
+          <li
+            tabindex="0"
+            class:list={{
+              "roster-featured": "featuredTag" in roster,
+              "roster-desktop-only": !MOBILE_GRID_ROSTER_IDS.includes(roster.id),
+            }}
+          >
+            {"featuredTag" in roster && <span class="roster-tag">{roster.featuredTag}</span>}
+            <span class="roster-emoji">{roster.emoji}</span>
+            <span>
+              <strong>{roster.name}</strong>
+              <small>{roster.source}</small>
+            </span>
+            <div class="roster-members" role="tooltip">
+              <b>{roster.members.length} members</b>
+              <div class="chips">
+                {roster.members.map((member) => <span class="chip">{member}</span>)}
+              </div>
+            </div>
+          </li>
+        ))}
+        <li class="roster-custom" tabindex="0">
+          <span class="roster-emoji">✏️</span>
+          <span>
+            <strong>Your own</strong>
+            <small>Any list of names</small>
+          </span>
+          <div class="roster-members" role="tooltip">
+            <b>As many as you like</b>
+            <div class="chips">
+              <span class="chip">⭐ Your favorites</span>
+              <span class="chip">🪑 Everyone else</span>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <p class="docs-link">
+        <a href="/rosters">See all {PRESET_ROSTERS.length} rosters / submit your own →</a>
+      </p>
+
+      <div class="tip">
+        <span class="tip-icon" aria-hidden="true">📁</span>
+        <p>
+          <strong>Tip: different rosters for different projects.</strong> Run <code>rostr link</code> in a repo to give it
+          its own roster, so you can tell projects apart at a glance.
+        </p>
       </div>
     </section>
 
