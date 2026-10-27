@@ -1,6 +1,6 @@
 name = "rostr-live"
 main = "src/index.ts"
-compatibility_date = "2026-08-01"
+compatibility_date = "2026-10-23"
 routes = [{ pattern = "live.getrostr.sh", custom_domain = true }]
 
 [[durable_objects.bindings]]
