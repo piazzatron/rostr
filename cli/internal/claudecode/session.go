@@ -24,12 +24,9 @@ type HookInput struct {
 	Prompt         string `json:"prompt"`
 	PromptID       string `json:"prompt_id"`
 	SessionTitle   string `json:"session_title"` // the session's custom title, if it has one
-	ToolName       string `json:"tool_name"`     // PostToolUse
-	ToolUseID      string `json:"tool_use_id"`   // PostToolUse
-	// PostToolUse: the tool's arguments. rostr only reads a title tool's title and a Bash call's command
+	// PostToolUse: the tool's arguments. rostr only reads a title tool's title
 	ToolInput struct {
-		Title   string `json:"title"`
-		Command string `json:"command"`
+		Title string `json:"title"`
 	} `json:"tool_input"`
 }
 
@@ -174,7 +171,8 @@ func Identity(display, rosterName, sessionID string) string {
 			"PR descriptions, PR and issue comments.", display),
 		"- Don't put the name in code, commit messages, or files.",
 		"- Your user's own instructions about attribution or sign-offs take precedence over these.",
-		fmt.Sprintf("- When your work changes, run: %s \"<new task>\"", taskCommand(sessionID)),
+		fmt.Sprintf("- When your work changes, run this first, before you write anything: %s \"<new task>\"",
+			taskCommand(sessionID)),
 	}, "\n")
 }
 
@@ -236,11 +234,6 @@ func UserPrompt(prompt string) string {
 		prompt = strings.TrimSpace(rest)
 	}
 	return prompt
-}
-
-// IsTaskCommand reports whether a shell command is the agent recording its task.
-func IsTaskCommand(command string) bool {
-	return strings.HasPrefix(strings.TrimSpace(command), "rostr task ")
 }
 
 // TaskFromTitle returns the task in a title of the form "<display> · <task>", reporting false for any other title.

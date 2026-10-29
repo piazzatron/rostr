@@ -19,7 +19,7 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 
 ## Your task
 
-- `rostr task "<task>"`: set what you're working on, in 3-5 words. Run it whenever your work changes.
+- `rostr task "<task>"`: set what you're working on, in 3-5 words. Run it whenever your work changes, before you write anything.
 - Your session comes from `ROSTR_SESSION`, so don't pass `--session`.
 
 ## Setting rostr up

@@ -16,7 +16,7 @@ Each handler reads the hook's JSON from stdin and prints the reply the agent exp
 |---|---|---|
 | `SessionStart` | `session-start` | Writes `ROSTR_SESSION`. `startup`/`clear`: in cloud mode, drafts ahead in the background (see [drafting.md](drafting.md#drafting-ahead)). `resume`: drafts, asking for the old name back. `compact`: re-tells the agent its name (below) |
 | `UserPromptSubmit` | `prompt` | First prompt: the draft step (below). Later prompts: come back from a rest, keep the draft alive, retitle the session to `<name> · <task>` if it differs (see [keepalive.md](keepalive.md)) |
-| `PostToolUse`, title tools and `Bash` | `title-set` | Records the title's summary as the task, and ends a plain-answer turn after `rostr task` (below) |
+| `PostToolUse`, title tools | `title-set` | Records the title's summary as the task, and tells the agent to carry on (below) |
 | `PostToolUse`, any tool | `working` | Reports that a turn started, if a turn end is pending: a turn can start without a prompt |
 | `Stop` | `turn-end` | Records that the turn ended |
 | `SessionEnd` | `session-end` | Benches the session's member and clears its files and pane label |
@@ -40,9 +40,9 @@ server-side title, which hooks can set for desktop Local sessions but not for Re
    comes first thing anyway.
 3. Terminal sessions have no title tool, so the hook starts `rostr hook summarize` in the background: a headless
    `claude -p --model haiku` run that summarizes the prompt into the task, which the next prompt puts in the title.
-4. After a title call, `title-set` tells the agent to carry on and answer. When the agent runs `rostr task` after
-   writing its answer and every tool call since was titling, `title-set` returns `continue: false` to end the turn;
-   otherwise Claude would reply to the tool result and repeat itself.
+4. After a title call, `title-set` tells the agent to carry on and answer. The agent is asked to run `rostr task`
+   before writing anything too: Claude Code doesn't end a turn on a tool call, so a task call after the answer would
+   make Claude reply to its result and repeat itself.
 
 ### Compaction and identity
 
@@ -50,7 +50,7 @@ After compaction the agent has lost its name, so the hook tells it again, but ne
 member: it re-tells the active draft, or reclaims the last member if free, or says nothing. The identity text
 (`claudecode.Identity`) goes in the hook output rather than the skill, since skills load only when a conversation
 looks relevant. It asks the agent to sign outside messages with its name, keep the name out of code and commits, and
-run `rostr task` when its work changes.
+run `rostr task`, before writing anything, when its work changes.
 
 ## Codex
 

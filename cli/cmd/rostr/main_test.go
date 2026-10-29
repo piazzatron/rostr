@@ -499,26 +499,6 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("task after another title: %q", task)
 	}
 
-	// When the title call (or the agent recording its task) finishes a plain answer, the turn ends there; alongside
-	// other work it goes on, and other Bash calls are left alone
-	answer := filepath.Join(t.TempDir(), "answer.jsonl")
-	os.WriteFile(answer, []byte(`{"type":"user","message":{"content":"How deep is Baikal?"}}
-{"type":"assistant","message":{"content":[{"type":"text","text":"About 1,642 m."}]}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"rostr task \"Deepest lake\""}}]}}
-`), 0o644)
-	work := filepath.Join(t.TempDir(), "work.jsonl")
-	os.WriteFile(work, []byte(`{"type":"user","message":{"content":"List the newest files"}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__claude-code-remote__set_session_title","input":{}},{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"ls -lt"}}]}}
-`), 0o644)
-	toolCall := func(transcript, tool, input string) string {
-		return fmt.Sprintf(`{"session_id":"s2","transcript_path":%q,"hook_event_name":"PostToolUse","tool_name":%q,"tool_use_id":"t1","tool_input":%s}`, transcript, tool, input)
-	}
-	if out := readToolOutput("plain answer", hook("title-set", toolCall(answer, "Bash", `{"command":"rostr task \"Deepest lake\""}`))); out.Continue == nil || *out.Continue {
-		t.Fatalf("plain answer: %+v", out)
-	}
-	expectCarryOn("title call before the answer", hook("title-set", toolCall(work, "mcp__claude-code-remote__set_session_title", `{"title":"💍 Frodo · Find the newest files"}`)))
-	expectQuiet("other Bash call", hook("title-set", toolCall(answer, "Bash", `{"command":"ls"}`)), 0)
-
 	// Local desktop session: the agent titles it first thing with the app's own tool, so the hook sets no placeholder
 	os.WriteFile(filepath.Join(sessionsDir, "4343.json"), []byte(`{"sessionId":"s9","bridgeSessionId":"session_l","entrypoint":"claude-desktop"}`), 0o644)
 	if out := readPromptOutput(hook("prompt", firstPrompt("s9"))); out.HookSpecificOutput.SessionTitle != "" ||
