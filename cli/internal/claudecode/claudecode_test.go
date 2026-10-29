@@ -228,7 +228,7 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 		t.Error("the hook command was HTML-escaped")
 	}
 
-	// The prompt hook runs before Claude; the title hook runs, in the foreground, after the title tools and Bash
+	// The prompt hook runs before Claude; the title hook runs, in the foreground, after the title tools
 	prompt := settings.Hooks["UserPromptSubmit"]
 	if len(prompt) != 2 || prompt[0].Hooks[0].Command != "echo mine" ||
 		prompt[1].Hooks[0].Command != HookCommand("prompt") || prompt[1].Hooks[0].AsyncRewake {
@@ -237,8 +237,8 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	if stop := settings.Hooks["Stop"]; len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("turn-end") || stop[0].Hooks[0].Async {
 		t.Errorf("Stop: %+v", stop)
 	}
-	// PostToolUse: the title hook on the title tools and Bash, and the turn-start check on every tool
-	if post := settings.Hooks["PostToolUse"]; len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" ||
+	// PostToolUse: the title hook on the title tools, and the turn-start check on every tool
+	if post := settings.Hooks["PostToolUse"]; len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool ||
 		post[0].Hooks[0].Command != HookCommand("title-set") || post[0].Hooks[0].Async ||
 		post[1].Matcher != "" || post[1].Hooks[0].Command != HookCommand("working") {
 		t.Errorf("PostToolUse: %+v", post)
@@ -357,7 +357,7 @@ func TestInstallReplacesTheOldBackgroundHooks(t *testing.T) {
 	stop := settings.Hooks["Stop"]
 	if len(prompt) != 1 || prompt[0].Hooks[0].Command != HookCommand("prompt") || prompt[0].Hooks[0].AsyncRewake ||
 		len(stop) != 1 || stop[0].Hooks[0].Command != HookCommand("turn-end") ||
-		len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool+"|Bash" || post[0].Hooks[0].Async {
+		len(post) != 2 || post[0].Matcher != RemoteTitleTool+"|"+LocalTitleTool || post[0].Hooks[0].Async {
 		t.Fatalf("hooks: %s", data)
 	}
 }

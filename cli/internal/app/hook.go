@@ -217,17 +217,8 @@ func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, 
 
 // hookWorking is the PostToolUse hook on every tool. A turn can start without a prompt (another Stop hook continues
 // it, or a background task wakes the agent), so a tool call reports the start too, in the background, if nothing has
-// since the last turn ended. A session that lost its name while resting hears about it on its next prompt. The title
-// calls are left to hookTitleSet, which may end the turn at them.
+// since the last turn ended. A session that lost its name while resting hears about it on its next prompt.
 func hookWorking(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
-	switch input.ToolName {
-	case claudecode.LocalTitleTool, claudecode.RemoteTitleTool:
-		return nil
-	case "Bash":
-		if claudecode.IsTaskCommand(input.ToolInput.Command) {
-			return nil
-		}
-	}
 	_, _, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), false)
 	return err
 }
@@ -312,31 +303,11 @@ func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout i
 	return nil
 }
 
-// hookTitleSet is the PostToolUse hook on the title tools and Bash. When the agent titles the session
-// "<name> · <summary>", it records the summary as the agent's task. A title call comes before the answer, so it tells
-// Claude to answer the user rather than report the rename. When the agent recording its task came after the answer,
-// it ends the turn, so Claude doesn't have to reply to the tool's result: Claude Code doesn't let a turn end without
-// visible text, so that reply would repeat the answer.
+// hookTitleSet is the PostToolUse hook on the title tools. When the agent titles the session "<name> · <summary>", it
+// records the summary as the agent's task. A title call comes before the answer, so it tells Claude to answer the user
+// rather than report the rename.
 func hookTitleSet(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
-	isTaskCommand := claudecode.IsTaskCommand(input.ToolInput.Command)
-	if input.ToolName == "Bash" && !isTaskCommand {
-		return nil
-	}
-	// Every time the turn isn't ended after the answer, Claude replies to the tool's result, so the reason goes in the log
-	if !isTaskCommand {
-		fmt.Fprintln(stdout, claudecode.AdditionalContext("PostToolUse", claudecode.TitleSetContext))
-	} else if ends, reason := claudecode.EndsPlainAnswer(input.TranscriptPath, input.ToolUseID); ends {
-		fmt.Fprintln(stdout, `{"continue": false, "suppressOutput": true}`)
-		// Ending the turn here may skip the Stop hook, so the turn's end is recorded here too
-		if err := recordTurnEnd(ctx, input.SessionID); err != nil {
-			fmt.Fprintln(stderr, "rostr:", err)
-		}
-	} else {
-		logBackground("title-set for session %s didn't end the turn: %s", input.SessionID, reason)
-	}
-	if isTaskCommand {
-		return nil
-	}
+	fmt.Fprintln(stdout, claudecode.AdditionalContext("PostToolUse", claudecode.TitleSetContext))
 
 	st, err := openStore()
 	if err != nil {

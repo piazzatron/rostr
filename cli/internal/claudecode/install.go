@@ -30,7 +30,7 @@ var hookEvents = []struct {
 }{
 	{"SessionStart", "", "session-start"},
 	{"UserPromptSubmit", "", "prompt"},
-	{"PostToolUse", RemoteTitleTool + "|" + LocalTitleTool + "|Bash", "title-set"},
+	{"PostToolUse", RemoteTitleTool + "|" + LocalTitleTool, "title-set"},
 	{"PostToolUse", "", "working"},
 	{"Stop", "", "turn-end"},
 	{"SessionEnd", "", "session-end"},
