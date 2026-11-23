@@ -19,6 +19,9 @@ git push origin v0.1.0
 
 Then watch the Release workflow in the repo's Actions tab.
 
+Or run the Release workflow by hand on `main` (Actions → Release → Run workflow, or
+`gh workflow run release.yml --ref main -f version=v0.1.0`). It tags `main`'s head with the version and releases it.
+
 ## One-time setup
 
 The workflow's own `GITHUB_TOKEN` can't push to the tap repo, so it needs a token that can:

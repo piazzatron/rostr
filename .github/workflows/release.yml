@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Or run it by hand on main with a version: it tags main's head and releases that. A tag pushed with the workflow's
+  # own token doesn't start another run, so this doesn't release twice.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, like v1.2.0"
+        required: true
 
 permissions:
   contents: read
@@ -38,6 +45,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Tag main (run by hand)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "Run this on main"; exit 1; }
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must look like v1.2.0"; exit 1; }
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "$VERSION"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: cli/go.mod
