@@ -298,11 +298,12 @@ type previousDraft struct {
 	repo, task           []byte
 }
 
-// activeDraft is one of the owner's active drafts.
+// activeDraft is one of the owner's active drafts. restingSince is set for a resting one (see restingSince).
 type activeDraft struct {
 	id               int64
 	rosterID, member string
 	copy             int
+	restingSince     *time.Time
 }
 
 // restingSince is when a draft (aliased d) started resting, or null: its session's turn ended, after it last started,
@@ -334,7 +335,7 @@ func tryDraft(ctx context.Context, db *pgxpool.Pool, ownerID string, in draftInp
 				if in.task != nil {
 					d.task = in.task
 				}
-				return writeDraft(ctx, db, d)
+				return writeDraft(ctx, db, d, nil)
 			}
 		}
 	}
@@ -347,9 +348,16 @@ func tryDraft(ctx context.Context, db *pgxpool.Pool, ownerID string, in draftInp
 		return draftResponse{}, err
 	}
 	busy := st.busy(roster.ID)
-	// Every name taken means a numbered copy: a resting session keeps its name, so it's never renamed mid-conversation
 	m, copy := freeMember(roster, busy, st.last[roster.ID])
-	return writeDraft(ctx, db, newDraft{ownerID, roster, m, copy, in.session, in.repoHash, in.repo, in.task, in.idle})
+
+	// Every name is taken: before handing out a copy, take the name of the member who has rested longest
+	var taking *int64
+	if copy > 1 {
+		if resting, ok := st.longestResting(roster); ok {
+			m, copy, taking = resting.member, 1, &resting.id
+		}
+	}
+	return writeDraft(ctx, db, newDraft{ownerID, roster, m, copy, in.session, in.repoHash, in.repo, in.task, in.idle}, taking)
 }
 
 // readDraftState reads what a draft needs in one round trip. Its first statement bumps the session's active draft, if
@@ -410,12 +418,13 @@ func readDraftState(ctx context.Context, db *pgxpool.Pool, ownerID string, in dr
 		return rows.Err()
 	})
 	batch.Queue(`
-		select d.id, d.roster_id, d.member_name, d.copy from drafts d
-		where d.owner_id = $1 and d.benched_at is null`, ownerID).Query(func(rows pgx.Rows) error {
+		select d.id, d.roster_id, d.member_name, d.copy, `+restingSince+` from drafts d
+		where d.owner_id = $1 and d.benched_at is null
+		order by d.turn_ended_at, d.id`, ownerID).Query(func(rows pgx.Rows) error {
 		var err error
 		st.active, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (activeDraft, error) {
 			var d activeDraft
-			err := row.Scan(&d.id, &d.rosterID, &d.member, &d.copy)
+			err := row.Scan(&d.id, &d.rosterID, &d.member, &d.copy, &d.restingSince)
 			return d, err
 		})
 		return err
@@ -488,6 +497,26 @@ func (st draftState) busy(rosterID string) map[slot]bool {
 	return busy
 }
 
+// restingMember is a resting draft whose name a new draft can take.
+type restingMember struct {
+	id     int64
+	member member
+}
+
+// longestResting is the roster's longest-resting draft of a member's own name (copy 1) whose member is still in the
+// cast. ok is false when none is resting.
+func (st draftState) longestResting(roster rosterRow) (restingMember, bool) {
+	for _, d := range st.active { // ordered by when their turns ended
+		if d.rosterID != roster.ID || d.copy != 1 || d.restingSince == nil {
+			continue
+		}
+		if m, inCast := roster.findMember(d.member); inCast {
+			return restingMember{d.id, m}, true
+		}
+	}
+	return restingMember{}, false
+}
+
 // freeMember picks the free copy-1 member drafted least recently (never-drafted first, then roster order), then copy 2
 // the same way, and so on, so drafts cycle through the cast. The cast is never empty.
 func freeMember(roster rosterRow, busy map[slot]bool, last map[string]time.Time) (member, int) {
@@ -530,12 +559,16 @@ type newDraft struct {
 // writeDraft inserts a draft in one round trip, first benching the resting draft whose name it takes, if any. The two
 // statements run as one implicit transaction: if the resting draft's session woke meanwhile, the bench changes nothing,
 // the insert hits the unique index on its name, and neither is kept.
-func writeDraft(ctx context.Context, db *pgxpool.Pool, d newDraft) (draftResponse, error) {
+func writeDraft(ctx context.Context, db *pgxpool.Pool, d newDraft, taking *int64) (draftResponse, error) {
 	resp := draftResponse{
 		Name: d.member.Name, Emoji: d.member.Emoji, Copy: d.copy, Roster: d.roster.Name,
 		EmojiMode: d.roster.EmojiMode, Session: d.session, Task: encodeCiphertext(d.task), Repo: encodeCiphertext(d.repo),
 	}
 	batch := &pgx.Batch{}
+	if taking != nil {
+		batch.Queue(`update drafts d set benched_at = now() where d.id = $1 and d.benched_at is null and (`+restingSince+`) is not null`,
+			*taking)
+	}
 	// An idle session's turn "ended" at its draft, so it rests if no prompt comes
 	batch.Queue(`
 		insert into drafts (owner_id, roster_id, member_name, member_emoji, copy, session_id, repo_hash, repo, task,

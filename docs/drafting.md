@@ -12,9 +12,10 @@ How a session gets its name. Local: `Draft` in `cli/internal/store/sqlite.go`. S
    roster of the project it's in now, else the default.
 3. **Least recently drafted.** Otherwise draft the free member drafted longest ago (never-drafted first, then roster
    order), so drafts cycle through the cast.
-4. **Copies.** If every member is busy, draft a numbered copy (`🧙 Gandalf 2`, then `💍 Frodo 2`, …). A session
-   always gets a name. A resting session keeps its name (see [keepalive.md](keepalive.md#resting)): taking it would
-   rename that session mid-conversation.
+4. **Take a resting name.** If every member is busy, take the name of the member whose session has rested longest
+   (see [keepalive.md](keepalive.md#resting)), benching that draft.
+5. **Copies.** If no one is resting either, draft a numbered copy (`🧙 Gandalf 2`, then `💍 Frodo 2`, …). A session
+   always gets a name.
 
 `POST /v1/agents/keepalive` and compaction run steps 1-2 only: they never pick a different member.
 
@@ -27,9 +28,9 @@ follow the same rules; only expiry differs (lazy locally, a 15-minute sweep on t
 `rostr draft 🦊 Fox` (and `/draft 🦊 Fox`, `$rostr-draft`) asks for a member by name (`DraftRequest.Member`, `member`
 in `POST /v1/agents/draft`), in the roster a first draft would use. A name not in the cast is added to its end, with
 the given emoji, or a random one. If another session holds the name, the draft fails (`ErrNameTaken`, `member_taken`)
-rather than rename that session. Otherwise the session's current draft is benched and the new one keeps its repo and
-task. Auto-draft doesn't apply, and in cloud mode the session cache is skipped. On the server it runs in one
-transaction holding the owner's row, since it can change the cast.
+rather than take it. Otherwise the session's current draft is benched and the new one keeps its repo and task.
+Auto-draft doesn't apply, and in cloud mode the session cache is skipped. On the server it runs in one transaction
+holding the owner's row, since it can change the cast.
 
 ## Concurrency
 
@@ -47,9 +48,9 @@ In cloud mode each API call costs ~0.5s from far away, so the first prompt shoul
 (`startup`, `clear`) starts `rostr hook draft-ahead` in the background, which drafts the session and saves the draft in
 `~/.cache/rostr/cloud/sessions/<session>.json`. The first-prompt hook reads it from there, which takes ~15ms.
 
-- The draft is marked idle: it counts as a turn that ended at the draft, so a session opened and never prompted shows
-  as resting after 15 minutes. It keeps its name until it ends or expires. Its first prompt reports the turn start
-  like any prompt after a rest.
+- The draft is marked idle: it counts as a turn that ended at the draft, so a session opened and never prompted rests
+  after 15 minutes and its name can be taken. Its first prompt then reports the turn start like any prompt after a
+  rest.
 - If the first prompt comes before the draft finishes, the prompt hook drafts itself and the server returns the same
   draft to both.
 - Later prompts, `rostr task`, and compaction read the session cache too (trusted for an hour), so they make no draft

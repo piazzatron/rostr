@@ -357,12 +357,10 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 	}
 	waitFor(t, "the draft ahead of the first prompt", func() bool { return len(m.list().drafted()) == 1 })
 
-	// The first prompt tells the agent the name drafted for it, and to record its task in its reply, and titles the
-	// session, all from the session's cache; the task reaches the server just after
+	// The first prompt tells the agent the name drafted for it and titles the session, all from the session's cache; the task reaches the server just after
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
-	if r.code != 0 || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
-		!strings.Contains(r.stdout, "rostr task --session hs1") {
+	if r.code != 0 || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	waitFor(t, "the first prompt's task", func() bool { return m.list().drafted()["Gandalf"] == "Fix the flaky login test" })
@@ -371,13 +369,13 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatalf("drafted: %+v", l)
 	}
 
-	// Later prompts answer from the session's cached draft; the title follows the task without a call
+	// Later prompts answer from the session's cached draft, and leave the title alone
 	later := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"next","prompt_id":"p2","session_title":"🧙 Gandalf · Fix the flaky login test"}`, repo)
 	if r := hook("prompt", later); r.code != 0 || r.stdout != "" {
 		t.Fatalf("later prompt: %+v", r)
 	}
 
-	// The agent sets its task through ROSTR_SESSION; compaction re-tells the same name
+	// rostr task finds the session through ROSTR_SESSION; compaction re-tells the same name
 	m.with("ROSTR_SESSION=hs1").okIn(repo, "task", "Deflake login test")
 	expectIdentity("compact", hook("session-start", start("compact")))
 
@@ -568,7 +566,7 @@ func TestTwoMachinesStartingSessionsAtOnceGetDifferentNames(t *testing.T) {
 	})
 }
 
-func TestASessionOpenedButNeverPromptedKeepsItsName(t *testing.T) {
+func TestASessionOpenedButNeverPromptedGivesUpItsName(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
@@ -578,19 +576,19 @@ func TestASessionOpenedButNeverPromptedKeepsItsName(t *testing.T) {
 	}
 	waitFor(t, "the draft ahead", func() bool { return m.list().drafted()["Gandalf"] == "" && len(m.list().drafted()) == 1 })
 
-	// Twenty minutes with no prompt: the session is resting, but keeps Gandalf, so another session gets a copy
+	// Twenty minutes with no prompt: the session is resting, so another session takes Gandalf rather than a copy
 	_, err := db.Exec(context.Background(), `
 		update drafts set turn_ended_at = turn_ended_at - interval '20 minutes', drafted_at = drafted_at - interval '20 minutes'
 		where owner_id = $1 and session_id = 'idle1'`, m.ownerID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := m.draft(m.home, "other"); d.Name != "Gandalf 2" {
-		t.Fatalf("other session drafted %+v, want Gandalf 2", d)
+	if d := m.draft(m.home, "other"); d.Name != "Gandalf" {
+		t.Fatalf("other session drafted %+v, want Gandalf", d)
 	}
 }
 
-func TestASessionWhoseNameExpiredIsRenamedOnItsNextPrompt(t *testing.T) {
+func TestARestingSessionThatLostItsNameIsRenamedOnItsNextPrompt(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
@@ -615,8 +613,9 @@ func TestASessionWhoseNameExpiredIsRenamedOnItsNextPrompt(t *testing.T) {
 	}
 	waitFor(t, "the turn's end to reach the server", turnEnded)
 
-	// Time passes with no prompt, on both clocks, until the draft expires and a new session takes Gandalf
-	if _, err := db.Exec(context.Background(), "update drafts set turn_ended_at = turn_ended_at - interval '20 minutes', benched_at = now() where owner_id = $1 and session_id = 'rest1'",
+	// Twenty minutes pass with no prompt, on both clocks: the session is resting, so a new session takes Gandalf
+	// rather than a copy
+	if _, err := db.Exec(context.Background(), "update drafts set turn_ended_at = turn_ended_at - interval '20 minutes' where owner_id = $1 and session_id = 'rest1'",
 		m.ownerID()); err != nil {
 		t.Fatal(err)
 	}

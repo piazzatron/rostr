@@ -40,7 +40,6 @@ var hookEvents = []struct {
 var permissions = []string{
 	RemoteTitleTool,
 	LocalTitleTool,
-	"Bash(rostr task:*)",
 }
 
 // Fingerprint identifies what this version of rostr installs (hooks, permissions, the skill, and /draft), so an

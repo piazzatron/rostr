@@ -61,22 +61,33 @@ func TestATurnThatEndedFifteenMinutesAgoRests(t *testing.T) {
 	}
 }
 
-func TestADraftNeverTakesARestingName(t *testing.T) {
+func TestADraftTakesTheLongestRestingNameBeforeCopies(t *testing.T) {
 	st, clock := openTestStore(t)
-	createRoster(t, st, "work", members("Gandalf", "Frodo"))
+	createRoster(t, st, "work", members("Gandalf", "Frodo", "Samwise"))
 	draft(t, st, "gandalf", "work")
 	draft(t, st, "frodo", "work")
-	recordTurn(t, st, "gandalf", true, clock.Now())
+	draft(t, st, "samwise", "work")
 	recordTurn(t, st, "frodo", true, clock.Now())
-	clock.Advance(2 * time.Hour)
+	clock.Advance(5 * time.Minute)
+	recordTurn(t, st, "gandalf", true, clock.Now())
+	clock.Advance(20 * time.Minute)
 
-	if d := draft(t, st, "a", "work"); d.Copy != 2 {
-		t.Fatalf("drafted %s, want a copy (resting sessions keep their names)", d.Name())
+	if d := draft(t, st, "a", "work"); d.Name() != "Frodo" {
+		t.Fatalf("drafted %s, want Frodo (resting longest)", d.Name())
 	}
-	for _, session := range []string{"gandalf", "frodo"} {
-		if err := st.RecordTurn(ctx, session, false, clock.Now()); err != nil {
-			t.Fatalf("%s lost its name while resting: %v", session, err)
-		}
+	if d := draft(t, st, "b", "work"); d.Name() != "Gandalf" {
+		t.Fatalf("drafted %s, want Gandalf (resting next)", d.Name())
+	}
+	if d := draft(t, st, "c", "work"); d.Copy != 2 {
+		t.Fatalf("drafted %s, want a copy (nobody else resting)", d.Name())
+	}
+
+	// Frodo's session lost the name, and can't reclaim it
+	if err := st.RecordTurn(ctx, "frodo", false, clock.Now()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("recording a turn after the name was taken: %v", err)
+	}
+	if d, err := st.Reclaim(ctx, "frodo"); err != nil || d != nil {
+		t.Fatalf("reclaimed %v, %v", d, err)
 	}
 }
 

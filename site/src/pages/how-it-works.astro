@@ -33,8 +33,11 @@ import Rostr from "../components/Rostr.astro";
         roster.
       </li>
       <li>
-        <strong>Copies.</strong> If everyone's busy, a numbered copy like 🧙 Gandalf 2. A session always gets a name,
-        and never loses it to another session.
+        <strong>Take a resting name.</strong> If everyone's busy, the name of the session that has rested longest.
+      </li>
+      <li>
+        <strong>Copies.</strong> If no one is resting either, a numbered copy like 🧙 Gandalf 2. A session always gets a
+        name.
       </li>
     </ol>
     <p>A resumed session gets its old name back, if no one else has taken it since.</p>
@@ -55,8 +58,9 @@ import Rostr from "../components/Rostr.astro";
     </p>
     <ul class="terse-list">
       <li>
-        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting,
-        shown as such in <code>rostr stats</code>. It keeps its name: new sessions never take it.
+        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting. It
+        keeps its name, but when every other name is taken, a new session can take it. If that happens, the resting
+        session gets a new name on its next prompt, and the agent is told.
       </li>
       <li>
         <strong>Keep-alive.</strong> Each prompt and turn tells <Rostr /> the session is still around, and later prompts
@@ -77,12 +81,11 @@ import Rostr from "../components/Rostr.astro";
       and Slack messages. After compaction, it's told again.
     </p>
     <p>
-      Commands the agent runs, like <code>rostr task</code>, need to know which session they're in. In Claude Code, the
+      Commands the agent runs, like <code>rostr draft</code>, need to know which session they're in. In Claude Code, the
       start hook appends <code>export ROSTR_SESSION=&lt;session ID&gt;</code> to the session's env file (the path Claude
       Code passes in <code>CLAUDE_ENV_FILE</code>), and Claude Code loads that file before every shell command the agent
-      runs. Codex sets <code>CODEX_THREAD_ID</code> in its commands' environment itself, so <Rostr /> reads that. The
-      <code>rostr task</code> command the agent is told to run also names the session with <code>--session</code>, so
-      it works even where neither variable is set.
+      runs. Codex sets <code>CODEX_THREAD_ID</code> in its commands' environment itself, so <Rostr /> reads that. Every command also takes <code>--session</code>, for where
+      neither variable is set.
     </p>
   </section>
 
@@ -104,8 +107,8 @@ import Rostr from "../components/Rostr.astro";
       <div class="row">
         <dt><code>UserPromptSubmit</code></dt>
         <dd>
-          First prompt: drafts, tells the agent who it is, and starts the title (below). Later prompts: end a rest, keep
-          the name alive, and retitle the session if its task changed.
+          First prompt: drafts, tells the agent who it is, and starts the title (below). Later prompts: end a rest and keep
+          the name alive.
         </dd>
       </div>
       <div class="row">
@@ -149,7 +152,7 @@ import Rostr from "../components/Rostr.astro";
           <td>
             The first-prompt hook sets <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>, so
             the name shows straight away. <Rostr /> summarizes your prompt in the background with{" "}
-            <code>claude -p --model haiku</code>, on your own login, and puts the summary in the title on your next prompt
+            <code>claude -p --model haiku</code>, on your own login, for the task <code>rostr stats</code> shows
           </td>
         </tr>
         <tr>
@@ -162,13 +165,13 @@ import Rostr from "../components/Rostr.astro";
       </tbody>
     </table>
     <p>
-      The summary is recorded as the session's task, which <code>rostr stats</code> shows. When the task changes, later
-      prompts retitle the session to match.
+      The summary is recorded as the session's task, which <code>rostr stats</code> shows. The title is set once and
+      isn't rewritten as the work changes.
     </p>
     <h3>Why the agent writes the summary in the app</h3>
     <p>
-      Hooks can only set a title when a prompt arrives. In a terminal, that's the best there is: the summary shows up
-      on your second prompt. The app can do better, because it gives the agent a title tool. The agent already knows
+      Hooks can only set a title when a prompt arrives, so in a terminal the title is the start of your first prompt.
+      The app can do better, because it gives the agent a title tool. The agent already knows
       the task, so it titles the session in its first reply.
     </p>
     <p>
@@ -222,7 +225,7 @@ import Rostr from "../components/Rostr.astro";
         writes anyway.
       </li>
       <li>
-        <strong>Now and then.</strong> After compaction, or when a session that was away long enough to lose its name is renamed, the agent is told its
+        <strong>Now and then.</strong> After compaction, or when a resting session is renamed, the agent is told its
         name again, about 120 tokens.
       </li>
     </ul>

@@ -15,7 +15,7 @@ Each handler reads the hook's JSON from stdin and prints the reply the agent exp
 | Event | Handler | What it does |
 |---|---|---|
 | `SessionStart` | `session-start` | Writes `ROSTR_SESSION`. `startup`/`clear`: in cloud mode, drafts ahead in the background (see [drafting.md](drafting.md#drafting-ahead)). `resume`: drafts, asking for the old name back. `compact`: re-tells the agent its name (below) |
-| `UserPromptSubmit` | `prompt` | First prompt: the draft step (below). Later prompts: come back from a rest, keep the draft alive, retitle the session to `<name> · <task>` if it differs (see [keepalive.md](keepalive.md)) |
+| `UserPromptSubmit` | `prompt` | First prompt: the draft step (below). Later prompts: come back from a rest, keep the draft alive (see [keepalive.md](keepalive.md)). They never retitle the session for a new task, only for a new name |
 | `PostToolUse`, title tools | `title-set` | Records the title's summary as the task, and tells the agent to carry on (below) |
 | `PostToolUse`, any tool | `working` | Reports that a turn started, if a turn end is pending: a turn can start without a prompt |
 | `Stop` | `turn-end` | Records that the turn ended |
@@ -40,18 +40,19 @@ server-side title, which hooks can set for desktop Local sessions but not for Re
    twice; the first thing in a turn is never turned into one. Local sessions get no placeholder title: the agent's
    comes first thing anyway.
 3. Terminal sessions have no title tool, so the hook starts `rostr hook summarize` in the background: a headless
-   `claude -p --model haiku` run that summarizes the prompt into the task, which the next prompt puts in the title.
-4. After a title call, `title-set` tells the agent to carry on and answer. The agent is asked to run `rostr task`
-   before writing anything too: Claude Code doesn't end a turn on a tool call, so a task call after the answer would
-   make Claude reply to its result and repeat itself.
+   `claude -p --model haiku` run that summarizes the prompt into the task `rostr stats` shows. The title keeps the
+   start of the prompt.
+4. After a title call, `title-set` tells the agent to carry on and answer.
+
+The title is set once, so it doesn't change under the user mid-session: the agent isn't asked to update its task as
+its work changes, and later prompts don't retitle the session. `rostr task` still sets the task `rostr stats` shows.
 
 ### Compaction and identity
 
 After compaction the agent has lost its name, so the hook tells it again, but never gives the session a different
 member: it re-tells the active draft, or reclaims the last member if free, or says nothing. The identity text
 (`claudecode.Identity`) goes in the hook output rather than the skill, since skills load only when a conversation
-looks relevant. It asks the agent to sign outside messages with its name, keep the name out of code and commits, and
-run `rostr task`, before writing anything, when its work changes.
+looks relevant. It asks the agent to sign outside messages with its name and keep the name out of code and commits.
 
 ## Codex
 

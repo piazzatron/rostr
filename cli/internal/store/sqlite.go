@@ -483,11 +483,19 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
-		// The free member drafted least recently, else a copy. A resting session keeps its name: taking it would
-		// rename that session mid-conversation.
+		// The free member drafted least recently; else the longest-resting member's name; else a copy
 		member, copy, err := firstFreeMember(ctx, tx, r)
 		if err != nil {
 			return err
+		}
+		if copy > 1 {
+			rested, ok, err := s.takeRestingMember(ctx, tx, r)
+			if err != nil {
+				return err
+			}
+			if ok {
+				member, copy = rested, 1
+			}
 		}
 		inserted, err := s.insertDraft(ctx, tx, newDraft{
 			rosterID: r.id, member: member, copy: copy, sessionID: req.SessionID, repo: req.Repo, task: req.Task,
@@ -747,6 +755,32 @@ func (s *SQLite) resume(ctx context.Context, tx *sql.Tx, sessionID, repo, task s
 		rosterID: last.rosterID, member: member, copy: last.Copy, sessionID: sessionID, repo: repo, task: task,
 	})
 	return &d, err
+}
+
+// takeRestingMember releases the roster's longest-resting draft of a member's own name (copy 1) whose member is still
+// in the cast, and returns that member. ok is false when none is resting.
+func (s *SQLite) takeRestingMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Member, bool, error) {
+	drafts, err := queryDrafts(ctx, tx, "where d.roster_id = ? and d.copy = 1 and d.benched_at is null", r.id)
+	if err != nil {
+		return roster.Member{}, false, err
+	}
+	now := s.now().UTC()
+	var longest *draftRow
+	for i, d := range drafts {
+		since := restingSince(d.turnStarted, d.turnEnded, now)
+		if _, inCast := memberNamed(r.Members, d.Member); since.IsZero() || !inCast {
+			continue
+		}
+		if longest == nil || since.Before(longest.turnEnded) {
+			longest = &drafts[i]
+		}
+	}
+	if longest == nil {
+		return roster.Member{}, false, nil
+	}
+	member, _ := memberNamed(r.Members, longest.Member)
+	_, err = tx.ExecContext(ctx, "update drafts set benched_at = ? where id = ?", s.nowText(), longest.id)
+	return member, err == nil, err
 }
 
 // expireStaleDrafts releases active drafts not seen within the expiry, and deletes released drafts past retention.

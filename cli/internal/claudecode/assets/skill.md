@@ -1,6 +1,6 @@
 ---
 name: rostr
-description: Reference for rostr, which gives each coding-agent session a name drafted from a roster (like 🧙 Gandalf) and puts it in the session title. Use when the user asks about rostr, who else is running or what other agents are working on, changing this session's task, setting rostr up, or adding, editing, linking, or disbanding rosters.
+description: Reference for rostr, which gives each coding-agent session a name drafted from a roster (like 🧙 Gandalf) and puts it in the session title. Use when the user asks about rostr, who else is running or what other agents are working on setting rostr up, or adding, editing, linking, or disbanding rosters.
 ---
 
 # rostr
@@ -16,11 +16,6 @@ the `rostr assemble` wizard) error out, and you should ask the user to run them.
 
 - `rostr stats`: every roster, its working agents (name, task, repo, time since drafted), its resting ones (their session finished its turn a while ago), then its members on the bench.
 - `rostr stats <roster>, ... --json`: the same as JSON.
-
-## Your task
-
-- `rostr task "<task>"`: set what you're working on, in 3-5 words. Run it whenever your work changes, before you write anything.
-- Your session comes from `ROSTR_SESSION`, so don't pass `--session`.
 
 ## Setting rostr up
 

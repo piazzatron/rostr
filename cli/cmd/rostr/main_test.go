@@ -417,7 +417,6 @@ func TestClaudeCodeHooks(t *testing.T) {
 	os.WriteFile(fakeClaude, []byte("#!/bin/sh\ncat >/dev/null; printf '{\"result\":\"Fix login redirect\"}\n'\n"), 0o755)
 	out := readPromptOutput(hook("prompt", firstPrompt("s1"), "ROSTR_CLAUDE_BIN="+fakeClaude))
 	if !strings.Contains(out.HookSpecificOutput.AdditionalContext, "🧙 Gandalf") ||
-		!strings.Contains(out.HookSpecificOutput.AdditionalContext, "rostr task --session s1") ||
 		strings.Contains(out.HookSpecificOutput.AdditionalContext, "set_session_title") ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
 		t.Fatalf("first prompt: %+v", out)
@@ -429,16 +428,14 @@ func TestClaudeCodeHooks(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	// The next prompt puts it in the title
-	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix login redirect" {
-		t.Fatalf("title after the summary: %+v", out)
+	// Later prompts leave the title alone, even once the task changed; a prompt that looks like the first again
+	// doesn't re-tell the name either
+	if r := hook("prompt", firstPrompt("s1")); r.code != 0 || r.stdout != "" {
+		t.Fatalf("prompt after the summary: %+v", r)
 	}
 	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Fix the login redirect loop")
-
-	// A prompt that looks like the first again neither re-tells the name nor retitles the session with its text
-	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.AdditionalContext != "" ||
-		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
-		t.Fatalf("repeated first prompt: %+v", out)
+	if r := hook("prompt", firstPrompt("s1")); r.code != 0 || r.stdout != "" {
+		t.Fatalf("prompt after a task change: %+v", r)
 	}
 	if _, err := os.Stat(filepath.Join(keepAliveDir, "s1")); err != nil {
 		t.Fatalf("no keep-alive mark: %v", err)
@@ -515,7 +512,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	}
 	expectQuiet("cloud end", hook("session-end", `{"session_id":"s3","hook_event_name":"SessionEnd"}`), 0)
 
-	// Later prompts keep the draft alive, at most once an hour, and the title in step with the task
+	// Later prompts keep the draft alive, at most once an hour, and never retitle the session for a new task
 	transcript := filepath.Join(t.TempDir(), "s1.jsonl")
 	os.WriteFile(transcript, []byte(`{"type":"user","origin":{"kind":"human"},"promptId":"p1"}`+"\n"), 0o644)
 	laterPrompt := func(title string) string {
@@ -528,9 +525,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatal("keep-alive didn't bump after an hour")
 	}
 	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Deflake the login test")
-	if out := readPromptOutput(hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Deflake the login test" {
-		t.Fatalf("title after a new task: %+v", out)
-	}
+	expectQuiet("later prompt after a new task", hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop")), 0)
 
 	// Compaction re-tells the name without drafting
 	expectIdentity("compact", hook("session-start", start("s1", "compact")), "🧙 Gandalf")
@@ -563,7 +558,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("CLAUDE_ENV_FILE: %q", env)
 	}
 	r := s.run(repo, "", nil, "hook", "claude-code", "draft", "--session", "s4")
-	if r.code != 0 || !strings.Contains(r.stdout, "🏹 Legolas") || !strings.Contains(r.stdout, "rostr task") {
+	if r.code != 0 || !strings.Contains(r.stdout, "🏹 Legolas") {
 		t.Fatalf("/draft: exit %d, stdout %q", r.code, r.stdout)
 	}
 	before := len(s.list().Rosters[0].Drafted)
@@ -1080,7 +1075,7 @@ func TestCodexHooks(t *testing.T) {
 	expectQuiet("prompt, auto-draft off", hook("prompt", prompt("t3", "null", firstPrompt)))
 	expectQuiet("fork, auto-draft off", hook("session-start", start("t4", "fork")))
 	r := s.run(repo, "", []string{path, "CODEX_THREAD_ID=t3"}, "hook", "codex", "draft")
-	if r.code != 0 || !strings.Contains(r.stdout, "👑 Aragorn") || !strings.Contains(r.stdout, "rostr task --session t3") {
+	if r.code != 0 || !strings.Contains(r.stdout, "👑 Aragorn") {
 		t.Fatalf("$rostr-draft: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	expectNamed("$rostr-draft")
