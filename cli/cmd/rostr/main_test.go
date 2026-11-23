@@ -208,15 +208,15 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("redraft: %q", out)
 	}
 
-	// task: the session's agent, or a named one
-	s.ok(repo, session("s1"), "task", "Fix auth redirect loop")
-	s.ok(s.home, nil, "task", "GANDALF", "Review the PR")
-	s.fails(s.home, nil, "task", "Something")
-	s.fails(s.home, session("nobody"), "task", "Something")
+	// The hooks' task command sets the session's agent's task; there's no task command for people or agents
+	s.ok(repo, session("s1"), "hook", "task", "Fix auth redirect loop")
+	s.fails(s.home, nil, "hook", "task", "Something")
+	s.fails(s.home, session("nobody"), "hook", "task", "Something")
+	s.fails(s.home, session("s1"), "task", "Something")
 
 	listing = s.list("play,", "work")
 	ada, gandalf := listing.Rosters[0].Drafted[0], listing.Rosters[1].Drafted[0]
-	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "Review the PR" || gandalf.Repo != "" {
+	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "" || gandalf.Repo != "" {
 		t.Fatalf("list: %+v", listing)
 	}
 	// list is an alias for stats
@@ -428,14 +428,16 @@ func TestClaudeCodeHooks(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	// Later prompts leave the title alone, even once the task changed; a prompt that looks like the first again
-	// doesn't re-tell the name either
-	if r := hook("prompt", firstPrompt("s1")); r.code != 0 || r.stdout != "" {
-		t.Fatalf("prompt after the summary: %+v", r)
+	// The next prompt puts it in the title
+	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix login redirect" {
+		t.Fatalf("title after the summary: %+v", out)
 	}
-	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Fix the login redirect loop")
-	if r := hook("prompt", firstPrompt("s1")); r.code != 0 || r.stdout != "" {
-		t.Fatalf("prompt after a task change: %+v", r)
+	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "hook", "task", "Fix the login redirect loop")
+
+	// A prompt that looks like the first again neither re-tells the name nor retitles the session with its text
+	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.AdditionalContext != "" ||
+		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
+		t.Fatalf("repeated first prompt: %+v", out)
 	}
 	if _, err := os.Stat(filepath.Join(keepAliveDir, "s1")); err != nil {
 		t.Fatalf("no keep-alive mark: %v", err)
@@ -512,7 +514,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	}
 	expectQuiet("cloud end", hook("session-end", `{"session_id":"s3","hook_event_name":"SessionEnd"}`), 0)
 
-	// Later prompts keep the draft alive, at most once an hour, and never retitle the session for a new task
+	// Later prompts keep the draft alive, at most once an hour, and the title in step with the task
 	transcript := filepath.Join(t.TempDir(), "s1.jsonl")
 	os.WriteFile(transcript, []byte(`{"type":"user","origin":{"kind":"human"},"promptId":"p1"}`+"\n"), 0o644)
 	laterPrompt := func(title string) string {
@@ -524,8 +526,10 @@ func TestClaudeCodeHooks(t *testing.T) {
 	if info, _ := os.Stat(filepath.Join(keepAliveDir, "s1")); time.Since(info.ModTime()) > time.Minute {
 		t.Fatal("keep-alive didn't bump after an hour")
 	}
-	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Deflake the login test")
-	expectQuiet("later prompt after a new task", hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop")), 0)
+	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "hook", "task", "Deflake the login test")
+	if out := readPromptOutput(hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Deflake the login test" {
+		t.Fatalf("title after a new task: %+v", out)
+	}
 
 	// Compaction re-tells the name without drafting
 	expectIdentity("compact", hook("session-start", start("s1", "compact")), "🧙 Gandalf")
@@ -1015,7 +1019,7 @@ func TestCodexHooks(t *testing.T) {
 	}
 
 	// The agent's own rostr commands find the session through CODEX_THREAD_ID, unless ROSTR_SESSION says otherwise
-	s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "task", "Fix auth redirects")
+	s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "hook", "task", "Fix auth redirects")
 	s.ok(repo, []string{"CODEX_THREAD_ID=t1", "ROSTR_SESSION=other"}, "draft")
 	sessions := map[string]string{}
 	for _, d := range s.list().Rosters[0].Drafted {

@@ -31,7 +31,7 @@ func newHookCommand() *cobra.Command {
 	hook := &cobra.Command{Use: "hook", Short: "What the installed hooks run (and `rostr hook sync` to reinstall them)"}
 	claudeCode := &cobra.Command{Use: "claude-code", Short: "Claude Code hooks"}
 	codexHooks := &cobra.Command{Use: "codex", Short: "Codex hooks"}
-	hook.AddCommand(claudeCode, codexHooks, newHookDraftAheadCommand(), newHookSummarizeCommand(), newHookTurnCommand(), newHookSyncCommand())
+	hook.AddCommand(claudeCode, codexHooks, newHookDraftAheadCommand(), newHookSummarizeCommand(), newHookTaskCommand(), newHookTurnCommand(), newHookSyncCommand())
 
 	claudeCode.AddCommand(
 		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
@@ -109,8 +109,8 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 }
 
 // hookPrompt runs before Claude sees each prompt. On the first, it drafts the session, tells the agent its name and to
-// title the session in its reply, and titles the session with the start of the prompt; later prompts keep the draft
-// alive. The title isn't changed after that, unless the session loses its name and gets a new one.
+// title the session in its reply, and titles the session with the start of the prompt for now; later prompts keep the
+// draft alive and the title in step with the agent's task.
 func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr io.Writer) error {
 	if !claudecode.IsFirstPrompt(input) {
 		return laterPrompt(ctx, input, stdout)
@@ -151,7 +151,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 			d = *renamed
 		}
 		if placeholder != "" {
-			_ = spawnHook(nil, "task", "--session", input.SessionID, "--", placeholder)
+			_ = spawnHook(nil, "hook", "task", "--session", input.SessionID, "--", placeholder)
 		}
 	} else {
 		drafted, ok, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), placeholder)
@@ -166,10 +166,10 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
 	pane.Label(ctx, pane.Claude, d.Display())
 
-	// The agent titles the session with its summary where it has a title tool; a terminal shows the start of the
-	// prompt, and rostr summarizes the prompt in the background for the task `rostr stats` shows. A desktop Local
-	// session gets no placeholder: its agent titles it first thing, and a placeholder would only change the title once
-	// more
+	// The agent titles the session with its summary where it has a title tool; in a terminal, rostr summarizes the
+	// prompt in the background and the next prompt's hook puts it in the title. Until then a terminal shows the start
+	// of the prompt as the task. A desktop Local session doesn't: its agent titles it first thing, and a placeholder
+	// would only change the title once more
 	where := titleWhere(input.SessionID)
 	context := claudecode.Identity(d.Display(), d.Roster)
 	if instruction := claudecode.TitleInstruction(d.Display(), input.SessionID, where); instruction != "" {
@@ -187,31 +187,32 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	return nil
 }
 
-// laterPrompt records that the session's turn started and keeps the draft alive. It leaves the title alone unless the
-// session lost its name while resting and got a new one.
+// laterPrompt records that the session's turn started, keeps the draft alive, and keeps the title in step with the
+// agent's task.
 func laterPrompt(ctx context.Context, input claudecode.HookInput, stdout io.Writer) error {
-	if err := wakeSession(ctx, input, stdout); err != nil {
+	note, err := wakeSession(ctx, input)
+	if err != nil {
 		return err
 	}
-	return keepDraftAlive(ctx, input.SessionID)
+	if err := keepDraftAlive(ctx, input.SessionID); err != nil {
+		return err
+	}
+	return syncTitleWithTask(ctx, input, stdout, note)
 }
 
-// wakeSession is wakeAfterRest for Claude Code. When the session got a new name, it tells the agent and retitles the
-// session with it, keeping the task; in Remote Control and cloud sessions, whose apps don't show a hook's title, it
-// asks the agent to retitle the session instead.
-func wakeSession(ctx context.Context, input claudecode.HookInput, stdout io.Writer) error {
+// wakeSession is wakeAfterRest for Claude Code: note tells the agent its new name, if it has one, and in Remote
+// Control and cloud sessions, whose apps don't show a hook's title, asks it to retitle the session.
+func wakeSession(ctx context.Context, input claudecode.HookInput) (note string, err error) {
 	d, from, err := wakeAfterRest(ctx, input.SessionID, hookDir(input.Cwd), true)
 	if err != nil || d == nil {
-		return err
+		return "", err
 	}
 	pane.Label(ctx, pane.Claude, d.Display())
-	note, title := claudecode.RenamedAfterRest(d.Display(), from), claudecode.Title(d.Display(), d.Task)
+	note = claudecode.RenamedAfterRest(d.Display(), from)
 	if where := titleWhere(input.SessionID); !where.ShowsHookTitles() {
 		note += "\n" + claudecode.TitleInstruction(d.Display(), input.SessionID, where)
-		title = ""
 	}
-	fmt.Fprintln(stdout, claudecode.PromptOutput(note, title))
-	return nil
+	return note, nil
 }
 
 // hookWorking is the PostToolUse hook on every tool. A turn can start without a prompt (another Stop hook continues
@@ -275,6 +276,31 @@ func wakeAfterRest(ctx context.Context, sessionID, dir string, check bool) (rena
 		return nil, "", nil
 	}
 	return d, end.Display, nil
+}
+
+// syncTitleWithTask retitles the session "<name> · <task>" when the agent's task has changed since the title was set,
+// and tells the agent when the server confirmed a different name than the one it was told (see store.Cloud). note is
+// more context for the agent, if any.
+func syncTitleWithTask(ctx context.Context, input claudecode.HookInput, stdout io.Writer, note string) error {
+	st, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	d, err := st.SessionDraft(ctx, input.SessionID)
+	if err != nil || d == nil {
+		return err
+	}
+	context, title := note, ""
+	if d.Task != "" {
+		if t := claudecode.Title(d.Display(), d.Task); t != input.SessionTitle {
+			title = t
+		}
+	}
+	if context != "" || title != "" {
+		fmt.Fprintln(stdout, claudecode.PromptOutput(context, title))
+	}
+	return nil
 }
 
 // hookTitleSet is the PostToolUse hook on the title tools. When the agent titles the session "<name> · <summary>", it

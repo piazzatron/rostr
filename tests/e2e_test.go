@@ -369,14 +369,14 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatalf("drafted: %+v", l)
 	}
 
-	// Later prompts answer from the session's cached draft, and leave the title alone
+	// Later prompts answer from the session's cached draft; the title follows the task without a call
 	later := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"next","prompt_id":"p2","session_title":"🧙 Gandalf · Fix the flaky login test"}`, repo)
 	if r := hook("prompt", later); r.code != 0 || r.stdout != "" {
 		t.Fatalf("later prompt: %+v", r)
 	}
 
-	// rostr task finds the session through ROSTR_SESSION; compaction re-tells the same name
-	m.with("ROSTR_SESSION=hs1").okIn(repo, "task", "Deflake login test")
+	// The task changes (the hooks' task command finds the session through ROSTR_SESSION); compaction re-tells the same name
+	m.with("ROSTR_SESSION=hs1").okIn(repo, "hook", "task", "Deflake login test")
 	expectIdentity("compact", hook("session-start", start("compact")))
 
 	// Session end releases; resume gets the old name back
@@ -752,13 +752,11 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		t.Fatalf("draft --roster: %+v", d)
 	}
 
-	// task and release, by session and by name across rosters
-	m.with("ROSTR_SESSION=s1").okIn(repo, "task", "Fix auth redirect loop")
-	m.fails("task", "gandalf", "x")
-	m.ok("task", "GANDALF", "Review the PR", "--roster", "work")
+	// Release, by session and by name across rosters
+	m.with("ROSTR_SESSION=s1").okIn(repo, "hook", "task", "Fix auth redirect loop")
 	m.ok("bench", "gandalf", "--roster", "side")
 	m.fails("bench", "ada 2")
-	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "Review the PR" {
+	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "" {
 		t.Fatalf("drafted: %v", drafted)
 	}
 	m.with("ROSTR_SESSION=s2").ok("bench")

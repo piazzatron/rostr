@@ -185,7 +185,8 @@ type TitleWhere struct {
 // call as a progress update: a summary of the answer, followed, after the title call, by the answer again. The first
 // thing in a turn is never turned into one, and the answer then ends the turn as usual.
 //
-// Terminal sessions have no title tool, so the agent isn't asked: their title stays the start of the first prompt.
+// Terminal sessions have no title tool, so the agent isn't asked: rostr summarizes the prompt itself (Summarize) and
+// the next prompt's hook retitles the session.
 func TitleInstruction(display, sessionID string, where TitleWhere) string {
 	title := fmt.Sprintf("%q", display+" · <3-5 word summary of what the user wants>")
 	switch {

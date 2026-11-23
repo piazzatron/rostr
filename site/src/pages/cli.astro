@@ -163,20 +163,6 @@ $ rostr draft --json
 $ rostr bench gandalf
 Benched 🧙 Gandalf from the work roster.`,
       },
-      {
-        id: "task",
-        heading: "task",
-        usage: "rostr task [<name>] <description>",
-        summary: "Set or change what an agent is working on. Your hooks set the first task from your first prompt.",
-        options: [
-          { flag: "--session <id>", description: "Set the task for whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION, then the agent's own session ID." },
-        ],
-        example: `$ rostr task "Migrate billing to Stripe v3"
-🌱 Samwise is now on: Migrate billing to Stripe v3
-
-$ rostr task samwise "Migrate billing to Stripe v3"
-🌱 Samwise is now on: Migrate billing to Stripe v3`,
-      },
     ],
   },
   {

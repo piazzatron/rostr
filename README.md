@@ -74,7 +74,6 @@ Full docs, with examples, at [getrostr.sh/cli](https://getrostr.sh/cli). Run `ro
 |---|---|
 | `rostr draft` | Draft the next free member for this session |
 | `rostr bench [<name>, ... \| all]` | Send this session's agent, named ones, or all of them back to the bench |
-| `rostr task [<name>] <description>` | Set what an agent is working on |
 
 **Settings**
 

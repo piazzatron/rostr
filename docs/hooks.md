@@ -15,7 +15,7 @@ Each handler reads the hook's JSON from stdin and prints the reply the agent exp
 | Event | Handler | What it does |
 |---|---|---|
 | `SessionStart` | `session-start` | Writes `ROSTR_SESSION`. `startup`/`clear`: in cloud mode, drafts ahead in the background (see [drafting.md](drafting.md#drafting-ahead)). `resume`: drafts, asking for the old name back. `compact`: re-tells the agent its name (below) |
-| `UserPromptSubmit` | `prompt` | First prompt: the draft step (below). Later prompts: come back from a rest, keep the draft alive (see [keepalive.md](keepalive.md)). They never retitle the session for a new task, only for a new name |
+| `UserPromptSubmit` | `prompt` | First prompt: the draft step (below). Later prompts: come back from a rest, keep the draft alive, retitle the session to `<name> · <task>` if it differs (see [keepalive.md](keepalive.md)) |
 | `PostToolUse`, title tools | `title-set` | Records the title's summary as the task, and tells the agent to carry on (below) |
 | `PostToolUse`, any tool | `working` | Reports that a turn started, if a turn end is pending: a turn can start without a prompt |
 | `Stop` | `turn-end` | Records that the turn ended |
@@ -40,12 +40,12 @@ server-side title, which hooks can set for desktop Local sessions but not for Re
    twice; the first thing in a turn is never turned into one. Local sessions get no placeholder title: the agent's
    comes first thing anyway.
 3. Terminal sessions have no title tool, so the hook starts `rostr hook summarize` in the background: a headless
-   `claude -p --model haiku` run that summarizes the prompt into the task `rostr stats` shows. The title keeps the
-   start of the prompt.
+   `claude -p --model haiku` run that summarizes the prompt into the task, which the next prompt puts in the title.
 4. After a title call, `title-set` tells the agent to carry on and answer.
 
-The title is set once, so it doesn't change under the user mid-session: the agent isn't asked to update its task as
-its work changes, and later prompts don't retitle the session. `rostr task` still sets the task `rostr stats` shows.
+There's no command for changing the task, so the agent can't retitle the session as its work changes: after the first
+prompt's title (and, in a terminal, the summary that replaces it on the next prompt) the title stays put. The hooks
+record the task with the hidden `rostr hook task`.
 
 ### Compaction and identity
 

@@ -127,15 +127,17 @@ func newBenchCommand() *cobra.Command {
 	return cmd
 }
 
-func newTaskCommand() *cobra.Command {
-	var session, rosterFlag string
+// newHookTaskCommand is `rostr hook task`, which the first-prompt hook runs in the background to record a session's
+// task. It isn't for people or agents: the session's task comes from its first prompt and title.
+func newHookTaskCommand() *cobra.Command {
+	var session string
 	cmd := &cobra.Command{
-		Use:   "task [<name>] <description>",
-		Short: "Set what an agent is working on",
-		Args:  cobra.RangeArgs(1, 2),
+		Use:    "task <description>",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			if len(args) == 1 && session == "" {
+			if session == "" {
 				return errNoSession
 			}
 			st, err := openStore()
@@ -143,33 +145,18 @@ func newTaskCommand() *cobra.Command {
 				return err
 			}
 			defer st.Close()
-
-			var agent store.Draft
-			if len(args) == 1 {
-				d, err := st.SessionDraft(ctx, session)
-				if err != nil {
-					return err
-				}
-				if d == nil {
-					return fmt.Errorf("this session has no drafted agent. Draft one with /draft")
-				}
-				agent = *d
-			} else {
-				if agent, err = findDraftedAgent(ctx, st, args[0], rosterFlag); err != nil {
-					return err
-				}
-			}
-
-			d, err := st.SetTask(ctx, agent.Key(), args[len(args)-1])
+			d, err := st.SessionDraft(ctx, session)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s · %s\n", d.Display(), d.Task)
-			return nil
+			if d == nil {
+				return fmt.Errorf("this session has no drafted agent")
+			}
+			_, err = st.SetTask(ctx, d.Key(), args[0])
+			return err
 		},
 	}
 	sessionFlag(cmd, &session)
-	cmd.Flags().StringVar(&rosterFlag, "roster", "", "the roster the named agent is in, when more than one has them drafted")
 	return cmd
 }
 

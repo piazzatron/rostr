@@ -107,8 +107,8 @@ import Rostr from "../components/Rostr.astro";
       <div class="row">
         <dt><code>UserPromptSubmit</code></dt>
         <dd>
-          First prompt: drafts, tells the agent who it is, and starts the title (below). Later prompts: end a rest and keep
-          the name alive.
+          First prompt: drafts, tells the agent who it is, and starts the title (below). Later prompts: end a rest, keep
+          the name alive, and retitle the session if its task changed.
         </dd>
       </div>
       <div class="row">
@@ -152,7 +152,7 @@ import Rostr from "../components/Rostr.astro";
           <td>
             The first-prompt hook sets <span class="session-title">&lt;name&gt; · &lt;start of your prompt&gt;</span>, so
             the name shows straight away. <Rostr /> summarizes your prompt in the background with{" "}
-            <code>claude -p --model haiku</code>, on your own login, for the task <code>rostr stats</code> shows
+            <code>claude -p --model haiku</code>, on your own login, and puts the summary in the title on your next prompt
           </td>
         </tr>
         <tr>
@@ -165,13 +165,13 @@ import Rostr from "../components/Rostr.astro";
       </tbody>
     </table>
     <p>
-      The summary is recorded as the session's task, which <code>rostr stats</code> shows. The title is set once and
-      isn't rewritten as the work changes.
+      The summary is recorded as the session's task, which <code>rostr stats</code> shows. The agent isn't asked to
+      change it as its work changes, so the title stays put after that.
     </p>
     <h3>Why the agent writes the summary in the app</h3>
     <p>
-      Hooks can only set a title when a prompt arrives, so in a terminal the title is the start of your first prompt.
-      The app can do better, because it gives the agent a title tool. The agent already knows
+      Hooks can only set a title when a prompt arrives. In a terminal, that's the best there is: the summary shows up
+      on your second prompt. The app can do better, because it gives the agent a title tool. The agent already knows
       the task, so it titles the session in its first reply.
     </p>
     <p>

@@ -53,7 +53,7 @@ In cloud mode each API call costs ~0.5s from far away, so the first prompt shoul
   rest.
 - If the first prompt comes before the draft finishes, the prompt hook drafts itself and the server returns the same
   draft to both.
-- Later prompts, `rostr task`, and compaction read the session cache too (trusted for an hour), so they make no draft
+- Later prompts and compaction read the session cache too (trusted for an hour), so they make no draft
   call.
 - Local mode has no network to wait on, and Codex fires `SessionStart` with the first prompt, so both draft on the
   first prompt.
