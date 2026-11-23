@@ -21,7 +21,8 @@ Each handler reads the hook's JSON from stdin and prints the reply the agent exp
 | `Stop` | `turn-end` | Records that the turn ended |
 | `SessionEnd` | `session-end` | Benches the session's member and clears its files and pane label |
 
-`/draft` runs `rostr hook claude-code draft`, which drafts even with auto-draft off. With auto-draft off, only the
+`/draft` runs `rostr hook claude-code draft`, which drafts even with auto-draft off. `/draft 🦊 Fox` drafts that name,
+adding it to the roster if it's new (see [drafting.md](drafting.md#drafting-by-name)). With auto-draft off, only the
 first-prompt draft step is skipped. Headless runs (`claude -p`, detected from the parent process's arguments, since
 neither the hook input nor the entrypoint tells them apart) are never drafted or re-told; Remote Control's own
 `--print --sdk-url` sessions are not headless.

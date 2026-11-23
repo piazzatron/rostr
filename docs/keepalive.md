@@ -8,17 +8,16 @@ Every active draft carries three times, in both stores (see [storage.md](storage
 
 | Column | Set by | Decides |
 |---|---|---|
-| `last_seen_at` | A re-draft of the same session, `rostr task`, every turn report, the hourly keep-alive | **Expiry:** a draft unseen for longer than the owner's expiry (`rostr config expiry`, 24 hours by default) is benched |
+| `last_seen_at` | A re-draft of the same session, `rostr task`, every turn report, the hourly keep-alive | **Expiry:** a draft unseen for longer than the owner's expiry (`rostr config expiry`, 14 days by default) is benched |
 | `turn_ended_at` | The `Stop` hook. In cloud mode a draft made ahead of the first prompt starts with it set | **Resting:** the session rests once this is at least 15 minutes old (`store.RestAfter`) and `turn_started_at` isn't later |
 | `turn_started_at` | The next prompt or tool call after a turn ended | Ends the rest |
 
 ## Resting
 
-A session that finished its turn and hasn't been prompted for 15 minutes rests. It keeps its name and shows under
-`Resting:` in `rostr stats`, but when a new session finds every member busy, it takes the name of the member who has
-rested longest instead of drafting a numbered copy. Fanning out reuses the names of sessions you've left, while a
-session you come back to soon keeps its name. Sessions that never fire `SessionEnd` (a closed desktop session, an
-archived cloud session) rest rather than hold a name until expiry.
+A session that finished its turn and hasn't been prompted for 15 minutes rests. It shows under `Resting:` in
+`rostr stats` and keeps its name: a new session that finds every member busy drafts a numbered copy rather than take a
+resting session's name, since that would rename the session mid-conversation. Sessions that never fire `SessionEnd` (a
+closed desktop session, an archived cloud session) hold their names until expiry.
 
 Turn reports (`POST /v1/agents/turn` in cloud mode) run in the background and only move each time forward, so
 reports arriving out of order can't mark a working session as resting.
@@ -30,7 +29,7 @@ tool call reads it:
 
 - **Within 10 minutes of the turn's end** (15 less a margin for clock skew), or from a tool call: report the start in
   the background. Nothing can have taken the name yet.
-- **Later, on a prompt:** report the start and wait. If the draft was benched (its name taken, or expired), reclaim
+- **Later, on a prompt:** report the start and wait. If the draft was benched (expired, or `rostr bench`), reclaim
   the old member if free, else draft a new one with the saved task. If the name changed, the agent is told
   (`claudecode.RenamedAfterRest`) and the session retitled.
 
@@ -62,12 +61,12 @@ deleted. `rostr bench <name>` frees a dead session's name sooner.
 |---|---|
 | `cli/internal/keepalive` | The hourly throttle and the turn file |
 | `cli/internal/store/sqlite_test.go` | Reclaim, expiry, keep-alive bumps preventing expiry (fake clock) |
-| `server/internal/api/drafting_test.go`, `resting_test.go` | `POST /v1/agents/keepalive` and `/turn`, resting, taking a resting name |
+| `server/internal/api/drafting_test.go`, `resting_test.go` | `POST /v1/agents/keepalive` and `/turn`, resting, never taking a resting name |
 | `cli/cmd/rostr/main_test.go` | The hooks in local mode, with the keep-alive file's mtime moved back |
 | `tests/e2e_test.go` | The real CLI against the real server, moving timestamps in Postgres and the cache files to stand in for time passing |
 
-The end-to-end tests (`tests/run.sh`) include a session drafted ahead that's never prompted giving up its name, a
-resting session that lost its name being renamed on its next prompt, and the prompt hook bumping `last_seen_at` at
+The end-to-end tests (`tests/run.sh`) include a session drafted ahead that's never prompted keeping its name, a
+session whose name expired being renamed on its next prompt, and the prompt hook bumping `last_seen_at` at
 most once an hour.
 
 To poke at it by hand, start the stack (`docker compose up -d --wait`), point a sandboxed `HOME` at it with

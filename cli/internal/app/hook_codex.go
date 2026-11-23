@@ -158,8 +158,7 @@ func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, std
 func newHookCodexDraftCommand() *cobra.Command {
 	var session string
 	cmd := &cobra.Command{
-		Use:  "draft",
-		Args: cobra.NoArgs,
+		Use: "draft [<emoji> <name>]",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			if session == "" {
@@ -173,7 +172,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := hookDraftSession(cmd.Context(), st, session, workingDir(), "")
+			d, err := draftSessionAs(cmd.Context(), st, session, "", workingDir(), "", namedMember(args))
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil

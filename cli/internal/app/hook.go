@@ -370,8 +370,7 @@ func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, std
 func newHookDraftCommand() *cobra.Command {
 	var session string
 	cmd := &cobra.Command{
-		Use:  "draft",
-		Args: cobra.NoArgs,
+		Use: "draft [<emoji> <name>]",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			if session == "" {
@@ -385,7 +384,7 @@ func newHookDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := hookDraftSession(cmd.Context(), st, session, workingDir(), "")
+			d, err := draftSessionAs(cmd.Context(), st, session, "", workingDir(), "", namedMember(args))
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil
@@ -453,13 +452,7 @@ func knownSessionDraft(ctx context.Context, st store.Store, sessionID string) (d
 	return d, d != nil, err
 }
 
-// hookDraftSession drafts the session in dir.
-func hookDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (store.Draft, error) {
-	repo, _ := project.Identify(dir)
-	return st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task})
-}
-
-// autoDraftSession is hookDraftSession when auto-draft is on; drafted is false when it's off.
+// autoDraftSession drafts the session in dir when auto-draft is on; drafted is false when it's off.
 func autoDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (d store.Draft, drafted bool, err error) {
 	repo, _ := project.Identify(dir)
 	d, err = st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task, IfAutoDraft: true})

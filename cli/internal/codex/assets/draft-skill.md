@@ -11,4 +11,7 @@ Run this command:
 rostr hook codex draft
 ```
 
+If the user named someone, with or without an emoji, pass the name, quoted: `rostr hook codex draft '🦊 Fox'`. That
+drafts them, adding them to the roster if they aren't in it yet.
+
 Follow what it prints, then tell the user who you are in one short line.

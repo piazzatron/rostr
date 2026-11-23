@@ -445,6 +445,12 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
+		if req.Member != nil {
+			named, err := s.draftNamed(ctx, tx, req)
+			out = named.Draft
+			return err
+		}
+
 		// Same session, same name
 		active, err := s.bumpActive(ctx, tx, req.SessionID, req.Task)
 		if err != nil || active != nil {
@@ -477,19 +483,11 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
-		// The free member drafted least recently; else the longest-resting member's name; else a copy
+		// The free member drafted least recently, else a copy. A resting session keeps its name: taking it would
+		// rename that session mid-conversation.
 		member, copy, err := firstFreeMember(ctx, tx, r)
 		if err != nil {
 			return err
-		}
-		if copy > 1 {
-			rested, ok, err := s.takeRestingMember(ctx, tx, r)
-			if err != nil {
-				return err
-			}
-			if ok {
-				member, copy = rested, 1
-			}
 		}
 		inserted, err := s.insertDraft(ctx, tx, newDraft{
 			rosterID: r.id, member: member, copy: copy, sessionID: req.SessionID, repo: req.Repo, task: req.Task,
@@ -662,6 +660,61 @@ func (s *SQLite) bumpActive(ctx context.Context, tx *sql.Tx, sessionID, task str
 	return &d, err
 }
 
+// draftNamed drafts the member req.Member names for the session, adding them to the roster's cast if they aren't in
+// it, and benching the session's draft of anyone else.
+func (s *SQLite) draftNamed(ctx context.Context, tx *sql.Tx, req DraftRequest) (draftRow, error) {
+	want, err := namedMember(*req.Member)
+	if err != nil {
+		return draftRow{}, err
+	}
+	r, err := draftRoster(ctx, tx, req)
+	if err != nil {
+		return draftRow{}, err
+	}
+
+	active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.benched_at is null", req.SessionID)
+	if err != nil {
+		return draftRow{}, err
+	}
+	if len(active) > 0 && active[0].rosterID == r.id && active[0].Copy == 1 && roster.NamesMatch(active[0].Member, want.Name) {
+		d, err := s.bumpActive(ctx, tx, req.SessionID, req.Task)
+		return *d, err
+	}
+
+	member, inCast := memberNamed(r.Members, want.Name)
+	if !inCast {
+		if member, err = addToCast(r.Members, want, r.EmojiMode); err != nil {
+			return draftRow{}, err
+		}
+		if err := updateRoster(ctx, tx, r.id, r.EmojiMode, append(r.Members, member)); err != nil {
+			return draftRow{}, err
+		}
+	}
+	busy, err := busySlots(ctx, tx, r.id)
+	if err != nil {
+		return draftRow{}, err
+	}
+	if busy[slot{roster.NormalizeName(member.Name), 1}] {
+		return draftRow{}, userError{fmt.Sprintf("%s is drafted by another session.", member.Name), ErrNameTaken}
+	}
+
+	repo, task := req.Repo, req.Task
+	if len(active) > 0 {
+		if _, err := tx.ExecContext(ctx, "update drafts set benched_at = ? where id = ?", s.nowText(), active[0].id); err != nil {
+			return draftRow{}, err
+		}
+		if repo == "" {
+			repo = active[0].Repo
+		}
+		if task == "" {
+			task = active[0].Task
+		}
+	}
+	return s.insertDraft(ctx, tx, newDraft{
+		rosterID: r.id, member: member, copy: 1, sessionID: req.SessionID, repo: repo, task: task,
+	})
+}
+
 // resume redrafts the session's last member if they're still in the cast and free, or returns nil. The new draft keeps
 // the last draft's repo and task unless new ones are given.
 func (s *SQLite) resume(ctx context.Context, tx *sql.Tx, sessionID, repo, task string) (*draftRow, error) {
@@ -694,32 +747,6 @@ func (s *SQLite) resume(ctx context.Context, tx *sql.Tx, sessionID, repo, task s
 		rosterID: last.rosterID, member: member, copy: last.Copy, sessionID: sessionID, repo: repo, task: task,
 	})
 	return &d, err
-}
-
-// takeRestingMember releases the roster's longest-resting draft of a member's own name (copy 1) whose member is still
-// in the cast, and returns that member. ok is false when none is resting.
-func (s *SQLite) takeRestingMember(ctx context.Context, tx *sql.Tx, r rosterRow) (roster.Member, bool, error) {
-	drafts, err := queryDrafts(ctx, tx, "where d.roster_id = ? and d.copy = 1 and d.benched_at is null", r.id)
-	if err != nil {
-		return roster.Member{}, false, err
-	}
-	now := s.now().UTC()
-	var longest *draftRow
-	for i, d := range drafts {
-		since := restingSince(d.turnStarted, d.turnEnded, now)
-		if _, inCast := memberNamed(r.Members, d.Member); since.IsZero() || !inCast {
-			continue
-		}
-		if longest == nil || since.Before(longest.turnEnded) {
-			longest = &drafts[i]
-		}
-	}
-	if longest == nil {
-		return roster.Member{}, false, nil
-	}
-	member, _ := memberNamed(r.Members, longest.Member)
-	_, err = tx.ExecContext(ctx, "update drafts set benched_at = ? where id = ?", s.nowText(), longest.id)
-	return member, err == nil, err
 }
 
 // expireStaleDrafts releases active drafts not seen within the expiry, and deletes released drafts past retention.

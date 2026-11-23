@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 
@@ -417,5 +418,45 @@ func TestConcurrentDraftsAcrossInstancesNeverDraftAMemberTwice(t *testing.T) {
 			t.Fatalf("%s was drafted twice", displayOf(d))
 		}
 		seen[displayOf(d)] = true
+	}
+}
+
+func TestDraftingByNameAddsTheMemberAndSwitchesTheSession(t *testing.T) {
+	t.Parallel()
+	c := newOwner(t)
+	createRoster(c, "work", members("Gandalf", "Frodo"))
+	s1, s2 := c.session("s1"), c.session("s2")
+	draftSessionNamed(c, s1)
+	draftSessionNamed(c, s2)
+	named := func(session, name, emoji string) *httptest.ResponseRecorder {
+		return c.do("POST", "/v1/agents/draft", map[string]any{"session": session, "member": map[string]string{"name": name, "emoji": emoji}})
+	}
+
+	// A new name joins the cast, and the session's old draft is benched
+	if d := decodeDraft(t, named(s1, "Fox", "🦊").Body.Bytes()); d.Name != "Fox" || d.Emoji != "🦊" || d.Copy != 1 {
+		t.Fatalf("drafted %+v", d)
+	}
+	if n := queryInt(t, `select count(*) from rosters where name = 'work' and members @> '[{"name": "Fox", "emoji": "🦊"}]'
+		and owner_id = (select owner_id from drafts where session_id = $1 limit 1)`, s1); n != 1 {
+		t.Fatal("Fox wasn't added to the cast")
+	}
+	if d := draftSessionNamed(c, c.session("new")); d.Name != "Gandalf" {
+		t.Fatalf("Gandalf wasn't freed: drafted %s", displayOf(d))
+	}
+
+	// Asking again for the same name is idempotent
+	if d := decodeDraft(t, named(s1, "fox", "").Body.Bytes()); d.Name != "Fox" {
+		t.Fatalf("redraft %+v", d)
+	}
+	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is null`, s1); n != 1 {
+		t.Fatal("the session has more than one active draft")
+	}
+
+	// A name another session holds isn't taken from it
+	if rec := named(c.session("s3"), "Frodo", ""); rec.Code != http.StatusConflict {
+		t.Fatalf("taking a drafted name: %d %s", rec.Code, rec.Body)
+	}
+	if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is null and member_name = 'Frodo'`, s2); n != 1 {
+		t.Fatal("s2 lost Frodo")
 	}
 }

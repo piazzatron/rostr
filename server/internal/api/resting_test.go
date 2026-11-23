@@ -66,37 +66,23 @@ func TestTurnsMarkADraftResting(t *testing.T) {
 		http.StatusNotFound, "not_drafted")
 }
 
-func TestDraftTakesTheLongestRestingNameBeforeCopies(t *testing.T) {
+func TestDraftNeverTakesARestingName(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
-	createRoster(c, "work", members("Gandalf", "Frodo", "Samwise"))
-	gandalf, frodo, samwise := c.session("gandalf"), c.session("frodo"), c.session("samwise")
+	createRoster(c, "work", members("Gandalf", "Frodo"))
+	gandalf, frodo := c.session("gandalf"), c.session("frodo")
 	draftSessionNamed(c, gandalf)
 	draftSessionNamed(c, frodo)
-	draftSessionNamed(c, samwise)
-	execSQL(t, `update drafts set turn_ended_at = now() - interval '20 minutes' where session_id = $1`, gandalf)
-	execSQL(t, `update drafts set turn_ended_at = now() - interval '40 minutes' where session_id = $1`, frodo)
-	// Samwise's turn ended long ago, but a new one has started since: working, not resting
-	execSQL(t, `update drafts set turn_ended_at = now() - interval '50 minutes', turn_started_at = now() - interval '1 minute'
-		where session_id = $1`, samwise)
+	execSQL(t, `update drafts set turn_ended_at = now() - interval '2 hours' where session_id in ($1, $2)`, gandalf, frodo)
 
-	if d := draftSessionNamed(c, c.session("a")); displayOf(d) != "Frodo" {
-		t.Fatalf("drafted %s, want Frodo (resting longest)", displayOf(d))
+	if d := draftSessionNamed(c, c.session("a")); displayOf(d) != "Gandalf 2" {
+		t.Fatalf("drafted %s, want Gandalf 2 (resting sessions keep their names)", displayOf(d))
 	}
-	if d := draftSessionNamed(c, c.session("b")); displayOf(d) != "Gandalf" {
-		t.Fatalf("drafted %s, want Gandalf (resting next)", displayOf(d))
-	}
-	// Nobody else is resting, so copies, drafted least recently first
-	if d := draftSessionNamed(c, c.session("c")); displayOf(d) != "Samwise 2" {
-		t.Fatalf("drafted %s, want Samwise 2", displayOf(d))
-	}
-
-	// Frodo's session lost the name; coming back, it doesn't get it, and its keep-alive says it isn't drafted
-	callError(c, "POST", "/v1/agents/turn", map[string]any{"session": frodo, "ended": false, "at": time.Now()},
-		http.StatusNotFound, "not_drafted")
-	callError(c, "POST", "/v1/agents/keepalive", map[string]any{"session": frodo}, http.StatusNotFound, "not_drafted")
-	if d := draftSessionNamed(c, frodo); displayOf(d) != "Frodo 2" {
-		t.Fatalf("Frodo's old session drafted %s, want Frodo 2", displayOf(d))
+	for _, session := range []string{gandalf, frodo} {
+		if n := queryInt(t, `select count(*) from drafts where session_id = $1 and benched_at is null`, session); n != 1 {
+			t.Fatal("a resting session lost its name")
+		}
+		turn(c, session, false, time.Now())
 	}
 }
 
@@ -116,8 +102,8 @@ func TestDraftPrefersAFreeNameToAResting(t *testing.T) {
 	}
 }
 
-// A session drafted when it starts, before any prompt, rests like one whose turn ended at the draft: its name can be
-// taken 15 minutes later if it never gets a prompt, and its first turn makes it working.
+// A session drafted when it starts, before any prompt, rests like one whose turn ended at the draft, and its first turn
+// makes it working.
 func TestIdleDraftsRestUntilTheirFirstTurn(t *testing.T) {
 	t.Parallel()
 	c := newOwner(t)
@@ -134,8 +120,5 @@ func TestIdleDraftsRestUntilTheirFirstTurn(t *testing.T) {
 
 	if restingSinceOf(c, "Gandalf") == nil || restingSinceOf(c, "Frodo") != nil {
 		t.Fatal("want the never-prompted session resting and the prompted one working")
-	}
-	if d := draftSessionNamed(c, c.session("new")); displayOf(d) != "Gandalf" {
-		t.Fatalf("drafted %s, want the never-prompted session's Gandalf", displayOf(d))
 	}
 }

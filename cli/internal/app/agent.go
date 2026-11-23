@@ -25,9 +25,10 @@ func newDraftCommand() *cobra.Command {
 	var task, session, rosterFlag string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "draft",
-		Short: "Draft the next free member for this session",
-		Args:  cobra.NoArgs,
+		Use:   "draft [<emoji> <name>]",
+		Short: "Draft the next free member for this session, or the one you name",
+		Long: "Draft the next free member for this session. Name someone (\"rostr draft 🦊 Fox\") to draft them " +
+			"instead, adding them to the roster if they aren't in it yet.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if session == "" {
@@ -39,7 +40,7 @@ func newDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := draftSession(ctx, st, session, rosterFlag, workingDir(), task)
+			d, err := draftSessionAs(ctx, st, session, rosterFlag, workingDir(), task, namedMember(args))
 			if err != nil {
 				return err
 			}
@@ -172,11 +173,22 @@ func newTaskCommand() *cobra.Command {
 	return cmd
 }
 
-// draftSession drafts for a session in dir. The store picks the roster for a first draft (--roster, else the
-// project's link, else the default), in the same call, so cloud mode drafts in one request.
-func draftSession(ctx context.Context, st store.Store, session, rosterFlag, dir, task string) (store.Draft, error) {
+// draftSessionAs drafts member for a session in dir, or the next free member when it's nil. The store picks the roster
+// for a first draft (--roster, else the project's link, else the default), in the same call, so cloud mode drafts in
+// one request.
+func draftSessionAs(ctx context.Context, st store.Store, session, rosterFlag, dir, task string, member *roster.Member) (store.Draft, error) {
 	repo, _ := project.Identify(dir)
-	return st.Draft(ctx, store.DraftRequest{SessionID: session, Roster: rosterFlag, Repo: repo, Task: task})
+	return st.Draft(ctx, store.DraftRequest{SessionID: session, Roster: rosterFlag, Repo: repo, Task: task, Member: member})
+}
+
+// namedMember is the member named by a command's arguments ("🦊 Fox", or "🦊", "Fox"), or nil for none.
+func namedMember(args []string) *roster.Member {
+	text := strings.TrimSpace(strings.Join(args, " "))
+	if text == "" {
+		return nil
+	}
+	m := roster.ParseMember(text)
+	return &m
 }
 
 // findDraftedAgent finds an active draft by name ("Gandalf", "gandalf 2", "eowyn") across every roster, or only in

@@ -568,7 +568,7 @@ func TestTwoMachinesStartingSessionsAtOnceGetDifferentNames(t *testing.T) {
 	})
 }
 
-func TestASessionOpenedButNeverPromptedGivesUpItsName(t *testing.T) {
+func TestASessionOpenedButNeverPromptedKeepsItsName(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
@@ -578,19 +578,19 @@ func TestASessionOpenedButNeverPromptedGivesUpItsName(t *testing.T) {
 	}
 	waitFor(t, "the draft ahead", func() bool { return m.list().drafted()["Gandalf"] == "" && len(m.list().drafted()) == 1 })
 
-	// Twenty minutes with no prompt: the session is resting, so another session takes Gandalf rather than a copy
+	// Twenty minutes with no prompt: the session is resting, but keeps Gandalf, so another session gets a copy
 	_, err := db.Exec(context.Background(), `
 		update drafts set turn_ended_at = turn_ended_at - interval '20 minutes', drafted_at = drafted_at - interval '20 minutes'
 		where owner_id = $1 and session_id = 'idle1'`, m.ownerID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := m.draft(m.home, "other"); d.Name != "Gandalf" {
-		t.Fatalf("other session drafted %+v, want Gandalf", d)
+	if d := m.draft(m.home, "other"); d.Name != "Gandalf 2" {
+		t.Fatalf("other session drafted %+v, want Gandalf 2", d)
 	}
 }
 
-func TestARestingSessionThatLostItsNameIsRenamedOnItsNextPrompt(t *testing.T) {
+func TestASessionWhoseNameExpiredIsRenamedOnItsNextPrompt(t *testing.T) {
 	t.Parallel()
 	m := newMachine(t)
 	m.ok("assemble", "work", "--names", "🧙 Gandalf", "--cloud")
@@ -615,9 +615,8 @@ func TestARestingSessionThatLostItsNameIsRenamedOnItsNextPrompt(t *testing.T) {
 	}
 	waitFor(t, "the turn's end to reach the server", turnEnded)
 
-	// Twenty minutes pass with no prompt, on both clocks: the session is resting, so a new session takes Gandalf
-	// rather than a copy
-	if _, err := db.Exec(context.Background(), "update drafts set turn_ended_at = turn_ended_at - interval '20 minutes' where owner_id = $1 and session_id = 'rest1'",
+	// Time passes with no prompt, on both clocks, until the draft expires and a new session takes Gandalf
+	if _, err := db.Exec(context.Background(), "update drafts set turn_ended_at = turn_ended_at - interval '20 minutes', benched_at = now() where owner_id = $1 and session_id = 'rest1'",
 		m.ownerID()); err != nil {
 		t.Fatal(err)
 	}
@@ -846,4 +845,32 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 	m.fails("stats")
 	m.fails("draft", "--session", "s5")
+}
+
+func TestDraftingAnyNameAddsItToTheRoster(t *testing.T) {
+	t.Parallel()
+	for name, flags := range map[string][]string{"local": nil, "cloud": {"--cloud"}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := newMachine(t)
+			m.ok(append([]string{"assemble", "work", "--names", "🧙 Gandalf"}, flags...)...)
+			m.draft(m.home, "s1")
+
+			if d := m.draft(m.home, "s1", "🦊", "Fox"); d.Name != "Fox" || d.Emoji != "🦊" {
+				t.Fatalf("drafted %+v, want 🦊 Fox", d)
+			}
+			// Gandalf was benched, so the next session gets him, and Fox stays on the roster for later drafts
+			if d := m.draft(m.home, "s2"); d.Name != "Gandalf" {
+				t.Fatalf("next session drafted %+v, want Gandalf", d)
+			}
+			m.ok("bench", "Fox")
+			if d := m.draft(m.home, "s3"); d.Name != "Fox" {
+				t.Fatalf("drafted %+v, want Fox from the roster", d)
+			}
+			// Another session can't take a drafted name
+			if r := m.run(m.home, "", "draft", "--session", "s4", "Gandalf"); r.code != 1 {
+				t.Fatalf("taking Gandalf: %+v", r)
+			}
+		})
+	}
 }

@@ -33,14 +33,15 @@ import Rostr from "../components/Rostr.astro";
         roster.
       </li>
       <li>
-        <strong>Take a resting name.</strong> If everyone's busy, the name of the session that has rested longest.
-      </li>
-      <li>
-        <strong>Copies.</strong> If no one is resting either, a numbered copy like 🧙 Gandalf 2. A session always gets a
-        name.
+        <strong>Copies.</strong> If everyone's busy, a numbered copy like 🧙 Gandalf 2. A session always gets a name,
+        and never loses it to another session.
       </li>
     </ol>
     <p>A resumed session gets its old name back, if no one else has taken it since.</p>
+    <p>
+      To pick a name yourself, use <code>/draft 🦊 Fox</code> (or <code>rostr draft 🦊 Fox</code>). Anyone not on the
+      roster yet is added to it, and a name another session holds stays with that session.
+    </p>
     <p>
       In cloud mode, Claude Code sessions draft in the background as soon as they start, so the first prompt doesn't
       wait on the network.
@@ -54,9 +55,8 @@ import Rostr from "../components/Rostr.astro";
     </p>
     <ul class="terse-list">
       <li>
-        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting. It
-        keeps its name, but when every other name is taken, a new session can take it. If that happens, the resting
-        session gets a new name on its next prompt, and the agent is told.
+        <strong>Resting.</strong> A session that finished its turn and gets no new prompt for 15 minutes is resting,
+        shown as such in <code>rostr stats</code>. It keeps its name: new sessions never take it.
       </li>
       <li>
         <strong>Keep-alive.</strong> Each prompt and turn tells <Rostr /> the session is still around, and later prompts
@@ -64,7 +64,7 @@ import Rostr from "../components/Rostr.astro";
       </li>
       <li>
         <strong>Benching.</strong> When a session ends, its name goes back to the bench. A session that's never seen
-        again, like a closed desktop session, is benched after 24 hours (<code>rostr config expiry</code>), and{" "}
+        again, like a closed desktop session, is benched after 14 days unseen (<code>rostr config expiry</code>), and{" "}
         <code>rostr bench &lt;name&gt;</code> frees a name sooner.
       </li>
     </ul>
@@ -222,7 +222,7 @@ import Rostr from "../components/Rostr.astro";
         writes anyway.
       </li>
       <li>
-        <strong>Now and then.</strong> After compaction, or when a resting session is renamed, the agent is told its
+        <strong>Now and then.</strong> After compaction, or when a session that was away long enough to lose its name is renamed, the agent is told its
         name again, about 120 tokens.
       </li>
     </ul>
