@@ -31,7 +31,7 @@ func newHookCommand() *cobra.Command {
 	hook := &cobra.Command{Use: "hook", Short: "What the installed hooks run (and `rostr hook sync` to reinstall them)"}
 	claudeCode := &cobra.Command{Use: "claude-code", Short: "Claude Code hooks"}
 	codexHooks := &cobra.Command{Use: "codex", Short: "Codex hooks"}
-	hook.AddCommand(claudeCode, codexHooks, newHookDraftAheadCommand(), newHookSummarizeCommand(), newHookTurnCommand(), newHookSyncCommand())
+	hook.AddCommand(claudeCode, codexHooks, newHookDraftAheadCommand(), newHookSummarizeCommand(), newHookTaskCommand(), newHookTurnCommand(), newHookSyncCommand())
 
 	claudeCode.AddCommand(
 		hookSubcommand("session-start", claudecode.ReadHookInput, hookSessionStart),
@@ -104,7 +104,7 @@ func hookSessionStart(ctx context.Context, input claudecode.HookInput, stdout, s
 	}
 	_ = keepalive.Mark(paths.KeepAliveDir(), input.SessionID, time.Now())
 	pane.Label(ctx, pane.Claude, d.Display())
-	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
+	fmt.Fprintln(stdout, claudecode.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster)))
 	return nil
 }
 
@@ -151,7 +151,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 			d = *renamed
 		}
 		if placeholder != "" {
-			_ = spawnHook(nil, "task", "--session", input.SessionID, "--", placeholder)
+			_ = spawnHook(nil, "hook", "task", "--session", input.SessionID, "--", placeholder)
 		}
 	} else {
 		drafted, ok, err := autoDraftSession(ctx, st, input.SessionID, hookDir(input.Cwd), placeholder)
@@ -171,7 +171,7 @@ func hookPrompt(ctx context.Context, input claudecode.HookInput, stdout, stderr 
 	// of the prompt as the task. A desktop Local session doesn't: its agent titles it first thing, and a placeholder
 	// would only change the title once more
 	where := titleWhere(input.SessionID)
-	context := claudecode.Identity(d.Display(), d.Roster, input.SessionID)
+	context := claudecode.Identity(d.Display(), d.Roster)
 	if instruction := claudecode.TitleInstruction(d.Display(), input.SessionID, where); instruction != "" {
 		context += "\n" + instruction
 	}
@@ -370,8 +370,7 @@ func hookSessionEnd(ctx context.Context, input claudecode.HookInput, stdout, std
 func newHookDraftCommand() *cobra.Command {
 	var session string
 	cmd := &cobra.Command{
-		Use:  "draft",
-		Args: cobra.NoArgs,
+		Use: "draft [<emoji> <name>]",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			if session == "" {
@@ -385,14 +384,14 @@ func newHookDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := hookDraftSession(cmd.Context(), st, session, workingDir(), "")
+			d, err := draftSessionAs(cmd.Context(), st, session, "", workingDir(), "", namedMember(args))
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil
 			}
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			pane.Label(cmd.Context(), pane.Claude, d.Display())
-			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
+			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster))
 			if instruction := claudecode.TitleInstruction(d.Display(), session, titleWhere(session)); instruction != "" {
 				fmt.Fprintf(out, "\n%s\n", instruction)
 			}
@@ -453,13 +452,7 @@ func knownSessionDraft(ctx context.Context, st store.Store, sessionID string) (d
 	return d, d != nil, err
 }
 
-// hookDraftSession drafts the session in dir.
-func hookDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (store.Draft, error) {
-	repo, _ := project.Identify(dir)
-	return st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task})
-}
-
-// autoDraftSession is hookDraftSession when auto-draft is on; drafted is false when it's off.
+// autoDraftSession drafts the session in dir when auto-draft is on; drafted is false when it's off.
 func autoDraftSession(ctx context.Context, st store.Store, sessionID, dir, task string) (d store.Draft, drafted bool, err error) {
 	repo, _ := project.Identify(dir)
 	d, err = st.Draft(ctx, store.DraftRequest{SessionID: sessionID, Repo: repo, Task: task, IfAutoDraft: true})

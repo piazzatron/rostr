@@ -357,12 +357,10 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 	}
 	waitFor(t, "the draft ahead of the first prompt", func() bool { return len(m.list().drafted()) == 1 })
 
-	// The first prompt tells the agent the name drafted for it, and to record its task in its reply, and titles the
-	// session, all from the session's cache; the task reaches the server just after
+	// The first prompt tells the agent the name drafted for it and titles the session, all from the session's cache; the task reaches the server just after
 	prompt := fmt.Sprintf(`{"session_id":"hs1","transcript_path":"/nonexistent","cwd":%q,"hook_event_name":"UserPromptSubmit","prompt":"Fix the flaky login test\nplease","prompt_id":"p1"}`, repo)
 	r := hook("prompt", prompt)
-	if r.code != 0 || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) ||
-		!strings.Contains(r.stdout, "rostr task --session hs1") {
+	if r.code != 0 || !strings.Contains(r.stdout, `🧙 Gandalf · Fix the flaky login test`) {
 		t.Fatalf("prompt: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	waitFor(t, "the first prompt's task", func() bool { return m.list().drafted()["Gandalf"] == "Fix the flaky login test" })
@@ -377,8 +375,8 @@ func TestClaudeCodeHooksInCloudMode(t *testing.T) {
 		t.Fatalf("later prompt: %+v", r)
 	}
 
-	// The agent sets its task through ROSTR_SESSION; compaction re-tells the same name
-	m.with("ROSTR_SESSION=hs1").okIn(repo, "task", "Deflake login test")
+	// The task changes (the hooks' task command finds the session through ROSTR_SESSION); compaction re-tells the same name
+	m.with("ROSTR_SESSION=hs1").okIn(repo, "hook", "task", "Deflake login test")
 	expectIdentity("compact", hook("session-start", start("compact")))
 
 	// Session end releases; resume gets the old name back
@@ -754,13 +752,11 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 		t.Fatalf("draft --roster: %+v", d)
 	}
 
-	// task and release, by session and by name across rosters
-	m.with("ROSTR_SESSION=s1").okIn(repo, "task", "Fix auth redirect loop")
-	m.fails("task", "gandalf", "x")
-	m.ok("task", "GANDALF", "Review the PR", "--roster", "work")
+	// Release, by session and by name across rosters
+	m.with("ROSTR_SESSION=s1").okIn(repo, "hook", "task", "Fix auth redirect loop")
 	m.ok("bench", "gandalf", "--roster", "side")
 	m.fails("bench", "ada 2")
-	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "Review the PR" {
+	if drafted := m.list().drafted(); len(drafted) != 2 || drafted["Ada"] != "Fix auth redirect loop" || drafted["Gandalf"] != "" {
 		t.Fatalf("drafted: %v", drafted)
 	}
 	m.with("ROSTR_SESSION=s2").ok("bench")
@@ -846,4 +842,32 @@ func TestEveryCommandInCloudMode(t *testing.T) {
 	}
 	m.fails("stats")
 	m.fails("draft", "--session", "s5")
+}
+
+func TestDraftingAnyNameAddsItToTheRoster(t *testing.T) {
+	t.Parallel()
+	for name, flags := range map[string][]string{"local": nil, "cloud": {"--cloud"}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := newMachine(t)
+			m.ok(append([]string{"assemble", "work", "--names", "🧙 Gandalf"}, flags...)...)
+			m.draft(m.home, "s1")
+
+			if d := m.draft(m.home, "s1", "🦊", "Fox"); d.Name != "Fox" || d.Emoji != "🦊" {
+				t.Fatalf("drafted %+v, want 🦊 Fox", d)
+			}
+			// Gandalf was benched, so the next session gets him, and Fox stays on the roster for later drafts
+			if d := m.draft(m.home, "s2"); d.Name != "Gandalf" {
+				t.Fatalf("next session drafted %+v, want Gandalf", d)
+			}
+			m.ok("bench", "Fox")
+			if d := m.draft(m.home, "s3"); d.Name != "Fox" {
+				t.Fatalf("drafted %+v, want Fox from the roster", d)
+			}
+			// Another session can't take a drafted name
+			if r := m.run(m.home, "", "draft", "--session", "s4", "Gandalf"); r.code != 1 {
+				t.Fatalf("taking Gandalf: %+v", r)
+			}
+		})
+	}
 }

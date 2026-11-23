@@ -44,7 +44,7 @@ func hookCodexSessionStart(ctx context.Context, input codex.HookInput, stdout, s
 		_ = codex.SetThreadName(ctx, input.SessionID, codexThreadName(*d))
 	}
 	pane.Label(ctx, pane.Codex, d.Display())
-	fmt.Fprintln(stdout, codex.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
+	fmt.Fprintln(stdout, codex.AdditionalContext("SessionStart", claudecode.Identity(d.Display(), d.Roster)))
 	return nil
 }
 
@@ -74,7 +74,7 @@ func hookCodexPrompt(ctx context.Context, input codex.HookInput, stdout, stderr 
 		pane.Label(ctx, pane.Codex, d.Display())
 	}
 	_ = spawnHook(codexTitleInput{SessionID: input.SessionID, Placeholder: d.Task}, "hook", "codex", "title")
-	fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.Identity(d.Display(), d.Roster, input.SessionID)))
+	fmt.Fprintln(stdout, codex.AdditionalContext("UserPromptSubmit", claudecode.Identity(d.Display(), d.Roster)))
 	return nil
 }
 
@@ -158,8 +158,7 @@ func hookCodexSessionEnd(ctx context.Context, input codex.HookInput, stdout, std
 func newHookCodexDraftCommand() *cobra.Command {
 	var session string
 	cmd := &cobra.Command{
-		Use:  "draft",
-		Args: cobra.NoArgs,
+		Use: "draft [<emoji> <name>]",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 			if session == "" {
@@ -173,7 +172,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := hookDraftSession(cmd.Context(), st, session, workingDir(), "")
+			d, err := draftSessionAs(cmd.Context(), st, session, "", workingDir(), "", namedMember(args))
 			if err != nil {
 				fmt.Fprintln(out, "rostr couldn't draft this session:", err)
 				return nil
@@ -181,7 +180,7 @@ func newHookCodexDraftCommand() *cobra.Command {
 			_ = keepalive.Mark(paths.KeepAliveDir(), session, time.Now())
 			_ = codex.SetThreadName(cmd.Context(), session, codexThreadName(d))
 			pane.Label(cmd.Context(), pane.Codex, d.Display())
-			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster, session))
+			fmt.Fprintln(out, claudecode.Identity(d.Display(), d.Roster))
 			return nil
 		},
 	}

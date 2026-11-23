@@ -130,12 +130,15 @@ func TestTaskFromTitle(t *testing.T) {
 }
 
 func TestIdentityText(t *testing.T) {
-	// The name, the roster, and the command to record the task; the wording around them is free to change
-	got := Identity("🧙 Gandalf", "work", "s1")
-	for _, want := range []string{"🧙 Gandalf", `"work"`, "rostr task --session s1"} {
+	// The name and the roster, and no ask to update the task as work changes; the wording around them is free to change
+	got := Identity("🧙 Gandalf", "work")
+	for _, want := range []string{"🧙 Gandalf", `"work"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("no %q in:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "rostr task") {
+		t.Fatalf("asks the agent to run rostr task:\n%s", got)
 	}
 }
 
@@ -221,7 +224,7 @@ func TestInstallIsIdempotentAndKeepsOtherSettings(t *testing.T) {
 	if err := json.Unmarshal(second, &settings); err != nil {
 		t.Fatal(err)
 	}
-	if settings.Model != "opus" || len(settings.Permissions.Allow) != 4 || settings.Permissions.Allow[0] != "Bash(ls:*)" {
+	if settings.Model != "opus" || len(settings.Permissions.Allow) != 3 || settings.Permissions.Allow[0] != "Bash(ls:*)" {
 		t.Errorf("other settings lost: %+v", settings)
 	}
 	if !strings.Contains(string(second), ">/dev/null") {

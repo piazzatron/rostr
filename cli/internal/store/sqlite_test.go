@@ -229,11 +229,11 @@ func TestExpiryReleasesStaleDrafts(t *testing.T) {
 	createRoster(t, st, "work", members("Gandalf", "Frodo"))
 
 	draft(t, st, "s1", "work") // Gandalf
-	clock.Advance(18 * time.Hour)
+	clock.Advance(10 * 24 * time.Hour)
 	draft(t, st, "s2", "work") // Frodo; Gandalf isn't stale yet
-	clock.Advance(8 * time.Hour)
+	clock.Advance(5 * 24 * time.Hour)
 
-	// s1 is 26 hours unseen (released), s2 only 8
+	// s1 is 15 days unseen (released), s2 only 5
 	active, err := st.ActiveDrafts(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -324,7 +324,7 @@ func TestASessionKeepsItsDraftAcrossProjects(t *testing.T) {
 
 	// Once its name is gone, a new member comes from the roster and project it's in now
 	draft(t, st, "s2", "work") // Frodo
-	clock.Advance(8 * 24 * time.Hour)
+	clock.Advance(15 * 24 * time.Hour)
 	draft(t, st, "s3", "work") // both expired; takes Gandalf, drafted longest ago
 	d, err := st.Draft(ctx, DraftRequest{SessionID: "s1", Roster: "play", Repo: "other/repo"})
 	if err != nil {
@@ -420,7 +420,7 @@ func TestFirstRosterBecomesDefault(t *testing.T) {
 	createRoster(t, st, "work", members("A"))
 	createRoster(t, st, "play", members("B"))
 	settings, _ := st.Settings(ctx)
-	if settings.DefaultRoster != "work" || !settings.AutoDraft || settings.Expiry != "1d" {
+	if settings.DefaultRoster != "work" || !settings.AutoDraft || settings.Expiry != "14d" {
 		t.Fatalf("settings %+v", settings)
 	}
 }
@@ -738,5 +738,44 @@ func TestAutoDraftOffOnlyKeepsAnActiveDraft(t *testing.T) {
 	bench(t, st, "s1")
 	if _, err := st.Draft(ctx, DraftRequest{SessionID: "s1", IfAutoDraft: true}); !errors.Is(err, ErrAutoDraftOff) {
 		t.Fatalf("got %v, want ErrAutoDraftOff rather than resuming", err)
+	}
+}
+
+func TestDraftingByNameAddsTheMemberAndSwitchesTheSession(t *testing.T) {
+	st, _ := openTestStore(t)
+	createRoster(t, st, "work", members("Gandalf", "Frodo"))
+	draft(t, st, "s1", "work")
+	draft(t, st, "s2", "work")
+	named := func(session string, m roster.Member) (Draft, error) {
+		return st.Draft(ctx, DraftRequest{SessionID: session, Member: &m})
+	}
+
+	// A new name joins the cast, and the session's old draft is benched
+	d, err := named("s1", roster.Member{Name: "Fox", Emoji: "🦊"})
+	if err != nil || d.Member != "Fox" || d.Emoji != "🦊" || d.Copy != 1 {
+		t.Fatalf("drafted %+v, %v", d, err)
+	}
+	r, _ := st.Roster(ctx, "work")
+	if m, ok := memberNamed(r.Members, "fox"); !ok || m.Emoji != "🦊" {
+		t.Fatalf("cast %+v", r.Members)
+	}
+	if again := draft(t, st, "new", "work"); again.Member != "Gandalf" {
+		t.Fatalf("Gandalf wasn't freed: drafted %s", again.Name())
+	}
+
+	// Asking again for the same name is idempotent; a name without an emoji gets one
+	if d, err := named("s1", roster.Member{Name: "fox"}); err != nil || d.Member != "Fox" {
+		t.Fatalf("redraft %+v, %v", d, err)
+	}
+	if d, err := named("s3", roster.Member{Name: "Owl"}); err != nil || d.Emoji == "" {
+		t.Fatalf("no emoji: %+v, %v", d, err)
+	}
+
+	// A name another session holds isn't taken from it
+	if _, err := named("s3", roster.Member{Name: "Frodo"}); !errors.Is(err, ErrNameTaken) {
+		t.Fatalf("taking a drafted name: %v", err)
+	}
+	if d, _ := st.SessionDraft(ctx, "s2"); d == nil || d.Member != "Frodo" {
+		t.Fatalf("s2 lost Frodo: %+v", d)
 	}
 }

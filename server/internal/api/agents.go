@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -74,6 +75,7 @@ func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID str
 		Repo     *string `json:"repo"`
 		Task     *string `json:"task"`
 		Idle     bool    `json:"idle"`
+		Member   *member `json:"member"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		return err
@@ -91,9 +93,14 @@ func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID str
 	}
 
 	in := draftInput{req.Session, req.Roster, repoHash, repo, task, req.Idle}
-	unlock := s.draftLocks.lock(ownerID)
-	resp, err := draftSession(r.Context(), s.db, ownerID, in, true)
-	unlock()
+	var resp draftResponse
+	if req.Member != nil {
+		resp, err = s.draftNamed(r.Context(), ownerID, in, *req.Member)
+	} else {
+		unlock := s.draftLocks.lock(ownerID)
+		resp, err = draftSession(r.Context(), s.db, ownerID, in, true)
+		unlock()
+	}
 	if err != nil {
 		return err
 	}
@@ -101,6 +108,119 @@ func (s *Server) handleDraft(w http.ResponseWriter, r *http.Request, ownerID str
 	s.live.notify()
 	writeJSON(w, http.StatusOK, resp)
 	return nil
+}
+
+// draftNamed drafts the member named for the session, adding them to the roster's cast if they aren't in it, and
+// benching the session's draft of anyone else. It runs in one transaction holding the owner's row, so it can't race
+// another draft of the owner's to a cast change.
+func (s *Server) draftNamed(ctx context.Context, ownerID string, in draftInput, want member) (draftResponse, error) {
+	name, err := validateName("Member name", want.Name)
+	if err != nil {
+		return draftResponse{}, err
+	}
+	if len(want.Emoji) > maxEmojiBytes {
+		return draftResponse{}, invalidRequest(fmt.Sprintf("Member %q needs an emoji.", name))
+	}
+	want.Name = name
+
+	var resp draftResponse
+	err = s.withOwnerTx(ctx, ownerID, func(tx pgx.Tx) error {
+		roster, err := namedDraftRoster(ctx, tx, ownerID, in)
+		if err != nil {
+			return err
+		}
+		var activeID *int64
+		var activeRoster, activeMember string
+		var activeCopy int
+		err = tx.QueryRow(ctx, `select d.id, d.roster_id, d.member_name, d.copy from drafts d
+			where d.owner_id = $1 and d.session_id = $2 and d.benched_at is null`, ownerID, in.session).Scan(
+			&activeID, &activeRoster, &activeMember, &activeCopy)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if activeID != nil && activeRoster == roster.ID && activeCopy == 1 && nameKey(activeMember) == nameKey(name) {
+			resp, err = scanDraftOnly(tx.QueryRow(ctx, `
+				update drafts d set last_seen_at = now(), task = coalesce($2, d.task) from rosters r
+				where r.id = d.roster_id and d.id = $1 returning `+draftColumns, *activeID, in.task))
+			return err
+		}
+
+		m, inCast := roster.findMember(name)
+		if !inCast {
+			if want.Emoji == "" {
+				return invalidRequest(fmt.Sprintf("Member %q needs an emoji.", name))
+			}
+			c, err := validateCast(cast{EmojiMode: roster.EmojiMode, Members: append(roster.Members, want)})
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `update rosters set members = $2 where id = $1`, roster.ID, c.Members); err != nil {
+				return err
+			}
+			m = want
+		}
+
+		rows, err := tx.Query(ctx, `select member_name from drafts where roster_id = $1 and copy = 1 and benched_at is null`,
+			roster.ID)
+		if err != nil {
+			return err
+		}
+		drafted, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		if slices.ContainsFunc(drafted, func(n string) bool { return nameKey(n) == nameKey(m.Name) }) {
+			return &apiError{http.StatusConflict, "member_taken", fmt.Sprintf("%s is drafted by another session.", m.Name), nil}
+		}
+
+		d := newDraft{ownerID, roster, m, 1, in.session, in.repoHash, in.repo, in.task, false}
+		if activeID != nil {
+			// The new draft keeps the session's repo and task unless new ones were sent
+			var repoHash *string
+			var repo, task []byte
+			if err := tx.QueryRow(ctx, `update drafts set benched_at = now() where id = $1 returning repo_hash, repo, task`,
+				*activeID).Scan(&repoHash, &repo, &task); err != nil {
+				return err
+			}
+			if d.repoHash == nil {
+				d.repoHash, d.repo = repoHash, repo
+			}
+			if d.task == nil {
+				d.task = task
+			}
+		}
+		resp = draftResponse{
+			Name: m.Name, Emoji: m.Emoji, Copy: 1, Roster: roster.Name, EmojiMode: roster.EmojiMode, Session: in.session,
+			Task: encodeCiphertext(d.task), Repo: encodeCiphertext(d.repo),
+		}
+		return tx.QueryRow(ctx, `
+			insert into drafts (owner_id, roster_id, member_name, member_emoji, copy, session_id, repo_hash, repo, task)
+			values ($1, $2, $3, $4, 1, $5, $6, $7, $8)
+			returning drafted_at`,
+			ownerID, roster.ID, m.Name, m.Emoji, in.session, d.repoHash, d.repo, d.task).Scan(&resp.DraftedAt)
+	})
+	return resp, err
+}
+
+// namedDraftRoster picks the roster for a draft by name, as draftRoster does for any first draft.
+func namedDraftRoster(ctx context.Context, tx pgx.Tx, ownerID string, in draftInput) (rosterRow, error) {
+	if in.roster != nil {
+		return findRosterByName(ctx, tx, ownerID, *in.roster)
+	}
+	roster, err := scanRoster(tx.QueryRow(ctx, `
+		select `+rosterColumns+` from rosters r
+		where r.id = coalesce(
+			(select roster_id from project_links where owner_id = $1 and repo_hash = $2),
+			(select default_roster_id from owners where id = $1))`, ownerID, in.repoHash))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return rosterRow{}, errNoRosters
+	}
+	return roster, err
+}
+
+func scanDraftOnly(row pgx.Row) (draftResponse, error) {
+	_, d, err := scanDraft(row)
+	return d, err
 }
 
 // handleKeepAlive bumps the session's draft, or reclaims its last member if the draft expired and they're free. It

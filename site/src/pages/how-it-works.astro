@@ -42,6 +42,10 @@ import Rostr from "../components/Rostr.astro";
     </ol>
     <p>A resumed session gets its old name back, if no one else has taken it since.</p>
     <p>
+      To pick a name yourself, use <code>/draft 🦊 Fox</code> (or <code>rostr draft 🦊 Fox</code>). Anyone not on the
+      roster yet is added to it, and a name another session holds stays with that session.
+    </p>
+    <p>
       In cloud mode, Claude Code sessions draft in the background as soon as they start, so the first prompt doesn't
       wait on the network.
     </p>
@@ -64,7 +68,7 @@ import Rostr from "../components/Rostr.astro";
       </li>
       <li>
         <strong>Benching.</strong> When a session ends, its name goes back to the bench. A session that's never seen
-        again, like a closed desktop session, is benched after 24 hours (<code>rostr config expiry</code>), and{" "}
+        again, like a closed desktop session, is benched after 14 days unseen (<code>rostr config expiry</code>), and{" "}
         <code>rostr bench &lt;name&gt;</code> frees a name sooner.
       </li>
     </ul>
@@ -77,12 +81,11 @@ import Rostr from "../components/Rostr.astro";
       and Slack messages. After compaction, it's told again.
     </p>
     <p>
-      Commands the agent runs, like <code>rostr task</code>, need to know which session they're in. In Claude Code, the
+      Commands the agent runs, like <code>rostr draft</code>, need to know which session they're in. In Claude Code, the
       start hook appends <code>export ROSTR_SESSION=&lt;session ID&gt;</code> to the session's env file (the path Claude
       Code passes in <code>CLAUDE_ENV_FILE</code>), and Claude Code loads that file before every shell command the agent
-      runs. Codex sets <code>CODEX_THREAD_ID</code> in its commands' environment itself, so <Rostr /> reads that. The
-      <code>rostr task</code> command the agent is told to run also names the session with <code>--session</code>, so
-      it works even where neither variable is set.
+      runs. Codex sets <code>CODEX_THREAD_ID</code> in its commands' environment itself, so <Rostr /> reads that. Every command also takes <code>--session</code>, for where
+      neither variable is set.
     </p>
   </section>
 
@@ -162,8 +165,8 @@ import Rostr from "../components/Rostr.astro";
       </tbody>
     </table>
     <p>
-      The summary is recorded as the session's task, which <code>rostr stats</code> shows. When the task changes, later
-      prompts retitle the session to match.
+      The summary is recorded as the session's task, which <code>rostr stats</code> shows. The agent isn't asked to
+      change it as its work changes, so the title stays put after that.
     </p>
     <h3>Why the agent writes the summary in the app</h3>
     <p>

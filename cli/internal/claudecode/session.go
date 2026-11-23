@@ -162,17 +162,14 @@ func RenamedAfterRest(display, from string) string {
 		"one was resting). Sign as %s from now on.", display, from, display)
 }
 
-// Identity is what the agent is told whenever it's drafted or re-told its name. The task command names the session
-// explicitly, so it works even where ROSTR_SESSION isn't set (a session started before the hooks were installed).
-func Identity(display, rosterName, sessionID string) string {
+// Identity is what the agent is told whenever it's drafted or re-told its name.
+func Identity(display, rosterName string) string {
 	return strings.Join([]string{
 		fmt.Sprintf("You're %s for this session (drafted by rostr from the %q roster).", display, rosterName),
 		fmt.Sprintf("- When you write somewhere other than this chat, sign it \"— %s\": Slack messages, emails, "+
 			"PR descriptions, PR and issue comments.", display),
 		"- Don't put the name in code, commit messages, or files.",
 		"- Your user's own instructions about attribution or sign-offs take precedence over these.",
-		fmt.Sprintf("- When your work changes, run this first, before you write anything: %s \"<new task>\"",
-			taskCommand(sessionID)),
 	}, "\n")
 }
 
@@ -241,11 +238,6 @@ func TaskFromTitle(display, title string) (string, bool) {
 	task, ok := strings.CutPrefix(title, display+" · ")
 	task = strings.TrimSpace(task)
 	return task, ok && task != ""
-}
-
-// taskCommand is the command the agent runs to set its task, naming its session.
-func taskCommand(sessionID string) string {
-	return "rostr task --session " + sessionID
 }
 
 // PlaceholderTask is the start of the first prompt, used as the task until the agent sets its own.

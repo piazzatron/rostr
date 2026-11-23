@@ -23,6 +23,15 @@ With auto-draft off, only step 1 runs. Member names match ignoring case and acce
 follow the same rules; only expiry differs (lazy locally, a 15-minute sweep on the server; see
 [keepalive.md](keepalive.md#expiry)).
 
+## Drafting by name
+
+`rostr draft 🦊 Fox` (and `/draft 🦊 Fox`, `$rostr-draft`) asks for a member by name (`DraftRequest.Member`, `member`
+in `POST /v1/agents/draft`), in the roster a first draft would use. A name not in the cast is added to its end, with
+the given emoji, or a random one. If another session holds the name, the draft fails (`ErrNameTaken`, `member_taken`)
+rather than take it. Otherwise the session's current draft is benched and the new one keeps its repo and task.
+Auto-draft doesn't apply, and in cloud mode the session cache is skipped. On the server it runs in one transaction
+holding the owner's row, since it can change the cast.
+
 ## Concurrency
 
 - **Local:** each draft runs in one `begin immediate` SQLite transaction, so two sessions starting at once draft one
@@ -44,7 +53,7 @@ In cloud mode each API call costs ~0.5s from far away, so the first prompt shoul
   rest.
 - If the first prompt comes before the draft finishes, the prompt hook drafts itself and the server returns the same
   draft to both.
-- Later prompts, `rostr task`, and compaction read the session cache too (trusted for an hour), so they make no draft
+- Later prompts and compaction read the session cache too (trusted for an hour), so they make no draft
   call.
 - Local mode has no network to wait on, and Codex fires `SessionStart` with the first prompt, so both draft on the
   first prompt.

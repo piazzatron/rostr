@@ -143,9 +143,9 @@ Disbanded work. side is now your default roster`,
         id: "draft",
         heading: "draft / bench",
         badge: "⚙️ On session start and end",
-        usage: "rostr draft [--task <description>] [--session <id>] [--json]\nrostr bench [<name>, ... | all] [--session <id>]",
+        usage: "rostr draft [<emoji> <name>] [--task <description>] [--session <id>] [--json]\nrostr bench [<name>, ... | all] [--session <id>]",
         summary:
-          "Draft the next free agent when a session starts, and send it back to the bench when the session ends. The same session always gets the same name back.",
+          "Draft the next free agent when a session starts, and send it back to the bench when the session ends. The same session always gets the same name back. Name someone to draft them instead: anyone not on the roster yet is added to it.",
         options: [
           { flag: "--task <description>", description: "What the agent is working on. Shown in rostr stats." },
           { flag: "--session <id>", description: "The session to draft or bench for. The hooks pass this, and it defaults to ROSTR_SESSION, then the agent's own session ID." },
@@ -154,25 +154,14 @@ Disbanded work. side is now your default roster`,
         example: `$ rostr draft --task "Fix auth redirect loop"
 🧙 Gandalf is on it: Fix auth redirect loop
 
+$ rostr draft 🦊 Fox
+🦊 Fox
+
 $ rostr draft --json
 {"name": "Gandalf", "emoji": "🧙", "roster": "work", "display": "🧙 Gandalf"}
 
 $ rostr bench gandalf
 Benched 🧙 Gandalf from the work roster.`,
-      },
-      {
-        id: "task",
-        heading: "task",
-        usage: "rostr task [<name>] <description>",
-        summary: "Set or change what an agent is working on. Your hooks set the first task from your first prompt.",
-        options: [
-          { flag: "--session <id>", description: "Set the task for whoever is drafted to this session. The hooks pass this, and it defaults to ROSTR_SESSION, then the agent's own session ID." },
-        ],
-        example: `$ rostr task "Migrate billing to Stripe v3"
-🌱 Samwise is now on: Migrate billing to Stripe v3
-
-$ rostr task samwise "Migrate billing to Stripe v3"
-🌱 Samwise is now on: Migrate billing to Stripe v3`,
       },
     ],
   },
@@ -325,7 +314,7 @@ $ rostr config emoji only
           <dl class="options">
             <div class="option-row">
               <dt><code>/draft</code></dt>
-              <dd>Draft an agent for this session. Runs <code>rostr draft</code>.</dd>
+              <dd>Draft an agent for this session, or the one you name (<code>/draft 🦊 Fox</code>), adding them to the roster if they're new. Runs <code>rostr draft</code>.</dd>
             </div>
           </dl>
         </section>

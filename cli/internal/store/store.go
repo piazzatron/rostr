@@ -17,7 +17,7 @@ import (
 )
 
 // DefaultExpiry is how long a draft can go unseen before it's released, until `rostr config expiry` changes it.
-const DefaultExpiry = "1d"
+const DefaultExpiry = "14d"
 
 // ReleasedRetention is how long released drafts are kept, so a resumed session can ask for its old name back.
 const ReleasedRetention = 7 * 24 * time.Hour
@@ -69,7 +69,8 @@ type Store interface {
 
 	// Draft gives a session its member: the same one if it has an active draft, its last one if that's free,
 	// otherwise the free member drafted least recently (then the longest-resting member's name, then numbered copies)
-	// of req.Roster, else the linked roster of req.Repo, else the default; with none, the error is ErrNoRosters.
+	// of req.Roster, else the linked roster of req.Repo, else the default; with none, the error is ErrNoRosters. With
+	// req.Member, it drafts that member instead (see DraftRequest).
 	Draft(ctx context.Context, req DraftRequest) (Draft, error)
 	// Reclaim re-tells a session's name without drafting a new member: its active draft (bumped), else its last
 	// member if still free, else nil.
@@ -138,6 +139,10 @@ type DraftRequest struct {
 	// IfAutoDraft makes a new draft conditional on the auto-draft setting: with it off, the error is ErrAutoDraftOff.
 	// A session that already has a draft gets it back either way.
 	IfAutoDraft bool
+	// Member asks for this member by name, switching the session to them. A name not in the roster is added to its
+	// cast (with Member's emoji, or a free one if it has none). The error wraps ErrNameTaken when another session has
+	// that name.
+	Member *roster.Member
 	// Idle means the session hasn't had a turn yet: it's drafted when it starts, ahead of its first prompt. In cloud
 	// mode such a draft rests if no prompt comes, so a session opened and left doesn't hold a name.
 	Idle bool
@@ -253,4 +258,28 @@ func onOff(on bool) string {
 		return "on"
 	}
 	return "off"
+}
+
+// namedMember trims a member asked for by name.
+func namedMember(m roster.Member) (roster.Member, error) {
+	m.Name, m.Emoji = strings.TrimSpace(m.Name), strings.TrimSpace(m.Emoji)
+	if m.Name == "" {
+		return roster.Member{}, errors.New("drafting by name needs a name")
+	}
+	return m, nil
+}
+
+// addToCast is m, given a free emoji if it has none, checked against the cast it's joining.
+func addToCast(members []roster.Member, m roster.Member, mode roster.EmojiMode) (roster.Member, error) {
+	if m.Emoji == "" {
+		withEmoji, err := roster.AssignMissingEmoji(append(append([]roster.Member{}, members...), m))
+		if err != nil {
+			return roster.Member{}, err
+		}
+		m = withEmoji[len(withEmoji)-1]
+	}
+	if err := roster.ValidateCast(append(append([]roster.Member{}, members...), m), mode); err != nil {
+		return roster.Member{}, err
+	}
+	return m, nil
 }

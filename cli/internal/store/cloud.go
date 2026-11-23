@@ -82,6 +82,7 @@ var apiErrorKinds = map[string]error{
 	"link_not_found":   ErrNotFound,
 	"not_drafted":      ErrNotFound,
 	"roster_exists":    ErrNameTaken,
+	"member_taken":     ErrNameTaken,
 	"no_rosters":       ErrNoRosters,
 	"unauthorized":     ErrUnauthorized,
 }
@@ -357,12 +358,12 @@ func (c *Cloud) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 
 	// A session that has its draft keeps it. A cached draft is trusted for a while; after that the server may have
 	// expired or released it, so it's asked again.
-	if c.cache != nil {
+	if c.cache != nil && req.Member == nil {
 		if cs := c.cache.session(req.SessionID); cs != nil && time.Since(cs.At) < cachedDraftTrust {
 			return cs.Draft, nil
 		}
 	}
-	if req.IfAutoDraft && !c.autoDraft() {
+	if req.IfAutoDraft && req.Member == nil && !c.autoDraft() {
 		// Unless the session has a draft already, which the server returns either way
 		if d, err := c.SessionDraft(ctx, req.SessionID); err != nil {
 			return Draft{}, err
@@ -378,6 +379,21 @@ func (c *Cloud) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 	}
 	if req.Idle {
 		body["idle"] = true
+	}
+	if req.Member != nil {
+		m, err := namedMember(*req.Member)
+		if err != nil {
+			return Draft{}, err
+		}
+		if m.Emoji == "" {
+			// A random one: the server keeps a member's own emoji, so this only matters for a name it adds
+			withEmoji, err := roster.AssignMissingEmoji([]roster.Member{m})
+			if err != nil {
+				return Draft{}, err
+			}
+			m = withEmoji[0]
+		}
+		body["member"] = map[string]string{"name": m.Name, "emoji": m.Emoji}
 	}
 	if err := c.addRepo(body, req.Repo); err != nil {
 		return Draft{}, err

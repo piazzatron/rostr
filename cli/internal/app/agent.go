@@ -25,9 +25,10 @@ func newDraftCommand() *cobra.Command {
 	var task, session, rosterFlag string
 	var asJSON bool
 	cmd := &cobra.Command{
-		Use:   "draft",
-		Short: "Draft the next free member for this session",
-		Args:  cobra.NoArgs,
+		Use:   "draft [<emoji> <name>]",
+		Short: "Draft the next free member for this session, or the one you name",
+		Long: "Draft the next free member for this session. Name someone (\"rostr draft 🦊 Fox\") to draft them " +
+			"instead, adding them to the roster if they aren't in it yet.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if session == "" {
@@ -39,7 +40,7 @@ func newDraftCommand() *cobra.Command {
 			}
 			defer st.Close()
 
-			d, err := draftSession(ctx, st, session, rosterFlag, workingDir(), task)
+			d, err := draftSessionAs(ctx, st, session, rosterFlag, workingDir(), task, namedMember(args))
 			if err != nil {
 				return err
 			}
@@ -126,15 +127,17 @@ func newBenchCommand() *cobra.Command {
 	return cmd
 }
 
-func newTaskCommand() *cobra.Command {
-	var session, rosterFlag string
+// newHookTaskCommand is `rostr hook task`, which the first-prompt hook runs in the background to record a session's
+// task. It isn't for people or agents: the session's task comes from its first prompt and title.
+func newHookTaskCommand() *cobra.Command {
+	var session string
 	cmd := &cobra.Command{
-		Use:   "task [<name>] <description>",
-		Short: "Set what an agent is working on",
-		Args:  cobra.RangeArgs(1, 2),
+		Use:    "task <description>",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			if len(args) == 1 && session == "" {
+			if session == "" {
 				return errNoSession
 			}
 			st, err := openStore()
@@ -142,41 +145,37 @@ func newTaskCommand() *cobra.Command {
 				return err
 			}
 			defer st.Close()
-
-			var agent store.Draft
-			if len(args) == 1 {
-				d, err := st.SessionDraft(ctx, session)
-				if err != nil {
-					return err
-				}
-				if d == nil {
-					return fmt.Errorf("this session has no drafted agent. Draft one with /draft")
-				}
-				agent = *d
-			} else {
-				if agent, err = findDraftedAgent(ctx, st, args[0], rosterFlag); err != nil {
-					return err
-				}
-			}
-
-			d, err := st.SetTask(ctx, agent.Key(), args[len(args)-1])
+			d, err := st.SessionDraft(ctx, session)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s · %s\n", d.Display(), d.Task)
-			return nil
+			if d == nil {
+				return fmt.Errorf("this session has no drafted agent")
+			}
+			_, err = st.SetTask(ctx, d.Key(), args[0])
+			return err
 		},
 	}
 	sessionFlag(cmd, &session)
-	cmd.Flags().StringVar(&rosterFlag, "roster", "", "the roster the named agent is in, when more than one has them drafted")
 	return cmd
 }
 
-// draftSession drafts for a session in dir. The store picks the roster for a first draft (--roster, else the
-// project's link, else the default), in the same call, so cloud mode drafts in one request.
-func draftSession(ctx context.Context, st store.Store, session, rosterFlag, dir, task string) (store.Draft, error) {
+// draftSessionAs drafts member for a session in dir, or the next free member when it's nil. The store picks the roster
+// for a first draft (--roster, else the project's link, else the default), in the same call, so cloud mode drafts in
+// one request.
+func draftSessionAs(ctx context.Context, st store.Store, session, rosterFlag, dir, task string, member *roster.Member) (store.Draft, error) {
 	repo, _ := project.Identify(dir)
-	return st.Draft(ctx, store.DraftRequest{SessionID: session, Roster: rosterFlag, Repo: repo, Task: task})
+	return st.Draft(ctx, store.DraftRequest{SessionID: session, Roster: rosterFlag, Repo: repo, Task: task, Member: member})
+}
+
+// namedMember is the member named by a command's arguments ("🦊 Fox", or "🦊", "Fox"), or nil for none.
+func namedMember(args []string) *roster.Member {
+	text := strings.TrimSpace(strings.Join(args, " "))
+	if text == "" {
+		return nil
+	}
+	m := roster.ParseMember(text)
+	return &m
 }
 
 // findDraftedAgent finds an active draft by name ("Gandalf", "gandalf 2", "eowyn") across every roster, or only in

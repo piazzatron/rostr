@@ -445,6 +445,12 @@ func (s *SQLite) Draft(ctx context.Context, req DraftRequest) (Draft, error) {
 			return err
 		}
 
+		if req.Member != nil {
+			named, err := s.draftNamed(ctx, tx, req)
+			out = named.Draft
+			return err
+		}
+
 		// Same session, same name
 		active, err := s.bumpActive(ctx, tx, req.SessionID, req.Task)
 		if err != nil || active != nil {
@@ -660,6 +666,61 @@ func (s *SQLite) bumpActive(ctx context.Context, tx *sql.Tx, sessionID, task str
 	_, err = tx.ExecContext(ctx, "update drafts set last_seen_at = ?, task = ? where id = ?",
 		formatTime(d.LastSeenAt), nullIfEmpty(d.Task), d.id)
 	return &d, err
+}
+
+// draftNamed drafts the member req.Member names for the session, adding them to the roster's cast if they aren't in
+// it, and benching the session's draft of anyone else.
+func (s *SQLite) draftNamed(ctx context.Context, tx *sql.Tx, req DraftRequest) (draftRow, error) {
+	want, err := namedMember(*req.Member)
+	if err != nil {
+		return draftRow{}, err
+	}
+	r, err := draftRoster(ctx, tx, req)
+	if err != nil {
+		return draftRow{}, err
+	}
+
+	active, err := queryDrafts(ctx, tx, "where d.session_id = ? and d.benched_at is null", req.SessionID)
+	if err != nil {
+		return draftRow{}, err
+	}
+	if len(active) > 0 && active[0].rosterID == r.id && active[0].Copy == 1 && roster.NamesMatch(active[0].Member, want.Name) {
+		d, err := s.bumpActive(ctx, tx, req.SessionID, req.Task)
+		return *d, err
+	}
+
+	member, inCast := memberNamed(r.Members, want.Name)
+	if !inCast {
+		if member, err = addToCast(r.Members, want, r.EmojiMode); err != nil {
+			return draftRow{}, err
+		}
+		if err := updateRoster(ctx, tx, r.id, r.EmojiMode, append(r.Members, member)); err != nil {
+			return draftRow{}, err
+		}
+	}
+	busy, err := busySlots(ctx, tx, r.id)
+	if err != nil {
+		return draftRow{}, err
+	}
+	if busy[slot{roster.NormalizeName(member.Name), 1}] {
+		return draftRow{}, userError{fmt.Sprintf("%s is drafted by another session.", member.Name), ErrNameTaken}
+	}
+
+	repo, task := req.Repo, req.Task
+	if len(active) > 0 {
+		if _, err := tx.ExecContext(ctx, "update drafts set benched_at = ? where id = ?", s.nowText(), active[0].id); err != nil {
+			return draftRow{}, err
+		}
+		if repo == "" {
+			repo = active[0].Repo
+		}
+		if task == "" {
+			task = active[0].Task
+		}
+	}
+	return s.insertDraft(ctx, tx, newDraft{
+		rosterID: r.id, member: member, copy: 1, sessionID: req.SessionID, repo: repo, task: task,
+	})
 }
 
 // resume redrafts the session's last member if they're still in the cast and free, or returns nil. The new draft keeps

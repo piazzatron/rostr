@@ -208,15 +208,15 @@ func TestRosterAndAgentLifecycle(t *testing.T) {
 		t.Fatalf("redraft: %q", out)
 	}
 
-	// task: the session's agent, or a named one
-	s.ok(repo, session("s1"), "task", "Fix auth redirect loop")
-	s.ok(s.home, nil, "task", "GANDALF", "Review the PR")
-	s.fails(s.home, nil, "task", "Something")
-	s.fails(s.home, session("nobody"), "task", "Something")
+	// The hooks' task command sets the session's agent's task; there's no task command for people or agents
+	s.ok(repo, session("s1"), "hook", "task", "Fix auth redirect loop")
+	s.fails(s.home, nil, "hook", "task", "Something")
+	s.fails(s.home, session("nobody"), "hook", "task", "Something")
+	s.fails(s.home, session("s1"), "task", "Something")
 
 	listing = s.list("play,", "work")
 	ada, gandalf := listing.Rosters[0].Drafted[0], listing.Rosters[1].Drafted[0]
-	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "Review the PR" || gandalf.Repo != "" {
+	if ada.Task != "Fix auth redirect loop" || ada.Repo != "acme/api" || ada.Session != "s1" || gandalf.Task != "" || gandalf.Repo != "" {
 		t.Fatalf("list: %+v", listing)
 	}
 	// list is an alias for stats
@@ -417,7 +417,6 @@ func TestClaudeCodeHooks(t *testing.T) {
 	os.WriteFile(fakeClaude, []byte("#!/bin/sh\ncat >/dev/null; printf '{\"result\":\"Fix login redirect\"}\n'\n"), 0o755)
 	out := readPromptOutput(hook("prompt", firstPrompt("s1"), "ROSTR_CLAUDE_BIN="+fakeClaude))
 	if !strings.Contains(out.HookSpecificOutput.AdditionalContext, "🧙 Gandalf") ||
-		!strings.Contains(out.HookSpecificOutput.AdditionalContext, "rostr task --session s1") ||
 		strings.Contains(out.HookSpecificOutput.AdditionalContext, "set_session_title") ||
 		out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix the login redirect loop" {
 		t.Fatalf("first prompt: %+v", out)
@@ -433,7 +432,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Fix login redirect" {
 		t.Fatalf("title after the summary: %+v", out)
 	}
-	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Fix the login redirect loop")
+	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "hook", "task", "Fix the login redirect loop")
 
 	// A prompt that looks like the first again neither re-tells the name nor retitles the session with its text
 	if out := readPromptOutput(hook("prompt", firstPrompt("s1"))); out.HookSpecificOutput.AdditionalContext != "" ||
@@ -527,7 +526,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 	if info, _ := os.Stat(filepath.Join(keepAliveDir, "s1")); time.Since(info.ModTime()) > time.Minute {
 		t.Fatal("keep-alive didn't bump after an hour")
 	}
-	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "task", "Deflake the login test")
+	s.ok(s.home, []string{"ROSTR_SESSION=s1"}, "hook", "task", "Deflake the login test")
 	if out := readPromptOutput(hook("prompt", laterPrompt("🧙 Gandalf · Fix the login redirect loop"))); out.HookSpecificOutput.SessionTitle != "🧙 Gandalf · Deflake the login test" {
 		t.Fatalf("title after a new task: %+v", out)
 	}
@@ -563,7 +562,7 @@ func TestClaudeCodeHooks(t *testing.T) {
 		t.Fatalf("CLAUDE_ENV_FILE: %q", env)
 	}
 	r := s.run(repo, "", nil, "hook", "claude-code", "draft", "--session", "s4")
-	if r.code != 0 || !strings.Contains(r.stdout, "🏹 Legolas") || !strings.Contains(r.stdout, "rostr task") {
+	if r.code != 0 || !strings.Contains(r.stdout, "🏹 Legolas") {
 		t.Fatalf("/draft: exit %d, stdout %q", r.code, r.stdout)
 	}
 	before := len(s.list().Rosters[0].Drafted)
@@ -1020,7 +1019,7 @@ func TestCodexHooks(t *testing.T) {
 	}
 
 	// The agent's own rostr commands find the session through CODEX_THREAD_ID, unless ROSTR_SESSION says otherwise
-	s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "task", "Fix auth redirects")
+	s.ok(repo, []string{"CODEX_THREAD_ID=t1"}, "hook", "task", "Fix auth redirects")
 	s.ok(repo, []string{"CODEX_THREAD_ID=t1", "ROSTR_SESSION=other"}, "draft")
 	sessions := map[string]string{}
 	for _, d := range s.list().Rosters[0].Drafted {
@@ -1080,7 +1079,7 @@ func TestCodexHooks(t *testing.T) {
 	expectQuiet("prompt, auto-draft off", hook("prompt", prompt("t3", "null", firstPrompt)))
 	expectQuiet("fork, auto-draft off", hook("session-start", start("t4", "fork")))
 	r := s.run(repo, "", []string{path, "CODEX_THREAD_ID=t3"}, "hook", "codex", "draft")
-	if r.code != 0 || !strings.Contains(r.stdout, "👑 Aragorn") || !strings.Contains(r.stdout, "rostr task --session t3") {
+	if r.code != 0 || !strings.Contains(r.stdout, "👑 Aragorn") {
 		t.Fatalf("$rostr-draft: exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
 	}
 	expectNamed("$rostr-draft")
